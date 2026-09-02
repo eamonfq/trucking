@@ -18,8 +18,12 @@ const sora = localFont({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
   title: { default: "A&L Trucking Logistics", template: "%s | A&L Trucking Logistics" },
   description: "Demo operativo de envíos terrestres USA a México con precio fijo por categoría de caja.",
+  applicationName: "A&L Trucking Logistics",
+  keywords: ["envíos USA México", "carga terrestre", "cajas a México", "A&L Trucking Logistics"],
+  robots: { index: true, follow: true },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
