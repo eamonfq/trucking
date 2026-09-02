@@ -1,0 +1,7 @@
+import Link from "next/link";
+import { Plus } from "lucide-react";
+import { SectionTitle } from "@/components/cliente/section-title";
+import { StatusBadge } from "@/components/ui/badge";
+import { logisticsService } from "@/lib/services/logistics";
+
+export default async function ShipmentsPage() { const shipments = (await logisticsService.getShipments()).filter((item) => item.userId === "usr-001"); return <><SectionTitle eyebrow="Despachos" title="Mis envíos" description="Cajas agrupadas hacia un mismo destinatario." action={<Link href="/cliente/envios/nuevo" className="inline-flex min-h-11 items-center gap-2 rounded-full bg-orange-500 px-5 text-sm font-bold text-white"><Plus className="size-4" />Crear envío</Link>} /><div className="mt-7 grid gap-4 lg:grid-cols-2">{shipments.map((shipment) => <Link href={`/cliente/envios/${shipment.code}`} key={shipment.id} className="rounded-card border border-stone-200 bg-white p-5 transition hover:shadow-soft"><div className="flex items-start justify-between gap-4"><div><p className="font-display text-xl font-bold text-navy-950">{shipment.code}</p><p className="mt-2 text-sm text-navy-500">{shipment.destinationCity}</p></div><StatusBadge status={shipment.status} /></div><div className="mt-6 flex justify-between border-t border-stone-200 pt-4 text-xs text-navy-500"><span>{shipment.boxIds.length} cajas</span><span>{shipment.truckId ? "Camión asignado" : "Por asignar"}</span></div></Link>)}</div></>; }

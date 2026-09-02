@@ -1,0 +1,8 @@
+import { SectionTitle } from "@/components/cliente/section-title";
+import { Card } from "@/components/ui/card";
+import { StatusBadge } from "@/components/ui/badge";
+import { logisticsService } from "@/lib/services/logistics";
+import { formatDate, formatUsd } from "@/lib/utils/format";
+import { invoiceTotal } from "@/lib/utils/invoices";
+
+export default async function AccountStatementPage() { const invoices = (await logisticsService.getInvoices()).filter((item) => item.userId === "usr-001"); const balance = invoices.filter((item) => item.status !== "pagada").reduce((sum, item) => sum + invoiceTotal(item), 0); return <><SectionTitle eyebrow="Finanzas" title="Estado de cuenta" description="Cargos, pagos reportados y saldo actual del demo." /><Card className="mt-7 bg-navy-950 text-white"><p className="text-sm text-white/55">Saldo actual</p><p className="mt-2 font-display text-4xl font-bold text-orange-400">{formatUsd(balance)}</p></Card><div className="mt-5 overflow-x-auto rounded-card border border-stone-200 bg-white"><table className="w-full min-w-[620px] text-sm"><thead className="bg-cream-100 text-left text-xs uppercase tracking-wider text-navy-500"><tr><th className="p-4">Fecha</th><th className="p-4">Movimiento</th><th className="p-4">Estado</th><th className="p-4 text-right">Importe</th></tr></thead><tbody className="divide-y divide-stone-200">{invoices.map((invoice) => <tr key={invoice.id}><td className="p-4 text-navy-500">{formatDate(invoice.issuedAt)}</td><td className="p-4 font-bold text-navy-900">Cargo · {invoice.number}</td><td className="p-4"><StatusBadge status={invoice.status} /></td><td className="p-4 text-right font-bold">{formatUsd(invoiceTotal(invoice))}</td></tr>)}</tbody></table></div></>; }
