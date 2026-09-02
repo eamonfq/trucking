@@ -12,3 +12,18 @@ export const passwordSchema = z
   .regex(/[A-Z]/, "Incluye una mayúscula.")
   .regex(/[a-z]/, "Incluye una minúscula.")
   .regex(/\d/, "Incluye un número.");
+
+export const accountRegistrationSchema = z.object({
+  firstName: z.string().trim().min(2, "Escribe tu nombre."),
+  paternalLastName: z.string().trim().min(2, "Escribe tu apellido paterno."),
+  maternalLastName: z.string().trim().optional(),
+  email: z.email("Escribe un correo válido."),
+  phone: z.string().regex(/^\d{10}$/, "Escribe 10 dígitos."),
+  password: passwordSchema,
+  confirmPassword: z.string(),
+  acceptedTerms: z.boolean().refine(Boolean, "Debes aceptar los términos."),
+}).refine((data) => data.password === data.confirmPassword, { path: ["confirmPassword"], message: "Las contraseñas no coinciden." });
+
+export const resetRequestSchema = z.object({ email: z.email("Escribe un correo válido.") });
+export const resetPasswordSchema = z.object({ password: passwordSchema, confirmPassword: z.string() }).refine((data) => data.password === data.confirmPassword, { path: ["confirmPassword"], message: "Las contraseñas no coinciden." });
+export const changePasswordSchema = z.object({ currentPassword: z.string().min(8), password: passwordSchema, confirmPassword: z.string() }).refine((data) => data.password === data.confirmPassword, { path: ["confirmPassword"], message: "Las contraseñas no coinciden." });

@@ -1,0 +1,9 @@
+import Link from "next/link";
+import type { ReactNode } from "react";
+import { ArrowLeft, ShieldCheck } from "lucide-react";
+import { BrandLogo } from "@/components/marketing/brand-logo";
+import { BoxMark } from "@/components/marketing/box-mark";
+
+export function AuthShell({ children, eyebrow, title, description }: { children: ReactNode; eyebrow: string; title: string; description: string }) {
+  return <main className="grid min-h-screen bg-cream-50 lg:grid-cols-[.9fr_1.1fr]"><section className="flex min-h-screen flex-col px-5 py-6 sm:px-10 lg:px-14"><div className="flex items-center justify-between"><BrandLogo /><Link href="/" className="inline-flex min-h-11 items-center gap-2 rounded-full px-3 text-sm font-semibold text-navy-600 hover:bg-white"><ArrowLeft className="size-4" />Volver</Link></div><div className="my-auto w-full max-w-xl py-12 lg:mx-auto"><p className="text-xs font-bold uppercase tracking-[.18em] text-orange-600">{eyebrow}</p><h1 className="mt-3 font-display text-4xl font-bold tracking-[-.05em] text-navy-950 sm:text-5xl">{title}</h1><p className="mt-4 max-w-lg leading-7 text-navy-500">{description}</p><div className="mt-9">{children}</div></div></section><aside className="relative hidden overflow-hidden bg-navy-950 p-12 text-white lg:flex lg:flex-col lg:justify-between"><div aria-hidden="true" className="absolute -right-40 -top-40 size-[34rem] rounded-full border-[6rem] border-white/5" /><div className="relative"><span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-bold"><ShieldCheck className="size-4 text-orange-500" />Sesión protegida</span><h2 className="mt-7 max-w-lg font-display text-4xl font-bold leading-tight tracking-[-.04em]">Tu carga, tus documentos y cada movimiento en un solo lugar.</h2></div><div className="relative mx-auto w-full max-w-md"><BoxMark /></div><p className="relative text-xs text-white/45">Demo A&L Trucking Logistics · Datos simulados</p></aside></main>;
+}
