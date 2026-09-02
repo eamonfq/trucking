@@ -1,0 +1,7 @@
+import { PackageSearch } from "lucide-react";
+import { MarketingFooter } from "@/components/marketing/marketing-footer";
+import { MarketingHeader } from "@/components/marketing/marketing-header";
+import { TrackingSearch } from "@/components/marketing/tracking-search";
+
+export const metadata = { title: "Rastrear carga", description: "Consulta el estado de una caja, envío o camión A&L sin iniciar sesión." };
+export default function TrackingPage() { return <><MarketingHeader /><main className="min-h-[72vh] bg-cream-100 px-5 py-20 sm:px-8"><div className="mx-auto max-w-3xl text-center"><span className="mx-auto grid size-16 place-items-center rounded-3xl bg-white text-orange-600 shadow-soft"><PackageSearch className="size-7" /></span><p className="mt-7 text-xs font-bold uppercase tracking-[.18em] text-orange-600">Seguimiento público</p><h1 className="mt-3 font-display text-4xl font-bold tracking-[-.05em] text-navy-950 sm:text-6xl">Sigue tu carga de principio a fin.</h1><p className="mx-auto mt-5 max-w-xl leading-7 text-navy-500">Ingresa un código que comience con BX-, SH- o TR-. No mostraremos información personal.</p><div className="mt-9"><TrackingSearch /></div><div className="mt-7 flex flex-wrap justify-center gap-2 text-xs text-navy-500"><span className="rounded-full bg-white px-3 py-2">Caja: BX-260002</span><span className="rounded-full bg-white px-3 py-2">Envío: SH-260003</span><span className="rounded-full bg-white px-3 py-2">Camión: TR-260102</span></div></div></main><MarketingFooter /></>; }
