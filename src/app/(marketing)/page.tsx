@@ -60,7 +60,7 @@ export default async function LandingPage() {
           <path d="M-20 392 C 240 362, 420 262, 700 212 C 820 190, 900 168, 1000 120" stroke="#33436B" strokeWidth="2" strokeDasharray="10 12" opacity=".75" className="motion-safe:[animation:dash-move_9s_linear_infinite]" />
         </svg>
 
-        <div className="relative mx-auto grid max-w-[90rem] items-center gap-14 px-5 pt-16 sm:px-8 lg:grid-cols-[38.75rem_1fr] lg:px-18 lg:pt-24">
+        <div className="relative mx-auto grid max-w-[90rem] items-center gap-14 px-5 pt-16 sm:px-8 lg:px-18 lg:pt-24 xl:grid-cols-[38.75rem_1fr]">
           <div className="flex min-w-0 flex-col gap-7">
             <p className="inline-flex w-fit items-center gap-3 rounded-full border border-navy-700 bg-white/6 px-4.5 py-2.5 text-over font-semibold uppercase text-[#F2E9DC]">
               <span aria-hidden="true" className="size-2 rounded-full bg-brand-600" />
@@ -70,9 +70,10 @@ export default async function LandingPage() {
               Envía más,<br /><span className="text-brand-300">paga menos.</span>
             </h1>
             <p className="max-w-[32.5rem] text-lg leading-relaxed text-[#B9C4DC] text-pretty">Precio fijo por categoría de caja. El peso es un límite de seguridad, no la unidad de cobro: sabes el total antes de empacar.</p>
-            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
-              <Link href="/registro" className="inline-flex min-h-14 items-center justify-center gap-2.5 rounded-lg bg-brand-600 px-8 text-base font-semibold text-white shadow-[0_14px_34px_rgba(232,98,28,.32)] transition hover:-translate-y-0.5 hover:bg-brand-700">Crear mi cuenta <span aria-hidden="true">→</span></Link>
-              <Link href="#tarifas" className="inline-flex min-h-14 items-center justify-center rounded-lg border-[1.5px] border-[#44567F] px-7 text-base font-semibold text-white transition hover:border-white">Ver las 5 tarifas</Link>
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+              <Link href="/registro" className="inline-flex min-h-14 items-center justify-center gap-2.5 rounded-lg bg-brand-600 px-7 text-base font-semibold text-white shadow-[0_14px_34px_rgba(232,98,28,.32)] transition hover:-translate-y-0.5 hover:bg-brand-700">Crear mi cuenta <span aria-hidden="true">→</span></Link>
+              <Link href="/login" className="inline-flex min-h-14 items-center justify-center rounded-lg border-[1.5px] border-[#44567F] px-6 text-base font-semibold text-white transition hover:border-white">Ingresar a mi cuenta</Link>
+              <Link href="#tarifas" className="inline-flex min-h-14 items-center justify-center rounded-lg border-[1.5px] border-[#44567F] px-6 text-base font-semibold text-white transition hover:border-white">Ver las 5 tarifas</Link>
             </div>
             <dl className="hidden flex-wrap gap-10 border-t border-[#2A3A5E] pt-7 lg:flex">
               <HeroStat value="5" detail={<>categorías, sin escalas<br />de peso ocultas</>} />
@@ -82,7 +83,7 @@ export default async function LandingPage() {
           </div>
 
           {/* Composición de cajas a escala real entre sí */}
-          <div className="relative hidden h-140 min-w-0 lg:block" aria-hidden="true">
+          <div className="relative hidden h-140 min-w-0 xl:block" aria-hidden="true">
             <div className="absolute bottom-14 left-10 right-5 h-30 rounded-[50%] bg-[radial-gradient(ellipse_at_center,rgba(0,0,0,.45)_0%,transparent_70%)]" />
             <ScaledBox categories={categories} id="x-large" className="absolute bottom-11 left-1.5" price="$230" chip="light" chipClass="-left-3.5 top-5.5" />
             <ScaledBox categories={categories} id="cubo" className="absolute bottom-0 left-37.5" price="$260" chip="brand" chipClass="-right-5 bottom-14" />
@@ -97,7 +98,7 @@ export default async function LandingPage() {
 
           {/* Móvil: misma composición isométrica del artboard, anclada a los bordes para
               que no dependa de un ancho fijo. Escala uniforme, así siguen a escala real. */}
-          <div className="relative h-58 min-w-0 lg:hidden" aria-hidden="true">
+          <div className="relative mx-auto h-58 w-full min-w-0 max-w-100 xl:hidden" aria-hidden="true">
             <div className="absolute inset-x-2.5 bottom-5.5 h-17.5 rounded-[50%] bg-[radial-gradient(ellipse_at_center,rgba(0,0,0,.5)_0%,transparent_70%)]" />
             {mobileBoxes.map(({ category, position, chip, chipClass }) => (
               <div key={category.id} className={`absolute ${position}`}>
@@ -133,24 +134,24 @@ export default async function LandingPage() {
             </div>
             <p className="text-lg leading-relaxed text-[#A8B2CA] text-pretty">Las cajas están dibujadas a escala entre sí. Elige la más pequeña que admita todas tus medidas exteriores y el peso total; el límite incluye caja y contenido.</p>
           </div>
-          <div className="grid gap-3 lg:grid-cols-5 lg:gap-5">
+          <div className="grid gap-3 xl:grid-cols-5 xl:gap-5">
             {categories.map((category) => {
               const highlight = category.id === featured;
               return (
-                <article key={category.id} className={`relative flex items-center gap-4 rounded-xl border p-5 transition hover:-translate-y-0.5 lg:min-h-105 lg:flex-col lg:items-stretch lg:justify-between lg:p-7 ${highlight ? "border-brand-500 bg-cream-100 shadow-[0_0_0_3px_rgba(232,98,28,.35)]" : "border-navy-700 bg-navy-800"}`}>
-                  {highlight && <span className="absolute -top-3 left-5 rounded-full bg-brand-700 px-3 py-1.5 text-[.6875rem] font-bold uppercase tracking-[.14em] text-white lg:left-6">La más pedida</span>}
-                  <div className="flex w-20 shrink-0 justify-center lg:hidden"><BoxIso category={category} scale={0.6} /></div>
-                  <div className="hidden h-42 items-end justify-center lg:flex"><BoxIso category={category} scale={1} /></div>
+                <article key={category.id} className={`relative flex items-center gap-4 rounded-xl border p-5 transition hover:-translate-y-0.5 xl:min-h-105 xl:flex-col xl:items-stretch xl:justify-between xl:p-7 ${highlight ? "border-brand-500 bg-cream-100 shadow-[0_0_0_3px_rgba(232,98,28,.35)]" : "border-navy-700 bg-navy-800"}`}>
+                  {highlight && <span className="absolute -top-3 left-5 rounded-full bg-brand-700 px-3 py-1.5 text-[.6875rem] font-bold uppercase tracking-[.14em] text-white xl:left-6">La más pedida</span>}
+                  <div className="flex w-20 shrink-0 justify-center xl:hidden"><BoxIso category={category} scale={0.6} /></div>
+                  <div className="hidden h-42 items-end justify-center xl:flex"><BoxIso category={category} scale={1} /></div>
 
                   {/* Móvil: medidas y límite en líneas propias, así ninguna parte con el separador colgando */}
-                  <div className="flex min-w-0 flex-1 flex-col gap-1 lg:hidden">
+                  <div className="flex min-w-0 flex-1 flex-col gap-1 xl:hidden">
                     <p className={`text-base font-semibold ${highlight ? "text-navy-900" : "text-white"}`}>{category.name}</p>
                     <p className={`text-sm ${highlight ? "text-ink-700" : "text-[#A8B2CA]"}`}>{category.dimensions.length} × {category.dimensions.width} × {category.dimensions.height} in · hasta {category.maxWeightLb} lb</p>
                   </div>
-                  <p className={`shrink-0 font-display text-[1.875rem] font-extrabold leading-none tracking-[-.03em] lg:hidden ${highlight ? "text-navy-900" : "text-white"}`}>${category.priceUsd}</p>
+                  <p className={`shrink-0 font-display text-[1.875rem] font-extrabold leading-none tracking-[-.03em] xl:hidden ${highlight ? "text-navy-900" : "text-white"}`}>${category.priceUsd}</p>
 
                   {/* Escritorio: precio como elemento dominante de la tarjeta */}
-                  <div className="hidden flex-col gap-3.5 lg:flex">
+                  <div className="hidden flex-col gap-3.5 xl:flex">
                     <p className={`text-sm font-semibold ${highlight ? "text-navy-900" : "text-white"}`}>{category.name}</p>
                     <p className="flex items-baseline gap-1.5">
                       <span className={`font-display text-[3.25rem] font-extrabold leading-[.9] tracking-[-.04em] ${highlight ? "text-navy-900" : "text-white"}`}>${category.priceUsd}</span>
