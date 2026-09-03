@@ -79,6 +79,7 @@ export type Box = {
   originTracking?: string;
   receivedAt?: string;
   shipmentId?: string;
+  truckId?: string;
   timeline: TimelineEvent[];
 };
 
@@ -101,9 +102,21 @@ export type Truck = {
   driverName: string;
   departureDate: string;
   route: string;
+  destinationCity: string;
+  driverId: string;
   status: TruckStatus;
   boxIds: string[];
+  capacity: Record<BoxCategoryId, number>;
+  notes?: string;
   timeline: TimelineEvent[];
+};
+
+export type Driver = {
+  id: string;
+  name: string;
+  phone: string;
+  license: string;
+  active: boolean;
 };
 
 export type InvoiceLine = {

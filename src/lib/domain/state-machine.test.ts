@@ -10,6 +10,7 @@ import {
   transitionTruckWithCascade,
 } from "@/lib/domain/state-machine";
 import type { Box, BoxStatus, Invoice, InvoiceStatus, Shipment, ShipmentStatus, Truck } from "@/lib/types";
+import { DEFAULT_TRUCK_CAPACITY } from "@/lib/config/operations";
 
 const context = { actor: "Operaciones A&L", note: "Validación operativa", at: "2026-09-02T12:00:00.000Z" };
 const box = (id: string, status: BoxStatus): Box => ({ id, code: `BX-${id}`, userId: "usr-001", categoryId: "small", status, dimensions: { length: 10, width: 16, height: 12 }, weightLb: 20, timeline: [] });
@@ -64,7 +65,7 @@ describe("transiciones de factura", () => {
 
 describe("cascadas de camión", () => {
   it("recorre todas las etapas y actualiza cajas y envíos solo cuando corresponde", () => {
-    let truck: Truck = { id: "truck-1", code: "TR-001", plate: "ABC-123", driverName: "Ana López", departureDate: "2026-09-04", route: "Miami → Ciudad de México", status: "planificado", boxIds: ["box-1"], timeline: [] };
+    let truck: Truck = { id: "truck-1", code: "TR-001", plate: "ABC-123", driverId: "driver-1", driverName: "Ana López", departureDate: "2026-09-04", route: "Miami → Ciudad de México", destinationCity: "Ciudad de México", status: "planificado", boxIds: ["box-1"], capacity: { ...DEFAULT_TRUCK_CAPACITY }, timeline: [] };
     let boxes = [box("box-1", "en-bodega")];
     let shipments = [shipment("confirmado")];
     for (const expected of ["cargando", "despachado", "en-frontera", "en-destino", "cerrado"] as const) {
@@ -81,7 +82,7 @@ describe("cascadas de camión", () => {
   });
 
   it("impide despachar sin cajas", () => {
-    const truck: Truck = { id: "truck-1", code: "TR-001", plate: "ABC-123", driverName: "Ana López", departureDate: "2026-09-04", route: "Miami → Puebla", status: "cargando", boxIds: [], timeline: [] };
+    const truck: Truck = { id: "truck-1", code: "TR-001", plate: "ABC-123", driverId: "driver-1", driverName: "Ana López", departureDate: "2026-09-04", route: "Miami → Puebla", destinationCity: "Puebla", status: "cargando", boxIds: [], capacity: { ...DEFAULT_TRUCK_CAPACITY }, timeline: [] };
     expect(transitionTruckWithCascade(truck, [], [], context)).toMatchObject({ ok: false, error: "No puedes despachar un camión sin cajas asignadas." });
   });
 });

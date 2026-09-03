@@ -25,7 +25,7 @@ export const BOX_TRANSITIONS: Record<BoxStatus, readonly BoxStatus[]> = {
   recibida: ["categorizada", "excede-categoria", "rechazada"],
   categorizada: ["en-bodega", "excede-categoria", "rechazada"],
   "en-bodega": ["cargada-en-camion", "excede-categoria", "rechazada"],
-  "cargada-en-camion": ["en-transito"],
+  "cargada-en-camion": ["en-transito", "en-bodega"],
   "en-transito": ["en-destino"],
   "en-destino": ["entregada"],
   entregada: [],

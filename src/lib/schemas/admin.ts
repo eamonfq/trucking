@@ -1,4 +1,25 @@
 import { z } from "zod";
+import { BOX_CATEGORY_IDS } from "@/lib/config/box-categories";
+import { DESTINATION_CITIES } from "@/lib/config/operations";
 
 export const receptionSchema = z.object({ customer: z.string().min(1), length: z.coerce.number().positive(), width: z.coerce.number().positive(), height: z.coerce.number().positive(), weightLb: z.coerce.number().positive(), overrideCategory: z.string().optional(), overrideReason: z.string().optional(), photoName: z.string().optional() }).refine((data) => !data.overrideCategory || (data.overrideReason?.length ?? 0) >= 5, { path: ["overrideReason"], message: "Explica el motivo de la sobrescritura." });
-export const truckSchema = z.object({ plate: z.string().min(3), driverName: z.string().min(3), departureDate: z.string().min(1), route: z.string().min(3) });
+const capacityShape = Object.fromEntries(BOX_CATEGORY_IDS.map((id) => [id, z.coerce.number().int().min(0).max(99)])) as Record<(typeof BOX_CATEGORY_IDS)[number], z.ZodNumber>;
+
+export const truckSchema = z.object({
+  plate: z.string().trim().toUpperCase().regex(/^[A-Z0-9]{2,4}-[A-Z0-9]{2,4}$/, "Usa un formato como FLA-2604."),
+  driverId: z.string().min(1, "Selecciona un chofer."),
+  newDriverName: z.string().trim().optional(),
+  newDriverPhone: z.string().trim().optional(),
+  newDriverLicense: z.string().trim().optional(),
+  departureDate: z.string().min(1, "Selecciona la fecha de salida.").refine((value) => new Date(`${value}T23:59:59`).getTime() >= Date.now(), "La fecha de salida no puede estar en el pasado."),
+  destinationCity: z.enum(DESTINATION_CITIES),
+  capacity: z.object(capacityShape).refine((value) => Object.values(value).some((amount) => amount > 0), "Define capacidad para al menos una categoría."),
+  notes: z.string().trim().max(500, "Las notas no pueden superar 500 caracteres.").optional(),
+}).superRefine((value, context) => {
+  if (value.driverId !== "new") return;
+  if (!value.newDriverName || value.newDriverName.length < 3) context.addIssue({ code: "custom", path: ["newDriverName"], message: "Escribe el nombre completo del chofer." });
+  if (!/^\+?\d{10,15}$/.test(value.newDriverPhone ?? "")) context.addIssue({ code: "custom", path: ["newDriverPhone"], message: "Escribe un teléfono válido." });
+  if ((value.newDriverLicense?.length ?? 0) < 5) context.addIssue({ code: "custom", path: ["newDriverLicense"], message: "Escribe una licencia válida." });
+});
+
+export type TruckInput = z.infer<typeof truckSchema>;

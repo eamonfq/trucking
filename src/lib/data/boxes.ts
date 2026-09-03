@@ -1,6 +1,15 @@
 import { BOX_CATEGORIES } from "@/lib/config/box-categories";
 import { BOX_STATUSES, type Box } from "@/lib/types";
 
+const truckAssignments: Record<string, string> = {
+  "box-004": "truck-001",
+  "box-014": "truck-001",
+  "box-006": "truck-002",
+  "box-016": "truck-002",
+  "box-008": "truck-003",
+  "box-018": "truck-003",
+};
+
 const makeBox = (index: number): Box => {
   const category = BOX_CATEGORIES[index % BOX_CATEGORIES.length]!;
   const status = BOX_STATUSES[index % BOX_STATUSES.length]!;
@@ -17,6 +26,7 @@ const makeBox = (index: number): Box => {
     originTracking: index % 4 === 0 ? undefined : `DEMO-ORIGEN-${1000 + index}`,
     receivedAt: index === 0 ? undefined : new Date(Date.UTC(2026, 7, 2 + (index % 24))).toISOString(),
     shipmentId: index >= 8 ? `ship-${String((index % 8) + 1).padStart(3, "0")}` : undefined,
+    truckId: truckAssignments[id],
     timeline: [
       { from: null, to: "pre-alertada", actor: "Cliente", at: new Date(Date.UTC(2026, 7, 1 + (index % 20))).toISOString(), note: "Compra registrada antes de llegar a bodega." },
       ...(index === 0 ? [] : [{ from: "pre-alertada", to: status, actor: "Operaciones A&L", at: new Date(Date.UTC(2026, 7, 2 + (index % 20))).toISOString(), note: "Estado inicial del escenario operativo." }]),
