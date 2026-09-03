@@ -31,4 +31,9 @@ describe("suggestCategory", () => {
   it("devuelve null cuando una dimensión excede el máximo", () => {
     expect(suggestCategory({ length: 30, width: 24, height: 24 }, 80).category).toBeNull();
   });
+
+  it("usa el tarifario recibido en lugar de precios estáticos", () => {
+    const rates = [{ id: "small" as const, name: "Small", dimensions: { length: 12, width: 12, height: 12 }, priceUsd: 95, maxWeightLb: 55 }];
+    expect(suggestCategory({ length: 10, width: 10, height: 10 }, 50, rates).category?.priceUsd).toBe(95);
+  });
 });

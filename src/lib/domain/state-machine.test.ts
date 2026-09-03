@@ -61,6 +61,10 @@ describe("transiciones de factura", () => {
   it("no vence una factura antes de la fecha límite", () => {
     expect(transitionInvoice(invoice("emitida"), "vencida", { ...context, at: "2026-08-15" })).toMatchObject({ ok: false });
   });
+
+  it("devuelve a emitida una factura cuando se rechaza el pago reportado", () => {
+    expect(transitionInvoice(invoice("pago-reportado"), "emitida", { ...context, note: "Referencia bancaria no localizada." })).toMatchObject({ ok: true, value: { status: "emitida" } });
+  });
 });
 
 describe("cascadas de camión", () => {

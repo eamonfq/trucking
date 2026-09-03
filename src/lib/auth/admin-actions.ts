@@ -7,15 +7,16 @@ import { trucks } from "@/lib/data/trucks";
 import { demoCredentials, users } from "@/lib/data/users";
 import { addresses, recipients } from "@/lib/data/addresses";
 import { drivers } from "@/lib/data/drivers";
+import { notifications } from "@/lib/data/notifications";
 import { configService } from "@/lib/services/config";
 import { sendEmail } from "@/lib/services/email";
 import { simulateLatency } from "@/lib/services/delay";
 import { transitionBox, transitionInvoice, transitionTruckWithCascade } from "@/lib/domain/state-machine";
-import type { BoxCategory, Dimensions } from "@/lib/config/box-categories";
+import type { BoxCategory, BoxCategoryId } from "@/lib/config/box-categories";
 import type { FlowConfig } from "@/lib/config/flow";
-import type { Address, Recipient, Truck, User } from "@/lib/types";
+import type { Address, Box, Invoice, Recipient, Truck, User } from "@/lib/types";
 import { suggestCategory } from "@/lib/utils/suggest-category";
-import { truckSchema } from "@/lib/schemas/admin";
+import { receptionSchema, truckSchema } from "@/lib/schemas/admin";
 import { OPERATION_ORIGIN } from "@/lib/config/operations";
 import { CUSTOMER_COPY } from "@/lib/config/customers";
 import { customerAddressSchema, customerProfileSchema, customerRecipientSchema, internalNoteSchema, lockerCodeSchema } from "@/lib/schemas/customer";
@@ -184,24 +185,106 @@ export async function deleteCustomerRecipient(userId: string, recipientId: strin
   return { ok: true as const, user };
 }
 
-export async function receiveBox(input: { dimensions: Dimensions; weightLb: number; userId: string }) { await simulateLatency(); const suggestion = suggestCategory(input.dimensions, input.weightLb); return { ok: true as const, suggestion, code: `BX-26${String(boxes.length + 1).padStart(4, "0")}` }; }
-export async function loadBoxesOnTruck(boxIds: string[], truckId: string) { await simulateLatency(); boxes.filter((box) => boxIds.includes(box.id)).forEach((box) => { box.status = "cargada-en-camion"; box.shipmentId = box.shipmentId; }); const truck = trucks.find((item) => item.id === truckId); if (truck) truck.boxIds = Array.from(new Set([...truck.boxIds, ...boxIds])); return { ok: true as const, count: boxIds.length }; }
+async function createInvoiceForBoxes(userId: string, invoiceBoxes: Box[], actor: string) {
+  const rates = await configService.getRateTable();
+  const groups = new Map<BoxCategoryId, number>();
+  invoiceBoxes.forEach((box) => groups.set(box.categoryId, (groups.get(box.categoryId) ?? 0) + 1));
+  const issuedAt = now();
+  const invoice: Invoice = {
+    id: nextId("inv", invoices.length),
+    number: `AL-26-${String(invoices.length + 1).padStart(4, "0")}`,
+    userId,
+    shipmentId: invoiceBoxes.find((box) => box.shipmentId)?.shipmentId ?? "",
+    boxIds: invoiceBoxes.map((box) => box.id),
+    status: "emitida",
+    issuedAt,
+    dueAt: new Date(new Date(issuedAt).getTime() + 15 * 86_400_000).toISOString(),
+    lines: Array.from(groups, ([categoryId, quantity]) => ({ categoryId, quantity, unitPriceUsd: rates.find((rate) => rate.id === categoryId)?.priceUsd ?? 0 })),
+    insuranceUsd: 0,
+    homeDeliveryUsd: 0,
+    timeline: [{ from: null, to: "emitida", actor, at: issuedAt, note: "Documento generado según la configuración de facturación." }],
+  };
+  invoices.push(invoice);
+  return invoice;
+}
+
+export async function receiveBox(input: unknown) {
+  await simulateLatency();
+  const parsed = receptionSchema.safeParse(input);
+  if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Revisa los datos de recepción." };
+  const customer = findCustomer(parsed.data.customer);
+  if (!customer || !customer.active) return { ok: false as const, error: "Selecciona un cliente activo." };
+  const [rates, flow] = await Promise.all([configService.getRateTable(), configService.getFlowConfig()]);
+  const dimensions = { length: parsed.data.length, width: parsed.data.width, height: parsed.data.height };
+  const suggestion = suggestCategory(dimensions, parsed.data.weightLb, rates);
+  if (!suggestion.category && !parsed.data.reject) return { ok: false as const, error: "La caja excede la categoría máxima. Registra el rechazo e indica el motivo." };
+  const categoryId = (parsed.data.overrideCategory || suggestion.category?.id || rates.at(-1)?.id) as BoxCategoryId;
+  if (!rates.some((rate) => rate.id === categoryId)) return { ok: false as const, error: "Selecciona una categoría válida." };
+  const createdAt = now();
+  const id = nextId("box", boxes.length);
+  const code = `BX-26${String(boxes.length + 1).padStart(4, "0")}` as const;
+  const rejected = Boolean(parsed.data.reject);
+  const note = rejected ? parsed.data.rejectionReason : parsed.data.overrideCategory ? parsed.data.overrideReason : suggestion.reason ? `Categoría ajustada por ${suggestion.reason.replaceAll("-", " ")}.` : "Medidas y peso validados.";
+  const box: Box = {
+    id, code, userId: customer.id, categoryId, status: rejected ? "rechazada" : "en-bodega", dimensions, weightLb: parsed.data.weightLb,
+    receivedAt: createdAt,
+    photos: parsed.data.photoName ? [`Recepción: ${parsed.data.photoName}`] : [],
+    timeline: rejected
+      ? [{ from: null, to: "rechazada", actor: adminActor, at: createdAt, note }]
+      : [
+        { from: null, to: "recibida", actor: adminActor, at: createdAt, note: "Caja recibida físicamente en Miami." },
+        { from: "recibida", to: "categorizada", actor: adminActor, at: createdAt, note },
+        { from: "categorizada", to: "en-bodega", actor: adminActor, at: createdAt, note: "Disponible para asignación a guía máster." },
+      ],
+  };
+  boxes.push(box);
+  const notification = { id: nextId("not", notifications.length), userId: customer.id, title: rejected ? "Caja rechazada" : "Caja recibida", body: rejected ? `${code} fue rechazada: ${parsed.data.rejectionReason}.` : `${code} fue registrada en bodega como ${rates.find((rate) => rate.id === categoryId)?.name}.`, createdAt, read: false };
+  notifications.unshift(notification);
+  let invoice: Invoice | undefined;
+  if (!rejected && flow.billingMoment === "al-recibir") invoice = await createInvoiceForBoxes(customer.id, [box], adminActor);
+  await sendEmail({ to: customer.email, subject: rejected ? `Recepción rechazada ${code}` : `Caja recibida ${code}`, heading: rejected ? "La recepción requiere tu atención" : "Tu caja ya está en bodega", body: notification.body, actionLabel: "Ver mis cajas", actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/cliente/cajas` });
+  return { ok: true as const, suggestion, code, box, invoice, notification };
+}
+
+export async function loadBoxesOnTruck(boxIds: string[], truckId: string) {
+  await simulateLatency();
+  const truck = trucks.find((item) => item.id === truckId);
+  if (!truck) return { ok: false as const, error: "Selecciona un camión disponible." };
+  const rejected: Array<{ boxId: string; reason: string }> = [];
+  const assigned: Box[] = [];
+  for (const boxId of boxIds) {
+    const result = await assignBoxToTruck(truckId, boxId);
+    if (!result.ok) rejected.push({ boxId, reason: result.error });
+    else assigned.push({ ...result.box });
+  }
+  return { ok: true as const, count: assigned.length, assigned, rejected, truck: { ...truck } };
+}
 
 export async function transitionTruckState(truckId: string, note?: string) {
   await simulateLatency();
   const truckIndex = trucks.findIndex((item) => item.id === truckId);
   if (truckIndex < 0) return { ok: false as const, error: "No encontramos el camión seleccionado." };
+  const previousStatus = trucks[truckIndex]!.status;
   const result = transitionTruckWithCascade(trucks[truckIndex]!, boxes, shipments, { actor: "Operaciones A&L", note });
   if (!result.ok) return result;
   trucks[truckIndex] = result.value.truck;
   result.value.changedBoxIds.forEach((id) => { const index = boxes.findIndex((box) => box.id === id); boxes[index] = result.value.boxes.find((box) => box.id === id)!; });
   result.value.changedShipmentIds.forEach((id) => { const index = shipments.findIndex((shipment) => shipment.id === id); shipments[index] = result.value.shipments.find((shipment) => shipment.id === id)!; });
   const userIds = new Set(boxes.filter((box) => result.value.truck.boxIds.includes(box.id)).map((box) => box.userId));
+  const generatedInvoices: Invoice[] = [];
+  const flow = await configService.getFlowConfig();
+  if (previousStatus === "cargando" && result.value.truck.status === "despachado" && flow.billingMoment === "al-despachar") {
+    for (const userId of userIds) {
+      const eligible = boxes.filter((box) => result.value.truck.boxIds.includes(box.id) && box.userId === userId && !invoices.some((invoice) => invoice.boxIds?.includes(box.id)));
+      if (eligible.length) generatedInvoices.push(await createInvoiceForBoxes(userId, eligible, adminActor));
+    }
+  }
   await Promise.all(users.filter((user) => userIds.has(user.id)).map((user) => sendEmail({ to: user.email, subject: `Actualización ${result.value.truck.code}`, heading: "Tu carga avanzó de etapa", body: `El camión ${result.value.truck.code} cambió al estado ${result.value.truck.status}.`, actionLabel: "Ver seguimiento", actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/cliente/envios` })));
-  return { ok: true as const, truck: result.value.truck, changedBoxes: result.value.changedBoxIds.length, changedShipments: result.value.changedShipmentIds.length };
+  return { ok: true as const, truck: result.value.truck, changedBoxes: result.value.changedBoxIds.length, changedShipments: result.value.changedShipmentIds.length, generatedInvoices };
 }
-export async function approvePayment(invoiceId: string) { await simulateLatency(); const index = invoices.findIndex((item) => item.id === invoiceId); if (index < 0) return { ok: false as const, error: "No encontramos la factura seleccionada." }; const result = transitionInvoice(invoices[index]!, "pagada", { actor: "Operaciones A&L", note: "Comprobante validado." }); if (!result.ok) return result; invoices[index] = result.value; const user = users.find((item) => item.id === result.value.userId); if (user) await sendEmail({ to: user.email, subject: "Pago aprobado", heading: "Tu pago fue aprobado", body: `La factura ${result.value.number} ahora aparece como pagada.`, actionLabel: "Ver factura", actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/cliente/facturas/${result.value.id}` }); return { ok: true as const };
+export async function approvePayment(invoiceId: string, note: string) { await simulateLatency(); if (note.trim().length < 5) return { ok: false as const, error: "Agrega una nota de validación de al menos 5 caracteres." }; const index = invoices.findIndex((item) => item.id === invoiceId); if (index < 0) return { ok: false as const, error: "No encontramos la factura seleccionada." }; const result = transitionInvoice(invoices[index]!, "pagada", { actor: "Operaciones A&L", note }); if (!result.ok) return result; invoices[index] = { ...result.value, paymentReviewNote: note }; const user = users.find((item) => item.id === result.value.userId); if (user) await sendEmail({ to: user.email, subject: "Pago aprobado", heading: "Tu pago fue aprobado", body: `La factura ${result.value.number} ahora aparece como pagada.`, actionLabel: "Ver factura", actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/cliente/facturas/${result.value.id}` }); return { ok: true as const, invoice: invoices[index]! };
 }
+export async function rejectPayment(invoiceId: string, note: string) { await simulateLatency(); if (note.trim().length < 5) return { ok: false as const, error: "Explica el rechazo con al menos 5 caracteres." }; const index = invoices.findIndex((item) => item.id === invoiceId); if (index < 0) return { ok: false as const, error: "No encontramos la factura seleccionada." }; const result = transitionInvoice(invoices[index]!, "emitida", { actor: adminActor, note }); if (!result.ok) return result; invoices[index] = { ...result.value, paymentReviewNote: note, paymentReport: undefined }; const user = users.find((item) => item.id === result.value.userId); if (user) await sendEmail({ to: user.email, subject: "Reporte de pago rechazado", heading: "Necesitamos otro comprobante", body: `El reporte de ${result.value.number} fue rechazado: ${note}`, actionLabel: "Revisar factura", actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/cliente/facturas/${result.value.id}` }); return { ok: true as const, invoice: invoices[index]! }; }
 export async function createTruck(input: unknown) {
   await simulateLatency();
   const parsed = truckSchema.safeParse(input);

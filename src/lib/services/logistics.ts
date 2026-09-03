@@ -35,4 +35,8 @@ export const logisticsService = {
     await simulateLatency();
     return clone(boxes.find((box) => box.code.toLowerCase() === code.toLowerCase()) ?? null);
   },
+  async getBoxById(id: string) {
+    await simulateLatency();
+    return clone(boxes.find((box) => box.id === id) ?? null);
+  },
 };

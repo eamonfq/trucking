@@ -44,7 +44,7 @@ export const SHIPMENT_TRANSITIONS: Record<ShipmentStatus, readonly ShipmentStatu
 export const INVOICE_TRANSITIONS: Record<InvoiceStatus, readonly InvoiceStatus[]> = {
   borrador: ["emitida"],
   emitida: ["pago-reportado", "vencida"],
-  "pago-reportado": ["pagada"],
+  "pago-reportado": ["pagada", "emitida"],
   pagada: [],
   vencida: ["pago-reportado"],
 };

@@ -18,10 +18,10 @@ const dimensionsFit = (actual: Dimensions, limit: Dimensions) => {
   return box.every((value, index) => value <= category[index]);
 };
 
-export function suggestCategory(dimensions: Dimensions, weightLb: number): CategorySuggestion {
-  const dimensionIndex = BOX_CATEGORIES.findIndex((category) => dimensionsFit(dimensions, category.dimensions));
-  const weightIndex = BOX_CATEGORIES.findIndex((category) => weightLb <= category.maxWeightLb);
-  const categoryIndex = BOX_CATEGORIES.findIndex(
+export function suggestCategory(dimensions: Dimensions, weightLb: number, categories: readonly BoxCategory[] = BOX_CATEGORIES): CategorySuggestion {
+  const dimensionIndex = categories.findIndex((category) => dimensionsFit(dimensions, category.dimensions));
+  const weightIndex = categories.findIndex((category) => weightLb <= category.maxWeightLb);
+  const categoryIndex = categories.findIndex(
     (category) => dimensionsFit(dimensions, category.dimensions) && weightLb <= category.maxWeightLb,
   );
 
@@ -39,7 +39,7 @@ export function suggestCategory(dimensions: Dimensions, weightLb: number): Categ
   const upgradedByWeight = dimensionIndex >= 0 && categoryIndex > dimensionIndex;
   const upgradedByDimensions = weightIndex >= 0 && categoryIndex > weightIndex;
   return {
-    category: BOX_CATEGORIES[categoryIndex] ?? null,
+    category: categories[categoryIndex] ?? null,
     upgradedByWeight,
     upgradedByDimensions,
     reason: upgradedByWeight && upgradedByDimensions ? "peso-y-medida" : upgradedByWeight ? "peso" : upgradedByDimensions ? "medida" : null,

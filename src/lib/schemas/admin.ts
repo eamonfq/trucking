@@ -2,7 +2,10 @@ import { z } from "zod";
 import { BOX_CATEGORY_IDS } from "@/lib/config/box-categories";
 import { DESTINATION_CITIES } from "@/lib/config/operations";
 
-export const receptionSchema = z.object({ customer: z.string().min(1), length: z.coerce.number().positive(), width: z.coerce.number().positive(), height: z.coerce.number().positive(), weightLb: z.coerce.number().positive(), overrideCategory: z.string().optional(), overrideReason: z.string().optional(), photoName: z.string().optional() }).refine((data) => !data.overrideCategory || (data.overrideReason?.length ?? 0) >= 5, { path: ["overrideReason"], message: "Explica el motivo de la sobrescritura." });
+export const receptionSchema = z.object({ customer: z.string().min(1, "Selecciona un cliente."), length: z.coerce.number().positive("Escribe el largo."), width: z.coerce.number().positive("Escribe el ancho."), height: z.coerce.number().positive("Escribe el alto."), weightLb: z.coerce.number().positive("Escribe el peso."), overrideCategory: z.string().optional(), overrideReason: z.string().optional(), rejectionReason: z.string().optional(), reject: z.boolean().default(false), photoName: z.string().optional() }).superRefine((data, context) => {
+  if (data.overrideCategory && (data.overrideReason?.trim().length ?? 0) < 5) context.addIssue({ code: "custom", path: ["overrideReason"], message: "Explica el motivo de la sobrescritura." });
+  if (data.reject && (data.rejectionReason?.trim().length ?? 0) < 5) context.addIssue({ code: "custom", path: ["rejectionReason"], message: "Indica por qué se rechaza la caja." });
+});
 const capacityShape = Object.fromEntries(BOX_CATEGORY_IDS.map((id) => [id, z.coerce.number().int().min(0).max(99)])) as Record<(typeof BOX_CATEGORY_IDS)[number], z.ZodNumber>;
 
 export const truckSchema = z.object({

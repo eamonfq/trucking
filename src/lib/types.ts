@@ -84,6 +84,7 @@ export type Box = {
   receivedAt?: string;
   shipmentId?: string;
   truckId?: string;
+  photos?: string[];
   timeline: TimelineEvent[];
 };
 
@@ -140,6 +141,9 @@ export type Invoice = {
   lines: InvoiceLine[];
   insuranceUsd: number;
   homeDeliveryUsd: number;
+  boxIds?: string[];
+  paymentReport?: { amountUsd: number; method: string; reference: string; receiptName?: string; reportedAt: string };
+  paymentReviewNote?: string;
   timeline: TimelineEvent[];
 };
 

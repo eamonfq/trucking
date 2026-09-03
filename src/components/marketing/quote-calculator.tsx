@@ -4,15 +4,16 @@ import { useMemo, useState } from "react";
 import { AlertTriangle, ArrowUpRight, Box } from "lucide-react";
 import { suggestCategory } from "@/lib/utils/suggest-category";
 import { formatUsd } from "@/lib/utils/format";
+import type { BoxCategory } from "@/lib/config/box-categories";
 
 const numeric = (value: string) => Number(value) || 0;
 
-export function QuoteCalculator() {
+export function QuoteCalculator({ rates }: { rates?: BoxCategory[] }) {
   const [values, setValues] = useState({ length: "", width: "", height: "", weight: "" });
   const result = useMemo(() => {
     if (Object.values(values).some((value) => numeric(value) <= 0)) return null;
-    return suggestCategory({ length: numeric(values.length), width: numeric(values.width), height: numeric(values.height) }, numeric(values.weight));
-  }, [values]);
+    return suggestCategory({ length: numeric(values.length), width: numeric(values.width), height: numeric(values.height) }, numeric(values.weight), rates);
+  }, [rates, values]);
   const update = (key: keyof typeof values, value: string) => setValues((current) => ({ ...current, [key]: value }));
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_.8fr]">

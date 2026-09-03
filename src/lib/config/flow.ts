@@ -4,6 +4,21 @@ export const BILLING_MOMENTS = ["al-recibir", "al-despachar"] as const;
 export const EXCESS_POLICIES = ["subir-categoria", "recargo", "rechazo"] as const;
 export const DELIVERY_MODES = ["sucursal", "domicilio", "ambas"] as const;
 
+export const FLOW_OPTION_LABELS: Record<string, string> = {
+  casillero: "Casillero",
+  "entrega-directa": "Entrega directa",
+  cliente: "Empaca el cliente",
+  agencia: "Empaca la agencia",
+  "al-recibir": "Al recibir",
+  "al-despachar": "Al despachar",
+  "subir-categoria": "Sugerir categoría superior",
+  recargo: "Aplicar recargo",
+  rechazo: "Rechazar",
+  sucursal: "Sucursal",
+  domicilio: "Domicilio",
+  ambas: "Ambas",
+};
+
 export type FlowConfig = {
   originMode: (typeof ORIGIN_MODES)[number];
   packingMode: (typeof PACKING_MODES)[number];
