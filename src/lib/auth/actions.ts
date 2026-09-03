@@ -24,6 +24,7 @@ export async function authenticate(identifier: string, password: string) {
 
 export async function signOut() {
   (await cookies()).delete(SESSION_COOKIE);
+  redirect("/");
 }
 
 export async function getSession() {
