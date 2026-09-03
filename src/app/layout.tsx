@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import { ToastProvider } from "@/components/ui/toast";
 import "./globals.css";
 
 const inter = localFont({
@@ -29,7 +30,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="es-MX" data-scroll-behavior="smooth">
-      <body className={`${inter.variable} ${sora.variable} font-sans antialiased`}>{children}</body>
+      <body className={`${inter.variable} ${sora.variable} font-sans antialiased`}><ToastProvider>{children}</ToastProvider></body>
     </html>
   );
 }

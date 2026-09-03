@@ -13,8 +13,8 @@ export const shipments: Shipment[] = Array.from({ length: 8 }, (_, index) => {
     status,
     destinationCity: ["Ciudad de México", "Monterrey", "Guadalajara"][index % 3]!,
     timeline: [
-      { status: "pendiente", occurredAt: new Date(Date.UTC(2026, 7, 4 + index)).toISOString(), location: "Miami, FL", description: "Envío creado para demostración." },
-      ...(status === "pendiente" ? [] : [{ status, occurredAt: new Date(Date.UTC(2026, 7, 8 + index)).toISOString(), location: "Ruta USA–México", description: "Avance operativo simulado." }]),
+      { from: null, to: "pendiente", actor: "Cliente", at: new Date(Date.UTC(2026, 7, 4 + index)).toISOString(), note: "Solicitud de envío creada." },
+      ...(status === "pendiente" ? [] : [{ from: "pendiente", to: status, actor: "Operaciones A&L", at: new Date(Date.UTC(2026, 7, 8 + index)).toISOString(), note: "Estado inicial del escenario operativo." }]),
     ],
   } satisfies Shipment;
 });

@@ -18,8 +18,8 @@ const makeBox = (index: number): Box => {
     receivedAt: index === 0 ? undefined : new Date(Date.UTC(2026, 7, 2 + (index % 24))).toISOString(),
     shipmentId: index >= 8 ? `ship-${String((index % 8) + 1).padStart(3, "0")}` : undefined,
     timeline: [
-      { status: "pre-alertada", occurredAt: new Date(Date.UTC(2026, 7, 1 + (index % 20))).toISOString(), location: "Miami, FL", description: "Caja registrada para demostración." },
-      ...(index === 0 ? [] : [{ status, occurredAt: new Date(Date.UTC(2026, 7, 2 + (index % 20))).toISOString(), location: status.includes("destino") || status === "entregada" ? "México" : "Miami, FL", description: "Actualización operativa simulada." }]),
+      { from: null, to: "pre-alertada", actor: "Cliente", at: new Date(Date.UTC(2026, 7, 1 + (index % 20))).toISOString(), note: "Compra registrada antes de llegar a bodega." },
+      ...(index === 0 ? [] : [{ from: "pre-alertada", to: status, actor: "Operaciones A&L", at: new Date(Date.UTC(2026, 7, 2 + (index % 20))).toISOString(), note: "Estado inicial del escenario operativo." }]),
     ],
   };
 };

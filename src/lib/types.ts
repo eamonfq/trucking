@@ -36,6 +36,14 @@ export type User = {
   lockerCode: string;
 };
 
+export type TransitionEvent = {
+  from: string | null;
+  to: string;
+  actor: string;
+  at: string;
+  note?: string;
+};
+
 export type Address = {
   id: string;
   userId: string;
@@ -58,12 +66,7 @@ export type Recipient = {
   addressId: string;
 };
 
-export type TimelineEvent = {
-  status: string;
-  occurredAt: string;
-  location: string;
-  description: string;
-};
+export type TimelineEvent = TransitionEvent;
 
 export type Box = {
   id: string;
@@ -120,6 +123,7 @@ export type Invoice = {
   lines: InvoiceLine[];
   insuranceUsd: number;
   homeDeliveryUsd: number;
+  timeline: TimelineEvent[];
 };
 
 export type Notification = {
