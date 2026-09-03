@@ -25,5 +25,5 @@ export function QuoteCalculator() {
 }
 
 function Measure({ label, value, onChange, suffix }: { label: string; value: string; onChange: (value: string) => void; suffix: string }) {
-  return <label className="grid gap-2 text-sm font-bold text-navy-800">{label}<span className="flex min-h-14 items-center rounded-2xl border border-stone-200 bg-white px-4 transition focus-within:border-orange-500"><input type="number" min="0" step="0.1" value={value} onChange={(event) => onChange(event.target.value)} className="min-w-0 flex-1 bg-transparent text-lg font-semibold outline-none" /><span className="text-xs text-navy-400">{suffix}</span></span></label>;
+  return <label className="grid gap-2 text-sm font-bold text-navy-800">{label}<span className="flex min-h-14 items-center rounded-2xl border border-stone-200 bg-white px-4 transition focus-within:border-orange-500"><input type="number" min="0" step="0.1" value={value} onChange={(event) => onChange(event.target.value)} className="min-w-0 flex-1 bg-transparent text-lg font-semibold outline-none" /><span className="text-xs text-navy-500">{suffix}</span></span></label>;
 }

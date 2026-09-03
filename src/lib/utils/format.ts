@@ -1,9 +1,7 @@
-export const formatUsd = (amount: number) =>
-  `${new Intl.NumberFormat("es-MX", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-  }).format(amount)} USD`;
+export const formatUsd = (amount: number) => `$${new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+}).format(amount)} USD`;
 
 export const formatDate = (value: string | Date) =>
   new Intl.DateTimeFormat("es-MX", {

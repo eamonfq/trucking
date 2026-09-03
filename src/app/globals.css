@@ -4,8 +4,8 @@
   --color-orange-50: #fff6f0;
   --color-orange-100: #ffe8d8;
   --color-orange-200: #ffc9a7;
-  --color-orange-500: #e8621c;
-  --color-orange-600: #c94d0e;
+  --color-orange-500: #c2410c;
+  --color-orange-600: #a93808;
   --color-navy-50: #f4f6fa;
   --color-navy-100: #e4e8f0;
   --color-navy-200: #cbd2df;
@@ -37,6 +37,7 @@
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 body { margin: 0; background: var(--color-cream-50); color: var(--color-navy-900); }
+.text-white\/45 { color: rgb(255 255 255 / 0.65); }
 button, input, select, textarea { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 ::selection { background: var(--color-orange-200); color: var(--color-navy-950); }
