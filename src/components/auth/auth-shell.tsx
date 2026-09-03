@@ -12,9 +12,11 @@ const BENEFITS = [
 export function AuthShell({ eyebrow, title, description, children }: { eyebrow: string; title: string; description: string; children: ReactNode }) {
   return (
     <main className="grid min-h-screen bg-white lg:grid-cols-[1fr_38.75rem]">
-      <section className="flex min-h-screen flex-col justify-between gap-12 px-5 py-10 sm:px-10 lg:px-24 lg:py-16">
+      {/* La columna se centra: en pantallas anchas el panel izquierdo crece y el
+          formulario quedaría pegado al borde con un vacío enorme al lado. */}
+      <section className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-between gap-12 px-5 py-10 sm:px-0 lg:py-16">
         <BrandLogo className="h-8 w-auto" />
-        <div className="flex w-full max-w-md flex-col gap-8">
+        <div className="flex w-full flex-col gap-8">
           <div className="flex flex-col gap-3">
             <p className="text-over font-semibold uppercase text-brand-700">{eyebrow}</p>
             <h1 className="font-display text-[2.5rem] font-extrabold leading-[.98] tracking-[-.04em] text-navy-900 sm:text-d3">{title}</h1>

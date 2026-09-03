@@ -10,6 +10,9 @@ const UNIT = 1.6;
 const KX = UNIT * Math.sqrt(3);
 const KH = UNIT * 2;
 
+/** Ancho natural del viewBox de una caja. Sirve para repartir proporciones en composiciones fluidas. */
+export const boxIsoWidth = (category: BoxCategory) => (category.dimensions.length + category.dimensions.width) * KX;
+
 /** Los degradados viven una sola vez por página y las cajas los referencian por id. */
 export function BoxIsoDefs() {
   return (
@@ -37,14 +40,19 @@ export function BoxIsoDefs() {
 
 type BoxIsoProps = {
   category: BoxCategory;
-  /** Píxeles por unidad de viewBox. El mismo valor en varias cajas las deja a escala real entre sí. */
+  /**
+   * Píxeles por unidad de viewBox. El mismo valor en varias cajas las deja a
+   * escala real entre sí. Si se omite, el SVG no fija medidas y lo dimensiona
+   * el contenedor: sirve para composiciones fluidas donde la escala relativa
+   * se reparte con el ancho de cada envoltorio.
+   */
   scale?: number;
   /** Cinta de sellado y aristas iluminadas; se usa en la composición del hero. */
   detailed?: boolean;
   className?: string;
 };
 
-export function BoxIso({ category, scale = 1, detailed = false, className }: BoxIsoProps) {
+export function BoxIso({ category, scale, detailed = false, className }: BoxIsoProps) {
   const { length, width, height } = category.dimensions;
   const boardWidth = (length + width) * KX;
   const topHeight = (length + width) * UNIT;
@@ -64,8 +72,8 @@ export function BoxIso({ category, scale = 1, detailed = false, className }: Box
 
   return (
     <svg
-      width={boardWidth * scale}
-      height={(topHeight + side) * scale}
+      width={scale === undefined ? undefined : boardWidth * scale}
+      height={scale === undefined ? undefined : (topHeight + side) * scale}
       viewBox={`0 0 ${boardWidth} ${topHeight + side}`}
       fill="none"
       role="img"
