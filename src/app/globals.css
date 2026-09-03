@@ -1,36 +1,114 @@
 @import "tailwindcss";
 
+/*
+  Sistema visual derivado del rediseño editorial de A&L.
+  Regla de contraste del naranja, respetarla al escribir componentes:
+    brand-500 (#E8621C) solo ilustración y display de 24px o más.
+    brand-600 (#C24E12) botones y superficies con texto blanco.
+    brand-700 (#A8410C) texto naranja de 18px o menos y badges chicos.
+*/
 @theme {
-  --color-orange-50: #fff6f0;
-  --color-orange-100: #ffe8d8;
-  --color-orange-200: #ffc9a7;
-  --color-orange-500: #c2410c;
-  --color-orange-600: #a93808;
-  --color-navy-50: #f4f6fa;
-  --color-navy-100: #e4e8f0;
-  --color-navy-200: #cbd2df;
-  --color-navy-400: #77839a;
-  --color-navy-500: #5a6680;
-  --color-navy-700: #344360;
-  --color-navy-800: #263754;
+  --color-brand-50: #fdf6f0;
+  --color-brand-100: #fbe8d9;
+  --color-brand-200: #f7cfae;
+  --color-brand-300: #f2914e;
+  --color-brand-500: #e8621c;
+  --color-brand-600: #c24e12;
+  --color-brand-700: #a8410c;
+  --color-brand-900: #7e2e06;
+
+  --color-navy-700: #33436b;
+  --color-navy-800: #22335a;
   --color-navy-900: #1c2b4b;
-  --color-navy-950: #121d35;
-  --color-cream-50: #fdfbf7;
+  --color-navy-950: #101a2f;
+  --color-navy-975: #0b1426;
+  --color-navy-fade: #a8b2ca;
+
+  --color-ink-500: #5c6379;
+  --color-ink-700: #414960;
+  --color-label-600: #756950;
+
+  --color-cream-50: #fbf9f5;
   --color-cream-100: #f6f1e9;
-  --color-stone-100: #f2efe9;
-  --color-stone-200: #e3ded5;
-  --color-stone-500: #746f68;
+  --color-cream-200: #ded6c9;
+
+  --color-line-200: #ede6da;
+  --color-line-300: #ded5c6;
+
+  --color-success: #1e7a4b;
   --color-success-50: #ecfdf3;
-  --color-success-700: #067647;
-  --color-danger-50: #fff1f0;
-  --color-danger-700: #b42318;
-  --font-display: var(--font-sora), ui-sans-serif, system-ui;
+  --color-warning: #8a5a00;
+  --color-warning-50: #fff8e8;
+  --color-danger: #b3261e;
+  --color-danger-50: #fdf0ef;
+
+  --font-display: var(--font-bricolage), ui-sans-serif, system-ui;
   --font-sans: var(--font-inter), ui-sans-serif, system-ui;
-  --radius-card: 1.5rem;
-  --shadow-soft: 0 18px 55px rgba(28, 43, 75, 0.1);
-  --shadow-lift: 0 24px 70px rgba(28, 43, 75, 0.16);
-  --text-display: clamp(2.75rem, 7vw, 6.5rem);
+
+  --text-d1: 6.5rem;
+  --text-d1--line-height: 0.9;
+  --text-d1--letter-spacing: -0.045em;
+  --text-d2: 4.75rem;
+  --text-d2--line-height: 0.94;
+  --text-d2--letter-spacing: -0.04em;
+  --text-d3: 3.5rem;
+  --text-d3--line-height: 0.98;
+  --text-d3--letter-spacing: -0.04em;
+  --text-h1: 2.25rem;
+  --text-h1--line-height: 1.05;
+  --text-h1--letter-spacing: -0.02em;
+  --text-h2: 1.4375rem;
+  --text-h2--line-height: 1.3;
+  --text-h2--letter-spacing: -0.01em;
+  --text-lg: 1.3125rem;
+  --text-lg--line-height: 1.55;
+  --text-base: 1.0625rem;
+  --text-base--line-height: 1.6;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.6;
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.5;
+  --text-over: 0.75rem;
+  --text-over--line-height: 1.2;
+  --text-over--letter-spacing: 0.14em;
+
+  --radius-sm: 0.5rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.25rem;
+  --radius-card: 1.25rem;
+
+  --shadow-card: 0 1px 2px rgb(28 43 75 / 0.06);
+  --shadow-pop: 0 20px 50px rgb(28 43 75 / 0.14);
+  --shadow-frame: 0 30px 80px rgb(28 43 75 / 0.16);
+  --shadow-soft: 0 1px 2px rgb(28 43 75 / 0.06);
+  --shadow-lift: 0 20px 50px rgb(28 43 75 / 0.14);
+
   --ease-premium: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /*
+    Alias de compatibilidad: los paneles de cliente y operación todavía usan la
+    nomenclatura anterior y el rediseño no dibuja esas pantallas. Apuntan a los
+    valores nuevos para que hereden la paleta sin reescribirlas.
+  */
+  --color-orange-50: var(--color-brand-50);
+  --color-orange-100: var(--color-brand-100);
+  --color-orange-200: var(--color-brand-200);
+  --color-orange-300: var(--color-brand-300);
+  --color-orange-400: var(--color-brand-300);
+  --color-orange-500: var(--color-brand-600);
+  --color-orange-600: var(--color-brand-700);
+  --color-orange-700: var(--color-brand-900);
+  --color-navy-50: var(--color-cream-50);
+  --color-navy-100: var(--color-line-200);
+  --color-navy-200: var(--color-line-300);
+  --color-navy-400: var(--color-label-600);
+  --color-navy-500: var(--color-ink-500);
+  --color-stone-100: var(--color-cream-100);
+  --color-stone-200: var(--color-line-300);
+  --color-stone-500: var(--color-label-600);
+  --color-success-700: var(--color-success);
+  --color-danger-700: var(--color-danger);
 }
 
 :root { color-scheme: light; }
@@ -40,12 +118,21 @@ body { margin: 0; background: var(--color-cream-50); color: var(--color-navy-900
 .text-white\/45 { color: rgb(255 255 255 / 0.65); }
 button, input, select, textarea { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
-::selection { background: var(--color-orange-200); color: var(--color-navy-950); }
+::selection { background: var(--color-brand-500); color: #fff; }
 
 :focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--color-orange-500) 72%, white);
+  outline: 3px solid var(--color-brand-600);
   outline-offset: 3px;
 }
+
+/* Trama diagonal para datos pendientes de confirmar con el cliente. */
+.pending-data {
+  background-image: repeating-linear-gradient(135deg, rgb(28 43 75 / 0.1) 0 6px, transparent 6px 12px);
+}
+
+@keyframes rise-in { from { opacity: 0; transform: translateY(34px); } to { opacity: 1; transform: none; } }
+@keyframes float-y { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+@keyframes dash-move { to { stroke-dashoffset: -320; } }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

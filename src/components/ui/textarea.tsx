@@ -6,10 +6,10 @@ type TextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & { label: stri
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function Textarea({ id, label, error, hint, className, ...props }, ref) {
   const textareaId = id ?? props.name;
   return (
-    <label className="grid gap-2 text-sm font-semibold text-navy-900" htmlFor={textareaId}>
+    <label className="grid gap-2 text-xs font-medium text-ink-700" htmlFor={textareaId}>
       {label}
-      <textarea ref={ref} id={textareaId} aria-invalid={Boolean(error)} className={cn("min-h-28 resize-y rounded-xl border border-stone-200 bg-white px-4 py-3 text-base font-normal text-navy-950 outline-none transition hover:border-navy-400 focus:border-orange-500", error && "border-danger-700", className)} {...props} />
-      {(error || hint) && <span className={`text-xs font-normal ${error ? "text-danger-700" : "text-navy-500"}`}>{error ?? hint}</span>}
+      <textarea ref={ref} id={textareaId} aria-invalid={Boolean(error)} className={cn("min-h-28 resize-y rounded-md border-[1.5px] border-line-300 bg-white px-4 py-3 text-base font-medium text-navy-900 outline-none transition placeholder:font-normal placeholder:text-label-600 hover:border-label-600 focus:border-brand-700", error && "border-danger", className)} {...props} />
+      {(error || hint) && <span className={`text-xs font-normal ${error ? "text-danger" : "text-ink-500"}`}>{error ?? hint}</span>}
     </label>
   );
 });

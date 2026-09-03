@@ -1,40 +1,61 @@
 # Sistema de diseño A&L Trucking Logistics
 
+Sistema derivado del rediseño editorial de la superficie pública. La fuente de verdad son los tokens de `src/app/globals.css`; este documento explica cómo usarlos.
+
 ## Dirección visual
 
-La interfaz combina la confianza operativa de una compañía logística con el cuidado de un producto digital premium. La composición usa superficies blancas, fondos crema, tipografía de alto contraste y bloques azul marino. El naranja A&L se reserva para una acción principal o un dato protagonista por sección.
+Editorial y operativo a la vez: superficies amplias, tipografía display de peso alto como elemento protagonista y naranja racionado a una aparición por sección. El precio es un elemento tipográfico dominante, no una etiqueta más. Las cajas se dibujan isométricas y a escala real entre sí.
 
 ## Color
 
-- **Naranja A&L `#E8621C`**: acciones primarias, foco y acentos.
-- **Azul marino `#1C2B4B`**: texto principal, navegación y superficies de alta jerarquía.
-- **Crema `#F6F1E9`**: fondo cálido de marketing.
-- **Blanco `#FFFFFF`**: tarjetas y superficies de trabajo.
-- **Grises cálidos**: texto secundario, divisores y campos.
-- Verde y rojo se usan exclusivamente para estados positivos y críticos.
+| Token | Valor | Uso |
+|---|---|---|
+| `brand-500` | `#E8621C` | Solo ilustración y display de 24 px o más. |
+| `brand-600` | `#C24E12` | Botones y superficies con texto blanco. |
+| `brand-700` | `#A8410C` | Texto naranja de 18 px o menos y badges chicos. |
+| `brand-300` | `#F2914E` | Acentos sobre fondos oscuros. |
+| `navy-900` · `navy-800` · `navy-700` | `#1C2B4B` · `#22335A` · `#33436B` | Texto principal, superficies oscuras y bordes sobre oscuro. |
+| `navy-950` · `navy-975` | `#101A2F` · `#0B1426` | Hero y franja de rastreo. |
+| `ink-700` · `ink-500` · `label-600` | `#414960` · `#5C6379` · `#756950` | Cuerpo, texto secundario y etiquetas. |
+| `cream-50` · `cream-100` | `#FBF9F5` · `#F6F1E9` | Fondos cálidos alternos. |
+| `line-200` · `line-300` | `#EDE6DA` · `#DED5C6` | Divisores y bordes de campo. |
+| `success` · `warning` · `danger` | `#1E7A4B` · `#8A5A00` · `#B3261E` | Únicamente estados. |
 
-El contraste de texto y controles se mantiene en AA. El foco es un anillo naranja exterior visible que no depende solo del color del borde.
+**La regla del naranja no es opcional**: `brand-500` no alcanza contraste AA como texto pequeño sobre blanco. Para texto usa `brand-700`; para un botón relleno, `brand-600` con texto blanco.
+
+Los paneles de cliente y operación todavía usan la nomenclatura anterior (`orange-*`, `stone-*`, `navy-950`). Esos nombres viven como alias al final del bloque `@theme` y apuntan a los valores nuevos, así que heredan la paleta sin reescribirse. Al escribir código nuevo usa siempre los nombres canónicos.
 
 ## Tipografía
 
-Sora es la familia display para titulares y cifras destacadas. Inter es la familia funcional para navegación, formularios, tablas y texto. La escala usa los tokens `text-xs`, `text-sm`, `text-base`, `text-lg`, `text-xl`, `text-2xl`, `text-3xl`, `text-4xl` y `text-display`; no se introducen tamaños arbitrarios en componentes.
+Bricolage Grotesque para display y cifras; Inter para interfaz y cuerpo. Ambas se autoalojan con `next/font/local`.
+
+| Token | Tamaño / interlínea | Uso |
+|---|---|---|
+| `text-d1` · `text-d2` · `text-d3` | 104 / 76 / 56 px | Hero y titulares de sección. |
+| `text-h1` · `text-h2` | 36 / 23 px | Títulos de bloque y de tarjeta. |
+| `text-lg` · `text-base` · `text-sm` · `text-xs` | 21 / 17 / 15 / 13 px | Bajadas, cuerpo, secundario y etiquetas de campo. |
+| `text-over` | 12 px, `+0.14em`, versalitas | Overline de sección. |
 
 ## Forma, profundidad y ritmo
 
-Las tarjetas usan radios entre 18 y 28 px y sombras amplias de baja opacidad. El espacio interno mínimo de una superficie es 20 px en móvil y 24 px en escritorio. Los controles tienen 44 px de alto mínimo para interacción táctil. Las transiciones duran 180–240 ms y se desactivan cuando el sistema solicita movimiento reducido.
+Radios: `sm` 8, `md` 10, `lg` 14, `xl` 20 px. Los controles usan `md`, las tarjetas `lg` o `xl`. Sombras: `card` para reposo, `pop` para elementos flotantes y `frame` para lienzos completos. Los controles miden 48 px de alto (56 en formularios de auth y cotizador). Las transiciones duran 180–240 ms y se desactivan con `prefers-reduced-motion`.
 
 ## Componentes
 
-Los componentes base viven en `src/components/ui`. Todos aceptan clases adicionales sin perder sus estados accesibles. `StatusBadge` obtiene color y etiqueta de un mapa único por estado. Las tablas incluyen vacío propio; los diálogos conservan foco y se cierran con Escape; los toasts anuncian cambios mediante `aria-live`.
+Los componentes base viven en `src/components/ui` y siguen el kit del rediseño: botón primario relleno, secundario con borde marino, terciario con borde crema y destructivo con borde rojo. `StatusBadge` lee un mapa único de estado en `src/lib/config/status.ts`, compartido por cliente, operación y rastreo público: los estados en movimiento y los terminales van en sólido, el resto en tinte con borde del mismo tono.
 
 ## Ilustración
 
-Las ilustraciones de cajas y camiones serán SVG originales, isométricos y de línea limpia. No se usan fotografías de stock, emojis ni gradientes decorativos. La profundidad proviene de geometría, capas, sombras sobrias y contraste tipográfico.
+`<BoxIso>` calcula la proyección isométrica desde las dimensiones del tarifario, así la ilustración nunca se desincroniza del precio. Con el mismo `scale` en varias cajas quedan a escala real entre sí. Los degradados se declaran una vez por página con `<BoxIsoDefs />`. Mapas y guías de empaque son SVG propios en `src/components/marketing`. No se usan fotografías, emojis ni gradientes decorativos.
+
+## Datos pendientes
+
+La clase `.pending-data` aplica una trama diagonal a cualquier valor que todavía no confirma el cliente (tiempos de tránsito, dirección de bodega, teléfono). Sirve para que en la reunión se distinga a simple vista lo real de lo pendiente.
 
 ## Responsive
 
-La base es móvil. Las tablas pueden convertirse en desplazamiento horizontal o tarjetas según densidad. El sidebar se presenta como navegación inferior o panel superpuesto en pantallas pequeñas. Los objetivos de interacción mantienen 44 × 44 px siempre que sea posible.
+La base es móvil. El hero muestra tres cajas en línea y pasa a la composición de cinco desde `lg`. Las tablas densas se desplazan en horizontal. Los objetivos de interacción mantienen 44 × 44 px como mínimo.
 
 ## Accesibilidad y contenido
 
-Los campos llevan `label` visible, los errores se asocian con `aria-describedby`, los iconos decorativos se ocultan de lectores y todo control opera por teclado. La interfaz usa español de México y evita terminología de cobro por libra o volumen: el peso existe solo como límite de una categoría.
+Los campos llevan `label` visible, los errores se asocian con `aria-describedby`, los iconos decorativos se ocultan de lectores y todo control opera por teclado. El foco es un contorno `brand-600` de 3 px con separación. La interfaz usa español de México y evita terminología de cobro por libra o volumen: el peso existe solo como límite de una categoría.

@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { ArrowRight, Search } from "lucide-react";
+import { Search } from "lucide-react";
 
 export function TrackingSearch({ dark = false }: { dark?: boolean }) {
   const router = useRouter();
@@ -13,9 +13,20 @@ export function TrackingSearch({ dark = false }: { dark?: boolean }) {
     if (normalized) router.push(`/rastrear/${encodeURIComponent(normalized)}`);
   };
   return (
-    <form onSubmit={submit} className={`flex w-full flex-col gap-2 rounded-[1.35rem] border p-2 shadow-soft sm:flex-row ${dark ? "border-white/15 bg-white/10" : "border-stone-200 bg-white"}`}>
-      <label className="flex min-h-12 min-w-0 flex-1 items-center gap-3 px-3"><Search aria-hidden="true" className={dark ? "size-5 text-white/60" : "size-5 text-navy-400"} /><span className="sr-only">Número de guía</span><input value={code} onChange={(event) => setCode(event.target.value)} placeholder="BX-, SH- o TR-" className={`min-w-0 flex-1 bg-transparent text-base font-medium outline-none placeholder:font-normal ${dark ? "text-white placeholder:text-white/50" : "text-navy-950 placeholder:text-navy-400"}`} aria-label="Número de guía" /></label>
-      <button type="submit" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-orange-500 px-5 text-sm font-bold text-white transition hover:bg-orange-600">Rastrear <ArrowRight aria-hidden="true" className="size-4" /></button>
+    <form onSubmit={submit} className="flex w-full flex-col gap-3 sm:flex-row">
+      <div className="relative min-w-0 flex-1">
+        <Search aria-hidden="true" className={`pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 ${dark ? "text-[#A8B2CA]" : "text-label-600"}`} />
+        <label className="sr-only" htmlFor="tracking-code">Número de guía</label>
+        <input
+          id="tracking-code"
+          value={code}
+          onChange={(event) => setCode(event.target.value)}
+          placeholder="BX-, SH- o TR-"
+          autoComplete="off"
+          className={`h-15 w-full rounded-lg border-[1.5px] px-4 pl-11 text-base font-medium outline-none transition ${dark ? "border-navy-700 bg-[#141F38] text-white placeholder:text-[#8A96B4] focus:border-brand-300" : "border-line-300 bg-white text-navy-900 placeholder:text-label-600 focus:border-brand-700"}`}
+        />
+      </div>
+      <button type="submit" className="inline-flex h-15 shrink-0 items-center justify-center rounded-lg bg-brand-600 px-8 text-base font-semibold text-white transition hover:-translate-y-0.5 hover:bg-brand-700">Rastrear</button>
     </form>
   );
 }

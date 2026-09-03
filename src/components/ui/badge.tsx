@@ -3,7 +3,7 @@ import { getStatusClassName, getStatusLabel } from "@/lib/config/status";
 import { cn } from "@/lib/utils/cn";
 
 export function Badge({ className, ...props }: HTMLAttributes<HTMLSpanElement>) {
-  return <span className={cn("inline-flex items-center rounded-full bg-navy-100 px-2.5 py-1 text-xs font-bold text-navy-700", className)} {...props} />;
+  return <span className={cn("inline-flex items-center rounded-md border px-3 py-1.5 text-xs font-semibold", className)} {...props} />;
 }
 
 export function StatusBadge({ status }: { status: string }) {

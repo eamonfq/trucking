@@ -51,6 +51,10 @@ Define `RESEND_API_KEY` y `RESEND_FROM_EMAIL` en `.env.local`. El remitente debe
 
 Los eventos preparados para email incluyen bienvenida, recuperación de contraseña, pre-alerta, confirmación de envío, reporte/aprobación de pago, soporte, cambio de contraseña y avance de camión.
 
+## Sistema visual
+
+La superficie pública (landing, autenticación y rastreo) sigue el rediseño editorial documentado en [docs/DESIGN.md](docs/DESIGN.md). Los tokens viven en `src/app/globals.css`; al escribir componentes respeta la regla del naranja: `brand-500` solo para ilustración y display grande, `brand-600` para botones y `brand-700` para texto pequeño. Los valores con trama diagonal (`.pending-data`) son datos que faltan por confirmar con el cliente.
+
 ## Configuración del flujo
 
 Abre `/admin/configuracion` con el usuario administrador. Los cinco flags se editan en vivo:

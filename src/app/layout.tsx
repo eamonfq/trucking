@@ -11,11 +11,11 @@ const inter = localFont({
   variable: "--font-inter",
   display: "swap",
 });
-const sora = localFont({
-  src: "../../node_modules/@fontsource-variable/sora/files/sora-latin-wght-normal.woff2",
-  variable: "--font-sora",
+const bricolage = localFont({
+  src: "../../node_modules/@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-wght-normal.woff2",
+  variable: "--font-bricolage",
   display: "swap",
-  weight: "100 800",
+  weight: "200 800",
 });
 
 export const metadata: Metadata = {
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="es-MX" data-scroll-behavior="smooth">
-      <body className={`${inter.variable} ${sora.variable} font-sans antialiased`}><ToastProvider>{children}</ToastProvider></body>
+      <body className={`${inter.variable} ${bricolage.variable} font-sans antialiased`}><ToastProvider>{children}</ToastProvider></body>
     </html>
   );
 }
