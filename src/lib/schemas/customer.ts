@@ -22,3 +22,7 @@ export const customerRecipientSchema = z.object({
 export type CustomerProfileInput = z.infer<typeof customerProfileSchema>;
 export type CustomerAddressInput = z.infer<typeof customerAddressSchema>;
 export type CustomerRecipientInput = z.infer<typeof customerRecipientSchema>;
+
+/** Alta rápida en recepción: datos de contacto y dirección, sin contraseña. */
+export const quickCustomerSchema = customerProfileSchema.and(mexicanAddressSchema);
+export type QuickCustomerInput = z.infer<typeof quickCustomerSchema>;

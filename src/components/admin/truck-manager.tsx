@@ -32,6 +32,8 @@ export function TruckManager({ initial, initialDrivers }: { initial: Truck[]; in
   const [status, setStatus] = useState("all");
   const [destination, setDestination] = useState("all");
   const [sort, setSort] = useState<"asc" | "desc">("asc");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const { showToast } = useToast();
   const { register, handleSubmit, reset, control, formState: { errors, isSubmitting } } = useForm<TruckInput>({
     resolver: zodResolver(truckSchema),
@@ -40,8 +42,14 @@ export function TruckManager({ initial, initialDrivers }: { initial: Truck[]; in
   const driverId = useWatch({ control, name: "driverId" });
   const filtered = useMemo(() => trucks.filter((truck) => {
     const term = search.trim().toLowerCase();
-    return (!term || truck.code.toLowerCase().includes(term) || truck.plate.toLowerCase().includes(term)) && (status === "all" || truck.status === status) && (destination === "all" || truck.destinationCity === destination);
-  }).sort((a, b) => (a.departureDate.localeCompare(b.departureDate)) * (sort === "asc" ? 1 : -1)), [destination, search, sort, status, trucks]);
+    // departureDate es ISO (aaaa-mm-dd), así que comparar como texto ya ordena por fecha.
+    const day = truck.departureDate.slice(0, 10);
+    return (!term || truck.code.toLowerCase().includes(term) || truck.plate.toLowerCase().includes(term))
+      && (status === "all" || truck.status === status)
+      && (destination === "all" || truck.destinationCity === destination)
+      && (!from || day >= from)
+      && (!to || day <= to);
+  }).sort((a, b) => (a.departureDate.localeCompare(b.departureDate)) * (sort === "asc" ? 1 : -1)), [destination, from, search, sort, status, to, trucks]);
 
   const confirmTransition = async () => {
     if (!selectedTruck) return;
@@ -66,14 +74,14 @@ export function TruckManager({ initial, initialDrivers }: { initial: Truck[]; in
     })} className="rounded-card bg-navy-950 p-5 text-white sm:p-6">
       <div className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-2xl bg-white/10"><Plus className="size-5 text-orange-400" /></span><div><h2 className="font-display text-xl font-bold">Nueva guía máster</h2><p className="mt-1 text-sm text-white/60">Origen fijo: {OPERATION_ORIGIN}</p></div></div>
       <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Input label="Placa" placeholder="FLA-2604" error={errors.plate?.message} {...register("plate")} />
-        <Select label="Chofer" options={[{ value: "", label: "Selecciona" }, ...drivers.filter((driver) => driver.active).map((driver) => ({ value: driver.id, label: `${driver.name} · ${driver.license}` })), { value: "new", label: "+ Alta rápida" }]} error={errors.driverId?.message} {...register("driverId")} />
-        <Input label="Fecha de salida" type="date" min={new Date().toISOString().slice(0, 10)} error={errors.departureDate?.message} {...register("departureDate")} />
-        <Select label="Destino" options={DESTINATION_CITIES.map((city) => ({ value: city, label: city }))} error={errors.destinationCity?.message} {...register("destinationCity")} />
+        <Input tone="dark" label="Placa" placeholder="FLA-2604" error={errors.plate?.message} {...register("plate")} />
+        <Select tone="dark" label="Chofer" options={[{ value: "", label: "Selecciona" }, ...drivers.filter((driver) => driver.active).map((driver) => ({ value: driver.id, label: `${driver.name} · ${driver.license}` })), { value: "new", label: "+ Alta rápida" }]} error={errors.driverId?.message} {...register("driverId")} />
+        <Input tone="dark" label="Fecha de salida" type="date" min={new Date().toISOString().slice(0, 10)} error={errors.departureDate?.message} {...register("departureDate")} />
+        <Select tone="dark" label="Destino" options={DESTINATION_CITIES.map((city) => ({ value: city, label: city }))} error={errors.destinationCity?.message} {...register("destinationCity")} />
       </div>
-      {driverId === "new" && <div className="mt-4 grid gap-4 rounded-2xl bg-white/8 p-4 md:grid-cols-3"><Input label="Nombre del chofer" error={errors.newDriverName?.message} {...register("newDriverName")} /><Input label="Teléfono" placeholder="+13055550199" error={errors.newDriverPhone?.message} {...register("newDriverPhone")} /><Input label="Licencia" error={errors.newDriverLicense?.message} {...register("newDriverLicense")} /></div>}
-      <div className="mt-5"><p className="text-xs font-bold uppercase tracking-wider text-orange-400">Capacidad por categoría</p><div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">{BOX_CATEGORIES.map((category) => <Input key={category.id} label={category.name} type="number" min="0" max="99" error={errors.capacity?.[category.id]?.message} {...register(`capacity.${category.id}`)} />)}</div>{errors.capacity?.root?.message && <p className="mt-2 text-sm text-red-200">{errors.capacity.root.message}</p>}</div>
-      <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end"><Textarea label="Notas operativas" rows={2} error={errors.notes?.message} {...register("notes")} /><Button type="submit" loading={isSubmitting} className="min-w-44">Crear camión</Button></div>
+      {driverId === "new" && <div className="mt-4 grid gap-4 rounded-2xl bg-white/8 p-4 md:grid-cols-3"><Input tone="dark" label="Nombre del chofer" error={errors.newDriverName?.message} {...register("newDriverName")} /><Input tone="dark" label="Teléfono" placeholder="+13055550199" error={errors.newDriverPhone?.message} {...register("newDriverPhone")} /><Input tone="dark" label="Licencia" error={errors.newDriverLicense?.message} {...register("newDriverLicense")} /></div>}
+      <div className="mt-5"><p className="text-xs font-bold uppercase tracking-wider text-orange-400">Capacidad por categoría</p><div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">{BOX_CATEGORIES.map((category) => <Input key={category.id} tone="dark" label={category.name} type="number" min="0" max="99" error={errors.capacity?.[category.id]?.message} {...register(`capacity.${category.id}`)} />)}</div>{errors.capacity?.root?.message && <p className="mt-2 text-sm text-red-200">{errors.capacity.root.message}</p>}</div>
+      <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end"><Textarea tone="dark" label="Notas operativas" rows={2} error={errors.notes?.message} {...register("notes")} /><Button type="submit" loading={isSubmitting} className="min-w-44">Crear camión</Button></div>
     </form>
 
     <div className="grid gap-3 rounded-2xl border border-stone-200 bg-white p-4 lg:grid-cols-[1fr_.7fr_.7fr_auto]">
@@ -81,6 +89,17 @@ export function TruckManager({ initial, initialDrivers }: { initial: Truck[]; in
       <Select label="Estado" hideLabel options={[{ value: "all", label: "Todos los estados" }, ...TRUCK_STATUSES.map((item) => ({ value: item, label: getStatusLabel(item) }))]} value={status} onChange={(event) => setStatus(event.target.value)} />
       <Select label="Ruta" hideLabel options={[{ value: "all", label: "Todos los destinos" }, ...DESTINATION_CITIES.map((city) => ({ value: city, label: city }))]} value={destination} onChange={(event) => setDestination(event.target.value)} />
       <Button variant="secondary" onClick={() => setSort((current) => current === "asc" ? "desc" : "asc")}><ArrowUpDown className="size-4" />Salida</Button>
+
+      <div className="flex flex-wrap items-center gap-3 border-t border-stone-200 pt-3 lg:col-span-4">
+        <span className="text-xs font-medium text-ink-700">Fecha de salida</span>
+        <label className="flex items-center gap-2 text-xs text-ink-500">Desde
+          <input type="date" value={from} max={to || undefined} onChange={(event) => setFrom(event.target.value)} className="min-h-11 rounded-md border-[1.5px] border-line-300 bg-white px-3 text-sm font-medium text-navy-900 outline-none transition hover:border-label-600 focus:border-brand-700" />
+        </label>
+        <label className="flex items-center gap-2 text-xs text-ink-500">Hasta
+          <input type="date" value={to} min={from || undefined} onChange={(event) => setTo(event.target.value)} className="min-h-11 rounded-md border-[1.5px] border-line-300 bg-white px-3 text-sm font-medium text-navy-900 outline-none transition hover:border-label-600 focus:border-brand-700" />
+        </label>
+        {(from || to) && <button type="button" onClick={() => { setFrom(""); setTo(""); }} className="text-sm font-semibold text-brand-700 hover:text-brand-600">Quitar fechas</button>}
+      </div>
     </div>
 
     <p className="flex items-center gap-2 text-sm text-navy-500"><Filter className="size-4" />{filtered.length} guías encontradas</p>

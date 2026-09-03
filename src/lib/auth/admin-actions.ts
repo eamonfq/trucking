@@ -20,7 +20,7 @@ import { receptionSchema, truckSchema } from "@/lib/schemas/admin";
 import { OPERATION_ORIGIN } from "@/lib/config/operations";
 import { getStatusLabel } from "@/lib/config/status";
 import { CUSTOMER_COPY } from "@/lib/config/customers";
-import { customerAddressSchema, customerProfileSchema, customerRecipientSchema, internalNoteSchema, lockerCodeSchema } from "@/lib/schemas/customer";
+import { customerAddressSchema, customerProfileSchema, customerRecipientSchema, internalNoteSchema, lockerCodeSchema, quickCustomerSchema } from "@/lib/schemas/customer";
 import { registrationSchema } from "@/lib/schemas/registration";
 
 const adminActor = "Operaciones A&L";
@@ -30,11 +30,17 @@ const findCustomer = (userId: string) => users.find((user) => user.id === userId
 const recordCustomerActivity = (user: User, type: string, description: string) => user.activity.unshift({ id: `act-${crypto.randomUUID()}`, type, description, actor: adminActor, at: now() });
 const pushNotification = (userId: string, title: string, body: string) => { const notification = { id: nextId("not", notifications.length), userId, title, body, createdAt: now(), read: false }; notifications.unshift(notification); return notification; };
 
-export async function createCustomerAsAdmin(input: unknown) {
-  await simulateLatency();
-  const parsed = registrationSchema.safeParse(input);
-  if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Revisa los datos del cliente." };
-  if (users.some((user) => user.email.toLowerCase() === parsed.data.email.toLowerCase())) return { ok: false as const, error: "Ya existe una cuenta con ese correo." };
+const temporaryPassword = () => `Ayl${String(Math.floor(100000 + Math.random() * 900000))}!`;
+
+type NewCustomer = {
+  firstName: string; paternalLastName: string; maternalLastName?: string;
+  email: string; phone: string; rfc?: string;
+  street: string; exteriorNumber: string; interiorNumber?: string; neighborhood: string;
+  postalCode: string; municipality: string; state: string; references?: string;
+};
+
+/** Alta de cliente compartida por el gestor y por la recepción en bodega. */
+function registerCustomer(data: NewCustomer, password: string) {
   const numericIds = users.filter((user) => user.role === "cliente").map((user) => Number(user.id.replace("usr-", ""))).filter(Number.isFinite);
   const sequence = Math.max(0, ...numericIds) + 1;
   const userId = `usr-${String(sequence).padStart(3, "0")}`;
@@ -43,23 +49,47 @@ export async function createCustomerAsAdmin(input: unknown) {
   const user: User = {
     id: userId,
     role: "cliente",
-    firstName: parsed.data.firstName,
-    paternalLastName: parsed.data.paternalLastName,
-    maternalLastName: parsed.data.maternalLastName,
-    email: parsed.data.email.toLowerCase(),
-    phone: `+52${parsed.data.phone}`,
+    firstName: data.firstName,
+    paternalLastName: data.paternalLastName,
+    maternalLastName: data.maternalLastName,
+    email: data.email.toLowerCase(),
+    phone: data.phone.startsWith("+52") ? data.phone : `+52${data.phone}`,
     lockerCode,
-    rfc: parsed.data.rfc || undefined,
+    rfc: data.rfc || undefined,
     active: true,
     internalNotes: [],
     activity: [{ id: `act-${crypto.randomUUID()}`, type: "alta", description: CUSTOMER_COPY.activity.created, actor: adminActor, at: createdAt }],
   };
-  const address: Address = { id: nextId("addr", addresses.length), userId, label: "Principal", street: parsed.data.street, exteriorNumber: parsed.data.exteriorNumber, interiorNumber: parsed.data.interiorNumber, neighborhood: parsed.data.neighborhood, postalCode: parsed.data.postalCode, municipality: parsed.data.municipality, state: parsed.data.state, references: parsed.data.references };
+  const address: Address = { id: nextId("addr", addresses.length), userId, label: "Principal", street: data.street, exteriorNumber: data.exteriorNumber, interiorNumber: data.interiorNumber, neighborhood: data.neighborhood, postalCode: data.postalCode, municipality: data.municipality, state: data.state, references: data.references };
   users.push(user);
   addresses.push(address);
-  demoCredentials.push({ identifier: user.email, password: parsed.data.password, userId }, { identifier: lockerCode, password: parsed.data.password, userId });
-  await sendEmail({ to: user.email, subject: "Bienvenido a A&L Trucking Logistics", heading: `Tu casillero ${lockerCode} está listo`, body: `Hola ${user.firstName}. Tu cuenta fue creada por el equipo de operaciones y ya puedes comenzar a registrar compras.`, actionLabel: "Abrir mi panel", actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/cliente` });
+  demoCredentials.push({ identifier: user.email, password, userId }, { identifier: lockerCode, password, userId });
+  return { user, address };
+}
+
+export async function createCustomerAsAdmin(input: unknown) {
+  await simulateLatency();
+  const parsed = registrationSchema.safeParse(input);
+  if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Revisa los datos del cliente." };
+  if (users.some((user) => user.email.toLowerCase() === parsed.data.email.toLowerCase())) return { ok: false as const, error: "Ya existe una cuenta con ese correo." };
+  const { user, address } = registerCustomer(parsed.data, parsed.data.password);
+  await sendEmail({ to: user.email, subject: "Bienvenido a A&L Trucking Logistics", heading: `Tu casillero ${user.lockerCode} está listo`, body: `Hola ${user.firstName}. Tu cuenta fue creada por el equipo de operaciones y ya puedes comenzar a registrar compras.`, actionLabel: "Abrir mi panel", actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/cliente` });
   return { ok: true as const, user, address };
+}
+
+/**
+ * Alta rápida desde el mostrador de recepción: el operador no define contraseña,
+ * se genera una temporal y se envía al cliente junto con su casillero.
+ */
+export async function createCustomerAtReception(input: unknown) {
+  await simulateLatency();
+  const parsed = quickCustomerSchema.safeParse(input);
+  if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Revisa los datos del cliente." };
+  if (users.some((user) => user.email.toLowerCase() === parsed.data.email.toLowerCase())) return { ok: false as const, error: "Ya existe una cuenta con ese correo." };
+  const password = temporaryPassword();
+  const { user, address } = registerCustomer(parsed.data, password);
+  await sendEmail({ to: user.email, subject: `Tu casillero ${user.lockerCode} está listo`, heading: "Cuenta creada en bodega", body: `Hola ${user.firstName}. Registramos tu cuenta al recibir tu caja. Tu contraseña temporal es ${password}; cámbiala al entrar.`, actionLabel: "Iniciar sesión", actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/login` });
+  return { ok: true as const, user, address, temporaryPassword: password };
 }
 
 export async function updateCustomerProfile(userId: string, input: unknown) {
@@ -89,11 +119,11 @@ export async function resetCustomerPassword(userId: string) {
   await simulateLatency();
   const user = findCustomer(userId);
   if (!user) return { ok: false as const, error: "No encontramos el cliente seleccionado." };
-  const temporaryPassword = `Ayl${String(Math.floor(100000 + Math.random() * 900000))}!`;
-  demoCredentials.filter((credential) => credential.userId === user.id).forEach((credential) => { credential.password = temporaryPassword; });
+  const password = temporaryPassword();
+  demoCredentials.filter((credential) => credential.userId === user.id).forEach((credential) => { credential.password = password; });
   recordCustomerActivity(user, "seguridad", CUSTOMER_COPY.activity.passwordReset);
-  await sendEmail({ to: user.email, subject: "Contraseña temporal de A&L", heading: "Acceso temporal generado", body: `Tu contraseña temporal es ${temporaryPassword}. Cámbiala al ingresar a tu panel.`, actionLabel: "Iniciar sesión", actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/iniciar-sesion` });
-  return { ok: true as const, user, temporaryPassword };
+  await sendEmail({ to: user.email, subject: "Contraseña temporal de A&L", heading: "Acceso temporal generado", body: `Tu contraseña temporal es ${password}. Cámbiala al ingresar a tu panel.`, actionLabel: "Iniciar sesión", actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/login` });
+  return { ok: true as const, user, temporaryPassword: password };
 }
 
 export async function changeCustomerLocker(userId: string, input: string) {
