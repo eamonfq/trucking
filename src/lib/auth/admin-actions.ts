@@ -18,6 +18,7 @@ import type { Address, Box, Invoice, Recipient, Truck, User } from "@/lib/types"
 import { suggestCategory } from "@/lib/utils/suggest-category";
 import { receptionSchema, truckSchema } from "@/lib/schemas/admin";
 import { OPERATION_ORIGIN } from "@/lib/config/operations";
+import { getStatusLabel } from "@/lib/config/status";
 import { CUSTOMER_COPY } from "@/lib/config/customers";
 import { customerAddressSchema, customerProfileSchema, customerRecipientSchema, internalNoteSchema, lockerCodeSchema } from "@/lib/schemas/customer";
 import { registrationSchema } from "@/lib/schemas/registration";
@@ -27,6 +28,7 @@ const now = () => new Date().toISOString();
 const nextId = (prefix: string, length: number) => `${prefix}-${String(length + 1).padStart(3, "0")}`;
 const findCustomer = (userId: string) => users.find((user) => user.id === userId && user.role === "cliente");
 const recordCustomerActivity = (user: User, type: string, description: string) => user.activity.unshift({ id: `act-${crypto.randomUUID()}`, type, description, actor: adminActor, at: now() });
+const pushNotification = (userId: string, title: string, body: string) => { const notification = { id: nextId("not", notifications.length), userId, title, body, createdAt: now(), read: false }; notifications.unshift(notification); return notification; };
 
 export async function createCustomerAsAdmin(input: unknown) {
   await simulateLatency();
@@ -205,6 +207,7 @@ async function createInvoiceForBoxes(userId: string, invoiceBoxes: Box[], actor:
     timeline: [{ from: null, to: "emitida", actor, at: issuedAt, note: "Documento generado según la configuración de facturación." }],
   };
   invoices.push(invoice);
+  pushNotification(userId, "Factura emitida", `${invoice.number} por ${invoiceBoxes.length} ${invoiceBoxes.length === 1 ? "caja" : "cajas"} ya está disponible en tu panel.`);
   return invoice;
 }
 
@@ -238,8 +241,7 @@ export async function receiveBox(input: unknown) {
       ],
   };
   boxes.push(box);
-  const notification = { id: nextId("not", notifications.length), userId: customer.id, title: rejected ? "Caja rechazada" : "Caja recibida", body: rejected ? `${code} fue rechazada: ${parsed.data.rejectionReason}.` : `${code} fue registrada en bodega como ${rates.find((rate) => rate.id === categoryId)?.name}.`, createdAt, read: false };
-  notifications.unshift(notification);
+  const notification = pushNotification(customer.id, rejected ? "Caja rechazada" : "Caja recibida", rejected ? `${code} fue rechazada: ${parsed.data.rejectionReason}.` : `${code} fue registrada en bodega como ${rates.find((rate) => rate.id === categoryId)?.name}.`);
   let invoice: Invoice | undefined;
   if (!rejected && flow.billingMoment === "al-recibir") invoice = await createInvoiceForBoxes(customer.id, [box], adminActor);
   await sendEmail({ to: customer.email, subject: rejected ? `Recepción rechazada ${code}` : `Caja recibida ${code}`, heading: rejected ? "La recepción requiere tu atención" : "Tu caja ya está en bodega", body: notification.body, actionLabel: "Ver mis cajas", actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/cliente/cajas` });
@@ -279,12 +281,13 @@ export async function transitionTruckState(truckId: string, note?: string) {
       if (eligible.length) generatedInvoices.push(await createInvoiceForBoxes(userId, eligible, adminActor));
     }
   }
+  userIds.forEach((userId) => pushNotification(userId, "Tu carga avanzó de etapa", `El camión ${result.value.truck.code} cambió a ${getStatusLabel(result.value.truck.status).toLowerCase()}.`));
   await Promise.all(users.filter((user) => userIds.has(user.id)).map((user) => sendEmail({ to: user.email, subject: `Actualización ${result.value.truck.code}`, heading: "Tu carga avanzó de etapa", body: `El camión ${result.value.truck.code} cambió al estado ${result.value.truck.status}.`, actionLabel: "Ver seguimiento", actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/cliente/envios` })));
   return { ok: true as const, truck: result.value.truck, changedBoxes: result.value.changedBoxIds.length, changedShipments: result.value.changedShipmentIds.length, generatedInvoices };
 }
-export async function approvePayment(invoiceId: string, note: string) { await simulateLatency(); if (note.trim().length < 5) return { ok: false as const, error: "Agrega una nota de validación de al menos 5 caracteres." }; const index = invoices.findIndex((item) => item.id === invoiceId); if (index < 0) return { ok: false as const, error: "No encontramos la factura seleccionada." }; const result = transitionInvoice(invoices[index]!, "pagada", { actor: "Operaciones A&L", note }); if (!result.ok) return result; invoices[index] = { ...result.value, paymentReviewNote: note }; const user = users.find((item) => item.id === result.value.userId); if (user) await sendEmail({ to: user.email, subject: "Pago aprobado", heading: "Tu pago fue aprobado", body: `La factura ${result.value.number} ahora aparece como pagada.`, actionLabel: "Ver factura", actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/cliente/facturas/${result.value.id}` }); return { ok: true as const, invoice: invoices[index]! };
+export async function approvePayment(invoiceId: string, note: string) { await simulateLatency(); if (note.trim().length < 5) return { ok: false as const, error: "Agrega una nota de validación de al menos 5 caracteres." }; const index = invoices.findIndex((item) => item.id === invoiceId); if (index < 0) return { ok: false as const, error: "No encontramos la factura seleccionada." }; const result = transitionInvoice(invoices[index]!, "pagada", { actor: "Operaciones A&L", note }); if (!result.ok) return result; invoices[index] = { ...result.value, paymentReviewNote: note }; pushNotification(result.value.userId, "Pago aprobado", `Validamos el pago de ${result.value.number}. La factura quedó como pagada.`); const user = users.find((item) => item.id === result.value.userId); if (user) await sendEmail({ to: user.email, subject: "Pago aprobado", heading: "Tu pago fue aprobado", body: `La factura ${result.value.number} ahora aparece como pagada.`, actionLabel: "Ver factura", actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/cliente/facturas/${result.value.id}` }); return { ok: true as const, invoice: invoices[index]! };
 }
-export async function rejectPayment(invoiceId: string, note: string) { await simulateLatency(); if (note.trim().length < 5) return { ok: false as const, error: "Explica el rechazo con al menos 5 caracteres." }; const index = invoices.findIndex((item) => item.id === invoiceId); if (index < 0) return { ok: false as const, error: "No encontramos la factura seleccionada." }; const result = transitionInvoice(invoices[index]!, "emitida", { actor: adminActor, note }); if (!result.ok) return result; invoices[index] = { ...result.value, paymentReviewNote: note, paymentReport: undefined }; const user = users.find((item) => item.id === result.value.userId); if (user) await sendEmail({ to: user.email, subject: "Reporte de pago rechazado", heading: "Necesitamos otro comprobante", body: `El reporte de ${result.value.number} fue rechazado: ${note}`, actionLabel: "Revisar factura", actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/cliente/facturas/${result.value.id}` }); return { ok: true as const, invoice: invoices[index]! }; }
+export async function rejectPayment(invoiceId: string, note: string) { await simulateLatency(); if (note.trim().length < 5) return { ok: false as const, error: "Explica el rechazo con al menos 5 caracteres." }; const index = invoices.findIndex((item) => item.id === invoiceId); if (index < 0) return { ok: false as const, error: "No encontramos la factura seleccionada." }; const result = transitionInvoice(invoices[index]!, "emitida", { actor: adminActor, note }); if (!result.ok) return result; invoices[index] = { ...result.value, paymentReviewNote: note, paymentReport: undefined }; pushNotification(result.value.userId, "Reporte de pago rechazado", `${result.value.number} necesita otro comprobante: ${note}`); const user = users.find((item) => item.id === result.value.userId); if (user) await sendEmail({ to: user.email, subject: "Reporte de pago rechazado", heading: "Necesitamos otro comprobante", body: `El reporte de ${result.value.number} fue rechazado: ${note}`, actionLabel: "Revisar factura", actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/cliente/facturas/${result.value.id}` }); return { ok: true as const, invoice: invoices[index]! }; }
 export async function createTruck(input: unknown) {
   await simulateLatency();
   const parsed = truckSchema.safeParse(input);

@@ -1,4 +1,9 @@
 import { SectionTitle } from "@/components/cliente/section-title";
 import { AddressManager } from "@/components/cliente/crud-manager";
+import { requireClientUser } from "@/lib/auth/actions";
 import { logisticsService } from "@/lib/services/logistics";
-export default async function AddressesPage() { const items = (await logisticsService.getAddresses()).filter((item) => item.userId === "usr-001"); return <><SectionTitle eyebrow="Entrega en México" title="Direcciones" description="Administra domicilios con código postal, colonia, municipio y estado." /><div className="mt-7"><AddressManager initialItems={items} /></div></>; }
+
+export default async function AddressesPage() {
+  const [user, allItems] = await Promise.all([requireClientUser(), logisticsService.getAddresses()]);
+  return <><SectionTitle eyebrow="Entrega en México" title="Direcciones" description="Administra los domicilios donde podemos entregar tus cajas." /><div className="mt-7"><AddressManager initialItems={allItems.filter((item) => item.userId === user.id)} /></div></>;
+}

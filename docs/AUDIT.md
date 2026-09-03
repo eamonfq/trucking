@@ -74,6 +74,38 @@ Fecha: 2 de septiembre de 2026. Recorrido efectuado sobre `next start` con las c
 4. Persistir facturación, pagos, pre-alertas, envíos, CRUD y notificaciones con paridad.
 5. Cerrar microcopy, vacíos, skeletons, errores y revisión responsive.
 
+## Estado de remediación
+
+La lista priorizada se ejecutó en etapas. Cada etapa cerró con `npm run build`, `npm run lint` y `npm run test` en verde.
+
+| Etapa | Commit | Alcance cerrado |
+|---|---|---|
+| 0 | `fix(etapa-0)` | Auditoría de ambos paneles y priorización de brechas. |
+| 1 | `fix(etapa-1)` | Store mock compartido, identidad por sesión, máquina de estados tipada (`src/lib/domain/state-machine.ts`) e historial `{ from, to, actor, at, note }`. |
+| 2 | `fix(etapa-2)` | Camiones como guía máster: alta validada, detalle `/admin/camiones/[id]`, capacidad por categoría, cascadas con precondiciones y manifiesto. |
+| 3 | `fix(etapa-3)` | Gestor de clientes con búsqueda y expediente `/admin/clientes/[id]`: perfil, direcciones, destinatarios, notas internas y actividad. |
+| 4 | `fix(etapa-4)` | Recepción que persiste la caja, bodega con capacidad y elegibilidad, facturación según `billingMoment` y aprobación/rechazo de pagos. |
+| 5 | `fix(etapa-5)` | Paridad del panel del cliente: todas las acciones persisten en el mismo store, resuelven el usuario de la sesión y validan propiedad del recurso. |
+
+### Qué cerró la etapa 5
+
+- Pre-alertas, envíos, reportes de pago, CRUD de direcciones y destinatarios, perfil, contraseña y tickets de soporte se guardan en el store compartido mediante acciones de servidor; el administrador ve el mismo dato en la misma sesión.
+- Toda página y acción del cliente resuelve la identidad con `requireClientUser()` / `currentClient()`. No queda `usr-001` ni `mariana@demo.test` fuera de los fixtures.
+- Los detalles de caja, envío y factura devuelven `notFound()` cuando el recurso no pertenece al usuario autenticado, igual que ya hacían las rutas PDF.
+- Crear envío pasa por `transitionShipment`; el envío nace en `pendiente` y queda `confirmado` con los dos eventos en el historial.
+- `approvePayment`, `rejectPayment`, la generación de facturas y el avance de camión escriben en el centro de notificaciones del cliente, además del correo.
+- Las listas de cajas, envíos, facturas, notificaciones y estado de cuenta tienen filtros con conteo y estado vacío con acción. El estado de cuenta muestra cargos, pagos reportados y pagos validados.
+- Eliminar una dirección o un destinatario pide confirmación y se bloquea si hay un destinatario o un envío en curso que dependa de ellos.
+- El código postal completa municipio y estado también en el CRUD del cliente, con el mismo catálogo de muestra que usa el registro.
+- `internalNotes` nunca sale al navegador del cliente: `requireClientUser` devuelve una proyección sin ese campo.
+
+### Pendiente para la etapa 6
+
+1. Microcopy final de `/cliente/ayuda` como guía operativa enlazada a acciones.
+2. Skeletons de carga por módulo y errores contextuales por sección.
+3. Revisión responsive en 360, 768, 1280 y 1536 px sobre las pantallas nuevas.
+4. Lighthouse final sobre landing, login y panel.
+
 ## Línea base visual
 
 Medición previa con Lighthouse 13.4.0 sobre la compilación de producción:

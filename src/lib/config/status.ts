@@ -1,6 +1,6 @@
-import type { BoxStatus, InvoiceStatus, ShipmentStatus, TruckStatus } from "@/lib/types";
+import type { BoxStatus, InvoiceStatus, ShipmentStatus, SupportStatus, TruckStatus } from "@/lib/types";
 
-export type OperationalStatus = BoxStatus | ShipmentStatus | TruckStatus | InvoiceStatus;
+export type OperationalStatus = BoxStatus | ShipmentStatus | TruckStatus | InvoiceStatus | SupportStatus;
 export type StatusTone = "neutral" | "info" | "attention" | "success" | "danger";
 
 export const STATUS_CONFIG: Record<OperationalStatus, { label: string; tone: StatusTone; className: string }> = {
@@ -27,6 +27,8 @@ export const STATUS_CONFIG: Record<OperationalStatus, { label: string; tone: Sta
   "pago-reportado": { label: "Pago reportado", tone: "attention", className: "bg-[#fff8e8] text-[#8a4d00]" },
   pagada: { label: "Pagada", tone: "success", className: "bg-success-50 text-success-700" },
   vencida: { label: "Vencida", tone: "danger", className: "bg-danger-50 text-danger-700" },
+  abierto: { label: "Abierto", tone: "attention", className: "bg-orange-50 text-orange-600" },
+  "en-revision": { label: "En revisión", tone: "info", className: "bg-[#eff8ff] text-[#175cd3]" },
 };
 
 export function getStatusLabel(status: string) {

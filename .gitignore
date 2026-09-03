@@ -8,3 +8,7 @@ coverage/
 npm-debug.log*
 next-env.d.ts
 .gitdata/
+
+# Exportaciones de Claude Design usadas como referencia visual
+Guía visual de rediseño editorial/
+Guía visual de rediseño editorial.zip

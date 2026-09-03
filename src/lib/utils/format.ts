@@ -10,3 +10,13 @@ export const formatDate = (value: string | Date) =>
     year: "numeric",
     timeZone: "UTC",
   }).format(new Date(value));
+
+export const formatDateTime = (value: string | Date) =>
+  new Intl.DateTimeFormat("es-MX", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "UTC",
+  }).format(new Date(value));

@@ -3,6 +3,7 @@ import { boxes } from "@/lib/data/boxes";
 import { invoices } from "@/lib/data/invoices";
 import { notifications } from "@/lib/data/notifications";
 import { shipments } from "@/lib/data/shipments";
+import { supportTickets } from "@/lib/data/support";
 import { trucks } from "@/lib/data/trucks";
 import { users } from "@/lib/data/users";
 import { drivers } from "@/lib/data/drivers";
@@ -23,6 +24,7 @@ export const logisticsService = {
   getAddresses: () => all(addresses),
   getRecipients: () => all(recipients),
   getDrivers: () => all(drivers),
+  getSupportTickets: () => all(supportTickets),
   async getTruckById(id: string) {
     await simulateLatency();
     return clone(trucks.find((truck) => truck.id === id) ?? null);

@@ -155,3 +155,27 @@ export type Notification = {
   createdAt: string;
   read: boolean;
 };
+
+export const SUPPORT_STATUSES = ["abierto", "en-revision", "cerrado"] as const;
+export type SupportStatus = (typeof SUPPORT_STATUSES)[number];
+
+export type SupportMessage = {
+  id: string;
+  author: "cliente" | "soporte";
+  authorName: string;
+  body: string;
+  at: string;
+};
+
+export type SupportTicket = {
+  id: string;
+  code: string;
+  userId: string;
+  subject: string;
+  status: SupportStatus;
+  createdAt: string;
+  updatedAt: string;
+  messages: SupportMessage[];
+};
+
+export type ClientUser = Omit<User, "internalNotes">;
