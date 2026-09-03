@@ -1,0 +1,19 @@
+"use client";
+
+import { useState } from "react";
+import { useForm, useWatch } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { BOX_CATEGORIES } from "@/lib/config/box-categories";
+import { receiveBox } from "@/lib/auth/admin-actions";
+import { receptionSchema } from "@/lib/schemas/admin";
+import { suggestCategory } from "@/lib/utils/suggest-category";
+import { formatUsd } from "@/lib/utils/format";
+import type { User } from "@/lib/types";
+
+type ReceptionInput = z.input<typeof receptionSchema>;
+export function ReceptionForm({ users, excessPolicy }: { users: User[]; excessPolicy: string }) { const [received, setReceived] = useState(""); const { register, handleSubmit, control, formState: { errors, isSubmitting } } = useForm<ReceptionInput>({ resolver: zodResolver(receptionSchema) }); const values = useWatch({ control }); const dims = { length: Number(values.length) || 0, width: Number(values.width) || 0, height: Number(values.height) || 0 }; const suggestion = dims.length && dims.width && dims.height && Number(values.weightLb) ? suggestCategory(dims, Number(values.weightLb)) : null; return <form onSubmit={handleSubmit(async (data) => { const result = await receiveBox({ dimensions: { length: Number(data.length), width: Number(data.width), height: Number(data.height) }, weightLb: Number(data.weightLb), userId: data.customer }); setReceived(result.code); })} className="grid gap-6 lg:grid-cols-[1fr_.7fr]"><div className="grid content-start gap-5 rounded-card border border-stone-200 bg-white p-6"><Select label="Cliente o casillero" options={[{ value: "", label: "Selecciona" }, ...users.filter((user) => user.role === "cliente").map((user) => ({ value: user.id, label: `${user.lockerCode} · ${user.firstName} ${user.paternalLastName}` }))]} {...register("customer")} /><div className="grid grid-cols-2 gap-4 sm:grid-cols-4"><Input label="Largo (in)" type="number" step="0.1" {...register("length")} /><Input label="Ancho (in)" type="number" step="0.1" {...register("width")} /><Input label="Alto (in)" type="number" step="0.1" {...register("height")} /><Input label="Peso (lb)" type="number" step="0.1" {...register("weightLb")} /></div><Input label="Foto de recepción" type="file" accept="image/*" {...register("photoName")} /><Select label="Sobrescribir categoría (opcional)" options={[{ value: "", label: "Usar sugerencia" }, ...BOX_CATEGORIES.map((item) => ({ value: item.id, label: item.name }))]} {...register("overrideCategory")} /><Textarea label="Motivo de sobrescritura" error={errors.overrideReason?.message} {...register("overrideReason")} /><Button type="submit" loading={isSubmitting}>Registrar recepción</Button>{received && <p className="rounded-xl bg-success-50 p-4 text-sm font-bold text-success-700">Caja registrada: {received}</p>}</div><aside className="h-fit rounded-card bg-navy-950 p-6 text-white"><p className="text-xs font-bold uppercase tracking-wider text-orange-400">Categoría sugerida</p>{suggestion?.category ? <><p className="mt-5 font-display text-4xl font-bold">{suggestion.category.name}</p><p className="mt-2 font-display text-xl font-bold text-orange-400">{formatUsd(suggestion.category.priceUsd)}</p><p className="mt-4 text-sm leading-6 text-white/55">Hasta {suggestion.category.maxWeightLb} lb. {suggestion.reason ? `La categoría subió por ${suggestion.reason.replaceAll("-", " ")}.` : "Medidas y peso dentro del límite."}</p></> : <p className="mt-5 text-sm leading-6 text-white/55">Mide la caja para obtener una sugerencia. Si excede Cubo se aplicará: {excessPolicy}.</p>}</aside></form>; }
