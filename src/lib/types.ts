@@ -34,6 +34,10 @@ export type User = {
   email: string;
   phone: string;
   lockerCode: string;
+  rfc?: string;
+  active: boolean;
+  internalNotes: Array<{ id: string; body: string; actor: string; at: string }>;
+  activity: Array<{ id: string; type: string; description: string; actor: string; at: string }>;
 };
 
 export type TransitionEvent = {
