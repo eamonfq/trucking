@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { Boxes, ClipboardCheck, FileText, Gauge, Menu, Settings, Truck, UsersRound } from "lucide-react";
 import { Sidebar } from "@/components/ui/sidebar";
+import { BrandLogo } from "@/components/marketing/brand-logo";
 import { signOut } from "@/lib/auth/actions";
 
 const items = [
@@ -34,7 +35,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
         <div className="min-w-0 rounded-[1.8rem] bg-cream-50 p-5 sm:p-8 lg:p-10">
           <div className="mb-5 flex items-center justify-between lg:hidden">
-            <p className="font-display font-bold">A&amp;L Operaciones</p>
+            <BrandLogo />
             <details className="relative">
               <summary className="flex cursor-pointer list-none items-center gap-2 rounded-full border border-stone-200 bg-white px-4 py-2 text-sm font-bold shadow-sm">
                 <Menu className="size-4" /> Menú
