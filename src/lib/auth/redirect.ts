@@ -1,6 +1,6 @@
 import type { Role } from "@/lib/types";
 
-const HOME: Record<Role, string> = { admin: "/admin", cliente: "/cliente" };
+const HOME: Record<Role, string> = { operador: "/almacen", admin: "/admin", cliente: "/cliente" };
 
 /**
  * Destino después de iniciar sesión. El parámetro `siguiente` solo se respeta si

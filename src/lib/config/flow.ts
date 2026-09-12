@@ -1,3 +1,4 @@
+import { DESTINATION_CITIES } from "./operations";
 export const ORIGIN_MODES = ["casillero", "entrega-directa"] as const;
 export const PACKING_MODES = ["cliente", "agencia"] as const;
 export const BILLING_MOMENTS = ["al-recibir", "al-despachar"] as const;
@@ -20,19 +21,31 @@ export const FLOW_OPTION_LABELS: Record<string, string> = {
 };
 
 export type FlowConfig = {
+  pricePerLbUsd: number;
+  dimensionalBase: number;
+  dimensionalFactor: number;
   originMode: (typeof ORIGIN_MODES)[number];
   packingMode: (typeof PACKING_MODES)[number];
   billingMoment: (typeof BILLING_MOMENTS)[number];
   excessPolicy: (typeof EXCESS_POLICIES)[number];
   deliveryMode: (typeof DELIVERY_MODES)[number];
   exchangeRateMxn: number;
+  excessFeeUsd: number;
+  invoiceDueDays: number;
+  destinationCities: string[];
 };
 
 export const DEFAULT_FLOW_CONFIG: Readonly<FlowConfig> = {
+  pricePerLbUsd: 3.2,
+  dimensionalBase: 1000,
+  dimensionalFactor: 19,
   originMode: "casillero",
   packingMode: "cliente",
   billingMoment: "al-despachar",
   excessPolicy: "subir-categoria",
   deliveryMode: "ambas",
   exchangeRateMxn: 18.5,
+  excessFeeUsd: 0,
+  invoiceDueDays: 15,
+  destinationCities: [...DESTINATION_CITIES],
 };

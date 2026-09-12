@@ -1,0 +1,13 @@
+import { collection } from "./store";
+import type { Warehouse, User, Address, Recipient, Box, Invoice, Shipment, Truck, Driver, Notification, SupportTicket } from "@/lib/types";
+export const users = collection<User>("users");
+export const addresses = collection<Address>("addresses");
+export const recipients = collection<Recipient>("recipients");
+export const boxes = collection<Box>("boxes");
+export const invoices = collection<Invoice>("invoices");
+export const shipments = collection<Shipment>("shipments");
+export const trucks = collection<Truck>("trucks");
+export const drivers = collection<Driver>("drivers");
+export const notifications = collection<Notification>("notifications");
+export const supportTickets = collection<SupportTicket>("supportTickets");
+export const warehouses = collection<Warehouse>("warehouses");

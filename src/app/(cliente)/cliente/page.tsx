@@ -19,7 +19,7 @@ export default async function ClientDashboard() {
   const myInvoices = invoices.filter((invoice) => invoice.userId === user.id);
   const myNotifications = notifications.filter((item) => item.userId === user.id);
   const balance = myInvoices.filter((invoice) => !["pagada", "borrador"].includes(invoice.status)).reduce((total, invoice) => total + invoiceTotal(invoice), 0);
-  const pendingInvoices = myInvoices.filter((invoice) => ["emitida", "vencida"].includes(invoice.status)).length;
+  const pendingInvoices = myInvoices.filter((invoice) => ["emitida", "vencida", "pendiente-pago-destino"].includes(invoice.status)).length;
   const count = (statuses: string[]) => String(mine.filter((box) => statuses.includes(box.status)).length).padStart(2, "0");
   return <>
     <SectionTitle eyebrow="Panel del cliente" title={`Hola, ${user.firstName}`} description="Aquí tienes un panorama claro de tus cajas, envíos y pagos." action={<Link href="/cliente/cotizador" className="inline-flex min-h-11 items-center justify-center rounded-full bg-orange-500 px-5 text-sm font-bold text-white">Cotizar una caja</Link>} />

@@ -1,6 +1,7 @@
 export const BOX_CATEGORY_IDS = ["small", "medium", "large", "x-large", "cubo"] as const;
 
-export type BoxCategoryId = (typeof BOX_CATEGORY_IDS)[number];
+// Seed identifiers are not the catalog. Runtime categories live in MySQL.
+export type BoxCategoryId = string;
 
 export type Dimensions = {
   length: number;
@@ -9,6 +10,7 @@ export type Dimensions = {
 };
 
 export type BoxCategory = {
+  active?: boolean;
   id: BoxCategoryId;
   name: string;
   dimensions: Dimensions;

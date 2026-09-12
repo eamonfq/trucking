@@ -1,4 +1,6 @@
+import { billingDescription } from "@/lib/utils/billing";
 import Link from "next/link";
+import { PrivateFileLink } from "@/components/ui/private-file-link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Camera, PackageCheck } from "lucide-react";
 import { SectionTitle } from "@/components/cliente/section-title";
@@ -12,7 +14,7 @@ import { formatDate, formatUsd } from "@/lib/utils/format";
 
 export default async function BoxDetail({ params }: { params: Promise<{ codigo: string }> }) {
   const { codigo } = await params;
-  const [user, box, rates, shipments] = await Promise.all([requireClientUser(), logisticsService.getBoxByCode(codigo), configService.getRateTable(), logisticsService.getShipments()]);
+  const [user, box, rates, shipments] = await Promise.all([requireClientUser(), logisticsService.getBoxByCode(codigo), configService.getCatalog(), logisticsService.getShipments()]);
   if (!box || box.userId !== user.id) notFound();
   const category = rates.find((rate) => rate.id === box.categoryId);
   const shipment = shipments.find((item) => item.id === box.shipmentId);
@@ -23,8 +25,8 @@ export default async function BoxDetail({ params }: { params: Promise<{ codigo: 
       <div className="grid content-start gap-5">
         <Card className="shadow-none">
           <p className="text-xs font-bold uppercase tracking-wider text-navy-400">Categoría asignada</p>
-          <p className="mt-3 font-display text-3xl font-bold text-navy-950">{category?.name ?? "Por categorizar"}</p>
-          <p className="mt-1 font-display text-xl font-bold text-orange-600">{formatUsd(category?.priceUsd ?? 0)}</p>
+          <p className="mt-3 font-display text-3xl font-bold text-navy-950">{box.categoryName ?? category?.name ?? "Por categorizar"}</p>
+          <p className="mt-1 font-display text-xl font-bold text-orange-600">{formatUsd(box.customPriceUsd ?? category?.priceUsd ?? 0)}</p>{box.billing&&<p className="mt-2 text-sm text-navy-500">{billingDescription(box.billing)}</p>}
           <dl className="mt-5 grid grid-cols-2 gap-4 border-t border-stone-200 pt-5 text-sm">
             <div><dt className="text-navy-400">Medidas</dt><dd className="mt-1 font-semibold">{box.dimensions.length} × {box.dimensions.width} × {box.dimensions.height} in</dd></div>
             <div><dt className="text-navy-400">Peso</dt><dd className="mt-1 font-semibold">{box.weightLb ? `${box.weightLb} lb` : "Se registra al recibir"}</dd></div>
@@ -35,8 +37,8 @@ export default async function BoxDetail({ params }: { params: Promise<{ codigo: 
         </Card>
         <Card className="shadow-none">
           <div className="flex items-center gap-3"><Camera className="size-5 text-orange-500" /><h2 className="font-display text-lg font-bold">Fotos de recepción</h2></div>
-          {box.photos?.length
-            ? <ul className="mt-4 grid gap-3">{box.photos.map((photo) => <li key={photo} className="flex items-center gap-3 rounded-2xl bg-cream-100 p-4 text-sm text-navy-700"><PackageCheck className="size-5 shrink-0 text-orange-500" />{photo}</li>)}</ul>
+          {box.photoFileId ? <div className="mt-4"><PrivateFileLink id={box.photoFileId} name={box.photos?.[0] ?? "Foto de recepción"} /></div> : box.photos?.length
+            ? <ul className="mt-4 grid gap-3">{box.photos.map((photo) => <li key={photo} className="flex items-center gap-3 rounded-2xl bg-cream-100 p-4 text-sm text-navy-700"><PackageCheck className="size-5 shrink-0 text-orange-500" />{photo} (registro anterior sin archivo)</li>)}</ul>
             : <p className="mt-4 rounded-2xl bg-cream-100 p-4 text-sm leading-6 text-navy-500">Todavía no hay fotos. Se toman al momento de recibir y medir la caja en bodega.</p>}
         </Card>
       </div>

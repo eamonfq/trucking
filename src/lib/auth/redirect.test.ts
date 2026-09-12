@@ -4,6 +4,8 @@ import { resolvePostLoginPath } from "@/lib/auth/redirect";
 describe("resolvePostLoginPath", () => {
   it("manda a cada rol a su panel cuando no hay destino pedido", () => {
     expect(resolvePostLoginPath("admin")).toBe("/admin");
+    expect(resolvePostLoginPath("operador")).toBe("/almacen");
+    expect(resolvePostLoginPath("operador","/admin/facturas")).toBe("/almacen");
     expect(resolvePostLoginPath("cliente", null)).toBe("/cliente");
   });
 

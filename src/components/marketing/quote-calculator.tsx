@@ -27,7 +27,7 @@ export function QuoteCalculator({ rates }: { rates?: BoxCategory[] }) {
   const note = !result
     ? "Ingresa las cuatro medidas para ver la categoría y el precio."
     : category
-      ? `Categoría ${category.name} · ${category.dimensions.length} × ${category.dimensions.width} × ${category.dimensions.height} in · hasta ${category.maxWeightLb} lb. Precio fijo, sin cargos por peso.`
+      ? `Categoría ${category.name} · ${category.dimensions.length} × ${category.dimensions.width} × ${category.dimensions.height} in · hasta ${category.maxWeightLb} lb. Tarifa base sujeta a validación en bodega y a los ajustes aplicables.`
       : result.upgradedByDimensions
         ? `Alguna medida exterior supera la categoría ${largest?.name ?? "más grande"} (${largest ? `${largest.dimensions.length} × ${largest.dimensions.width} × ${largest.dimensions.height} in` : "del catálogo"}). Escríbenos para revisar tu caso antes de enviar.`
         : "Las medidas caben, pero el peso total rebasa el límite de esa categoría. Reduce el contenido o divídelo en dos cajas.";
@@ -60,7 +60,7 @@ export function QuoteCalculator({ rates }: { rates?: BoxCategory[] }) {
 
 function Measure({ label, value, placeholder, onChange }: { label: string; value: string; placeholder: string; onChange: (value: string) => void }) {
   return (
-    <label className="grid min-w-0 gap-2 text-xs font-medium text-ink-700">
+    <label className="grid min-w-0 gap-2 text-sm font-medium text-ink-700">
       {label}
       <input
         type="number"

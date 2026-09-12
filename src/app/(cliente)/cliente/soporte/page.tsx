@@ -5,5 +5,5 @@ import { logisticsService } from "@/lib/services/logistics";
 
 export default async function SupportPage() {
   const [user, tickets] = await Promise.all([requireClientUser(), logisticsService.getSupportTickets()]);
-  return <><SectionTitle eyebrow="Estamos para ayudarte" title="Soporte" description="Abre un ticket y conserva toda la conversación en un solo hilo." /><div className="mt-7"><SupportCenter initialTickets={tickets.filter((ticket) => ticket.userId === user.id)} /></div></>;
+  return <><SectionTitle eyebrow="Estamos para ayudarte" title="Soporte" description="Abre un ticket y conserva toda la conversación en un solo hilo." /><div className="mt-7"><SupportCenter key={tickets.map(ticket=>`${ticket.id}:${ticket.updatedAt}`).join("|")} initialTickets={tickets.filter((ticket) => ticket.userId === user.id)} /></div></>;
 }

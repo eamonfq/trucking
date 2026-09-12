@@ -1,0 +1,15 @@
+import nextEnv from '@next/env';
+import {spawnSync} from 'node:child_process';
+import {mkdirSync} from 'node:fs';
+import path from 'node:path';
+nextEnv.loadEnvConfig(process.cwd());
+if(!process.env.DATABASE_URL)throw new Error('Falta DATABASE_URL');
+const url=new URL(process.env.DATABASE_URL);
+const database=url.pathname.slice(1);
+if(!/^ayl_[a-z0-9_]+$/.test(database))throw new Error('Base fuera del prefijo ayl_');
+const folder=path.resolve('.local/backups');mkdirSync(folder,{recursive:true});
+const target=path.join(folder,`${database}-${new Date().toISOString().replaceAll(':','-')}.sql`);
+const binary=process.argv[2]||'mysqldump';
+const result=spawnSync(binary,['--host='+url.hostname,'--port='+(url.port||3306),'--user='+decodeURIComponent(url.username),'--single-transaction','--hex-blob','--no-tablespaces','--set-gtid-purged=OFF','--default-character-set=utf8mb4','--result-file='+target,database],{env:{...process.env,MYSQL_PWD:decodeURIComponent(url.password)},encoding:'utf8',windowsHide:true});
+if(result.error||result.status!==0)throw new Error('No se completó el respaldo. Revisa el ejecutable y los permisos; no uses un archivo parcial.');
+console.log('Respaldo privado creado: '+target);

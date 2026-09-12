@@ -78,7 +78,7 @@ export function RecipientManager({ initialItems, addresses }: { initialItems: Re
   const [deleting, setDeleting] = useState(false);
   const { showToast } = useToast();
   const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<RecipientInput>({ resolver: zodResolver(customerRecipientSchema) });
-  const begin = (item?: Recipient) => { setEditing(item ?? "new"); reset(item ? { name: item.name, phone: item.phone.replace("+52", ""), addressId: item.addressId } : { name: "", phone: "", addressId: addresses[0]?.id ?? "" }); };
+  const begin = (item?: Recipient) => { setEditing(item ?? "new"); reset(item ? { name: item.name, phone: item.phone, addressId: item.addressId } : { name: "", phone: "", addressId: addresses[0]?.id ?? "" }); };
   const save = handleSubmit(async (data) => {
     const result = await upsertClientRecipient(data, editing === "new" ? undefined : editing?.id);
     if (!result.ok) return showToast({ title: "No se pudo guardar", description: result.error, variant: "error" });
@@ -102,7 +102,7 @@ export function RecipientManager({ initialItems, addresses }: { initialItems: Re
     <Dialog open={Boolean(editing)} onClose={() => setEditing(null)} title={editing === "new" ? "Nuevo destinatario" : "Editar destinatario"} description="La persona debe presentar identificación al recibir.">
       <form onSubmit={save} className="grid gap-4">
         <Input label="Nombre completo" error={errors.name?.message} {...register("name")} />
-        <Input label="Teléfono +52" inputMode="numeric" placeholder="10 dígitos" error={errors.phone?.message} {...register("phone")} />
+        <Input label="Teléfono" inputMode="tel" placeholder="+502 5555 1234" error={errors.phone?.message} {...register("phone")} />
         <Select label="Dirección de entrega" options={[{ value: "", label: "Selecciona" }, ...addresses.map((item) => ({ value: item.id, label: item.label }))]} error={errors.addressId?.message} {...register("addressId")} />
         <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setEditing(null)}>Cancelar</Button><Button type="submit" loading={isSubmitting}>Guardar destinatario</Button></div>
       </form>

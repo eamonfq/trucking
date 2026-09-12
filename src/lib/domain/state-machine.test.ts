@@ -70,7 +70,7 @@ describe("transiciones de factura", () => {
 describe("cascadas de camión", () => {
   it("recorre todas las etapas y actualiza cajas y envíos solo cuando corresponde", () => {
     let truck: Truck = { id: "truck-1", code: "TR-001", plate: "ABC-123", driverId: "driver-1", driverName: "Ana López", departureDate: "2026-09-04", route: "Miami → Ciudad de México", destinationCity: "Ciudad de México", status: "planificado", boxIds: ["box-1"], capacity: { ...DEFAULT_TRUCK_CAPACITY }, timeline: [] };
-    let boxes = [box("box-1", "en-bodega")];
+    let boxes: Box[] = [{...box("box-1", "en-bodega"), truckId:"truck-1", shipmentId:"ship-1"}];
     let shipments = [shipment("confirmado")];
     for (const expected of ["cargando", "despachado", "en-frontera", "en-destino", "cerrado"] as const) {
       const result = transitionTruckWithCascade(truck, boxes, shipments, context);

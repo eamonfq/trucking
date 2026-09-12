@@ -1,17 +1,27 @@
+"use client";
 import type { ReactNode } from "react";
+import { NavigationPending } from "@/components/ui/navigation-pending";
 import Link from "next/link";
-import { Boxes, ClipboardCheck, FileText, Gauge, Menu, Settings, Truck, UsersRound } from "lucide-react";
+import { PencilLine, Boxes, ClipboardCheck, FileText, Gauge, Mail, Menu, Settings, Truck, UsersRound, ListTodo, MessageSquare, PackageCheck } from "lucide-react";
 import { Sidebar } from "@/components/ui/sidebar";
 import { BrandLogo } from "@/components/marketing/brand-logo";
 import { signOut } from "@/lib/auth/actions";
 
 const items = [
   { label: "Resumen", href: "/admin", icon: Gauge },
+  { label: "Pendientes", href: "/admin/pendientes", icon: ListTodo },
   { label: "Recepción", href: "/admin/recepcion", icon: ClipboardCheck },
+  { label: "Prealertas", href: "/admin/prealertas", icon: ClipboardCheck },
+  { label: "Almacenes y operadores", href: "/admin/almacenes", icon: UsersRound },
+  { label: "Recepción en destino", href: "/admin/recepcion-destino", icon: PackageCheck },
   { label: "Bodega", href: "/admin/bodega", icon: Boxes },
   { label: "Camiones", href: "/admin/camiones", icon: Truck },
+  { label: "Entregas", href: "/admin/entregas", icon: PackageCheck },
   { label: "Facturas", href: "/admin/facturas", icon: FileText },
   { label: "Clientes", href: "/admin/clientes", icon: UsersRound },
+  { label: "Soporte", href: "/admin/soporte", icon: MessageSquare },
+  { label: "Edición", href: "/admin/edicion", icon: PencilLine },
+  { label: "Correos", href: "/admin/correos", icon: Mail },
   { label: "Configuración", href: "/admin/configuracion", icon: Settings },
 ];
 
@@ -44,7 +54,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
                 {items.map((item) => (
                   <Link key={item.href} href={item.href} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-navy-800 hover:bg-orange-50">
                     <item.icon className="size-4 text-orange-500" />
-                    {item.label}
+                    {item.label}<NavigationPending/>
                   </Link>
                 ))}
                 <form action={signOut} className="border-t border-stone-100 px-3 pt-2">

@@ -1,6 +1,10 @@
 import type { MetadataRoute } from "next";
+import { seoConfig, siteUrl } from "@/lib/seo";
 
 export default function robots(): MetadataRoute.Robots {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-  return { rules: { userAgent: "*", allow: "/", disallow: ["/cliente/", "/admin/", "/design"] }, sitemap: `${baseUrl}/sitemap.xml` };
+  if (!seoConfig.indexable) return { rules: { userAgent: "*", disallow: "/" } };
+  return {
+    rules: { userAgent: "*", allow: "/", disallow: ["/cliente", "/admin", "/api/", "/design", "/rastrear", "/login", "/registro", "/recuperar", "/restablecer", "/verificar", "/invitacion"] },
+    sitemap: siteUrl("/sitemap.xml"),
+  };
 }

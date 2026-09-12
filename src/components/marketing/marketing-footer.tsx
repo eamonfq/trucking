@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { BrandLogo } from "@/components/marketing/brand-logo";
-import { COMPANY } from "@/lib/config/company";
+
 
 const service = [
   { label: "Tarifas", href: "/#tarifas" },
-  { label: "Cómo funciona", href: "/#proceso" },
+  { label: "Cómo funciona", href: "/como-funciona" },
   { label: "Cobertura", href: "/#cobertura" },
   { label: "Rastrear envío", href: "/rastrear" },
 ];
@@ -26,16 +26,15 @@ export function MarketingFooter() {
         </div>
         <FooterColumn title="Servicio">{service.map((item) => <Link key={item.href} href={item.href} className="text-sm text-[#A8B2CA] transition hover:text-white">{item.label}</Link>)}</FooterColumn>
         <FooterColumn title="Cuenta">{account.map((item) => <Link key={item.href} href={item.href} className="text-sm text-[#A8B2CA] transition hover:text-white">{item.label}</Link>)}</FooterColumn>
-        <FooterColumn title="Contacto">
-          <span className="pending-data w-fit rounded-sm px-1.5 text-sm text-[#A8B2CA]">Teléfono · {COMPANY.supportPhone}</span>
-          <span className="pending-data w-fit rounded-sm px-1.5 text-sm text-[#A8B2CA]">Correo · {COMPANY.supportEmail}</span>
-          <span className="pending-data w-fit rounded-sm px-1.5 text-sm text-[#A8B2CA]">Bodega Miami · dato pendiente</span>
+        <FooterColumn title="Te acompañamos">
+          <Link href="/cliente/soporte" className="text-sm text-[#A8B2CA] transition hover:text-white">Centro de soporte</Link>
+          <p className="text-sm leading-6 text-[#A8B2CA]">Consulta direcciones de recepción y condiciones de entrega con nuestro equipo antes de enviar.</p>
         </FooterColumn>
       </div>
       <div className="border-t border-white/10">
         <div className="mx-auto flex max-w-[90rem] flex-col gap-2 px-5 py-6 text-xs text-[#8A96B4] sm:flex-row sm:justify-between sm:px-8 lg:px-18">
           <span>© 2026 A&amp;L Trucking Logistics</span>
-          <div className="flex gap-6"><span>Aviso de privacidad</span><span>Términos y condiciones</span></div>
+          <span>Miami, USA → México</span>
         </div>
       </div>
     </footer>

@@ -1,3 +1,5 @@
+import { TruckRoute } from "@/components/admin/truck-route";
+import { getWarehouseAdministration } from "@/lib/auth/warehouse-actions";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
@@ -15,5 +17,6 @@ export default async function TruckDetailPage({ params }: { params: Promise<{ id
     logisticsService.getShipments(),
   ]);
   if (!truck) notFound();
-  return <><Link href="/admin/camiones" className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-navy-500 hover:text-orange-600"><ArrowLeft className="size-4" />Volver a camiones</Link><SectionTitle eyebrow="Guía máster" title={truck.code} description={`${truck.route}. Consulta capacidad, cajas e historial antes de ejecutar la siguiente acción.`} /><div className="mt-7"><TruckDetailManager initialTruck={truck} initialAssigned={boxes.filter((box) => truck.boxIds.includes(box.id))} initialAvailable={boxes.filter((box) => box.status === "en-bodega" && !box.truckId)} users={users} drivers={drivers} shipments={shipments} /></div></>;
+  const {warehouses}=await getWarehouseAdministration();
+  return <><Link href="/admin/camiones" className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-navy-500 hover:text-orange-600"><ArrowLeft className="size-4" />Volver a camiones</Link><SectionTitle eyebrow="Guía máster" title={truck.code} description={`${truck.route}. Consulta capacidad, cajas e historial antes de ejecutar la siguiente acción.`} /><div className="mt-7"><TruckRoute truck={truck} warehouses={warehouses}/><TruckDetailManager key={JSON.stringify(truck)} initialTruck={truck} initialAssigned={boxes.filter((box) => truck.boxIds.includes(box.id))} initialAvailable={boxes.filter((box) => box.status === "en-bodega" && !box.truckId)} users={users} drivers={drivers} shipments={shipments} /></div></>;
 }

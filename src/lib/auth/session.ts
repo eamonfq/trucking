@@ -1,57 +1,21 @@
+import "server-only";
+import type { RowDataPacket } from "mysql2/promise";
 import type { Role } from "@/lib/types";
-
-export const SESSION_COOKIE = "ayl_demo_session";
-const SESSION_DURATION_SECONDS = 60 * 60 * 8;
-
-export type SessionPayload = {
-  userId: string;
-  role: Role;
-  expiresAt: number;
-};
-
-const secret = process.env.AUTH_SECRET ?? "demo-only-change-this-secret-before-production";
-
-const encode = (value: string) => Buffer.from(value).toString("base64url");
-const decode = (value: string) => Buffer.from(value, "base64url").toString("utf8");
-
-async function signature(payload: string) {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const signed = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
-  return Buffer.from(signed).toString("base64url");
+import { randomToken, tokenHash } from "./crypto";
+import { sql } from "./repository";
+export const SESSION_COOKIE = "ayl_session";
+export type SessionPayload = { userId: string; role: Role; expiresAt: number };
+export const sessionCookieOptions = { httpOnly: true, sameSite: "lax" as const, secure: process.env.NODE_ENV === "production", path: "/" };
+export async function createSessionToken(userId: string, role: Role, remember = false) {
+  const token = randomToken();
+  const duration = remember ? 30 * 86400 : 8 * 3600;
+  await sql().execute("INSERT INTO sessions(token_hash,user_id,expires_at) SELECT ?,user_id,DATE_ADD(UTC_TIMESTAMP(3),INTERVAL ? SECOND) FROM accounts WHERE user_id=? AND role=? AND active=1 AND verified_at IS NOT NULL", [tokenHash(token), duration, userId, role]);
+  return token;
 }
-
-export async function createSessionToken(userId: string, role: Role) {
-  const payload: SessionPayload = {
-    userId,
-    role,
-    expiresAt: Math.floor(Date.now() / 1000) + SESSION_DURATION_SECONDS,
-  };
-  const encoded = encode(JSON.stringify(payload));
-  return `${encoded}.${await signature(encoded)}`;
-}
-
 export async function verifySessionToken(token?: string): Promise<SessionPayload | null> {
-  if (!token) return null;
-  const [encoded, suppliedSignature] = token.split(".");
-  if (!encoded || !suppliedSignature || (await signature(encoded)) !== suppliedSignature) return null;
-  try {
-    const payload = JSON.parse(decode(encoded)) as SessionPayload;
-    return payload.expiresAt > Math.floor(Date.now() / 1000) ? payload : null;
-  } catch {
-    return null;
-  }
+  if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
+  const [rows] = await sql().execute<RowDataPacket[]>("SELECT s.user_id,a.role,s.expires_at FROM sessions s JOIN accounts a ON a.user_id=s.user_id WHERE s.token_hash=? AND s.expires_at>UTC_TIMESTAMP(3) AND a.active=1 AND a.verified_at IS NOT NULL", [tokenHash(token)]);
+  const row = rows[0];
+  return row ? { userId: row.user_id, role: row.role, expiresAt: Math.floor(new Date(row.expires_at).getTime()/1000) } : null;
 }
-
-export const sessionCookieOptions = {
-  httpOnly: true,
-  sameSite: "lax" as const,
-  secure: process.env.NODE_ENV === "production",
-  path: "/",
-  maxAge: SESSION_DURATION_SECONDS,
-};
+export async function deleteSession(token?: string) { if (token) await sql().execute("DELETE FROM sessions WHERE token_hash=?", [tokenHash(token)]); }

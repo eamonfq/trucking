@@ -27,7 +27,7 @@ export default async function TrackingDetailPage({ params }: { params: Promise<{
   const summary = result.type === "shipment"
     ? `Envío ${item.code} · ${result.boxes.length} ${result.boxes.length === 1 ? "caja" : "cajas"}`
     : result.type === "box"
-      ? `Caja ${item.code} · ${getBoxCategory(result.item.categoryId)?.name ?? "Sin categoría"}`
+      ? `Caja ${item.code} · ${result.item.categoryName ?? getBoxCategory(result.item.categoryId)?.name ?? result.item.categoryId}`
       : `Camión ${item.code} · ${result.item.boxIds.length} cajas`;
 
   return <>
@@ -62,7 +62,7 @@ export default async function TrackingDetailPage({ params }: { params: Promise<{
             {result.type === "shipment" && <div className="rounded-xl border border-line-300 bg-cream-50 p-6">
               <h3 className="font-display text-h2 font-semibold text-navy-900">Cajas en este envío</h3>
               <ul className="mt-4 grid gap-2.5">{result.boxes.map((box) => <li key={box.id} className="flex items-center justify-between gap-3 rounded-md bg-white px-4 py-3">
-                <span className="text-sm font-semibold text-navy-900">{box.code} <span className="font-normal text-ink-500">{getBoxCategory(box.categoryId)?.name}</span></span>
+                <span className="text-sm font-semibold text-navy-900">{box.code} <span className="font-normal text-ink-500">{box.categoryName ?? getBoxCategory(box.categoryId)?.name ?? box.categoryId}</span></span>
                 <span className="text-xs font-medium text-brand-700">{getStatusLabel(box.status)}</span>
               </li>)}</ul>
               <p className="mt-4 text-sm leading-6 text-ink-500">Recibe {result.recipientFirstName}.</p>

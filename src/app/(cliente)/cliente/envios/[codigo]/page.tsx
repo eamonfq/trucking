@@ -12,13 +12,13 @@ import { formatDate, formatUsd } from "@/lib/utils/format";
 
 export default async function ShipmentDetail({ params }: { params: Promise<{ codigo: string }> }) {
   const { codigo } = await params;
-  const [user, shipments, boxes, recipients, trucks, rates] = await Promise.all([requireClientUser(), logisticsService.getShipments(), logisticsService.getBoxes(), logisticsService.getRecipients(), logisticsService.getTrucks(), configService.getRateTable()]);
+  const [user, shipments, boxes, recipients, trucks, rates] = await Promise.all([requireClientUser(), logisticsService.getShipments(), logisticsService.getBoxes(), logisticsService.getRecipients(), logisticsService.getTrucks(), configService.getCatalog()]);
   const shipment = shipments.find((item) => item.code.toLowerCase() === codigo.toLowerCase());
   if (!shipment || shipment.userId !== user.id) notFound();
   const shipmentBoxes = boxes.filter((box) => shipment.boxIds.includes(box.id));
-  const recipient = recipients.find((item) => item.id === shipment.recipientId);
+  const recipient = shipment.recipientSnapshot ?? recipients.find((item) => item.id === shipment.recipientId);
   const truck = trucks.find((item) => item.id === shipment.truckId);
-  const total = shipmentBoxes.reduce((sum, box) => sum + (rates.find((rate) => rate.id === box.categoryId)?.priceUsd ?? 0), 0);
+  const total = shipmentBoxes.reduce((sum, box) => sum + (box.customPriceUsd ?? rates.find((rate) => rate.id === box.categoryId)?.priceUsd ?? 0), 0);
   return <>
     <Link href="/cliente/envios" className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-navy-500"><ArrowLeft className="size-4" />Mis envíos</Link>
     <SectionTitle eyebrow="Detalle de envío" title={shipment.code} action={<StatusBadge status={shipment.status} />} />

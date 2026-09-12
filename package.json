@@ -3,11 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "system:check": "node scripts/check-system.mjs",
+    "db:migrate": "node scripts/db-migrate.mjs",
+    "db:admin": "node scripts/bootstrap-admin.mjs",
+    "email:worker": "node scripts/email-worker.mjs",
+    "dev": "next dev --port 3100 --hostname 127.0.0.1",
     "build": "next build",
-    "start": "next start",
+    "start": "next start --port 3100 --hostname 127.0.0.1",
     "lint": "eslint . --max-warnings=0",
     "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:watch": "vitest"
   },
   "dependencies": {
@@ -15,7 +20,9 @@
     "@fontsource-variable/inter": "^5.2.8",
     "@hookform/resolvers": "^5.2.2",
     "@react-pdf/renderer": "^4.3.1",
+    "jsbarcode": "^3.12.3",
     "lucide-react": "^0.544.0",
+    "mysql2": "^3.23.3",
     "next": "^16.0.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

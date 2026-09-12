@@ -39,6 +39,7 @@ export const STATUS_CONFIG: Record<OperationalStatus, { label: string; tone: Sta
   borrador: { label: "Borrador", tone: "neutral", className: NEUTRAL },
   emitida: { label: "Emitida", tone: "info", className: INFO },
   "pago-reportado": { label: "Pago reportado", tone: "attention", className: AMBER },
+  "pendiente-pago-destino": { label: "Pendiente de pago en destino", tone: "attention", className: AMBER },
   pagada: { label: "Pagada", tone: "success", className: DONE },
   vencida: { label: "Vencida", tone: "danger", className: DANGER },
   abierto: { label: "Abierto", tone: "attention", className: AMBER },

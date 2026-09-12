@@ -9,7 +9,7 @@ import { z } from "zod";
 import { createCustomerAsAdmin } from "@/lib/auth/admin-actions";
 import { CUSTOMER_COPY, CUSTOMER_STATUS } from "@/lib/config/customers";
 import { MEXICO_STATES, POSTAL_CODE_CATALOG } from "@/lib/config/mexico";
-import { registrationSchema } from "@/lib/schemas/registration";
+import { quickCustomerSchema as registrationSchema } from "@/lib/schemas/customer";
 import { formatDate, formatUsd } from "@/lib/utils/format";
 import { invoiceTotal } from "@/lib/utils/invoices";
 import type { Address, Box, Invoice, Shipment, User } from "@/lib/types";
@@ -31,7 +31,7 @@ export function CustomerManager({ initialUsers, initialAddresses, boxes, shipmen
   const [city, setCity] = useState("all");
   const [open, setOpen] = useState(false);
   const { showToast } = useToast();
-  const { register, handleSubmit, reset, setValue, formState: { errors, isSubmitting } } = useForm<RegistrationInput>({ resolver: zodResolver(registrationSchema), defaultValues: { acceptedTerms: true, state: "", rfc: "" } });
+  const { register, handleSubmit, reset, setValue, formState: { errors, isSubmitting } } = useForm<RegistrationInput>({ resolver: zodResolver(registrationSchema), defaultValues: { state: "", rfc: "" } });
   const cities = useMemo(() => Array.from(new Set(customerAddresses.map((address) => address.municipality))).sort(), [customerAddresses]);
   const filtered = useMemo(() => customers.filter((customer) => {
     const term = search.trim().toLowerCase();
@@ -51,7 +51,7 @@ export function CustomerManager({ initialUsers, initialAddresses, boxes, shipmen
   };
 
   const beginCreate = () => {
-    reset({ firstName: "", paternalLastName: "", maternalLastName: "", email: "", phone: "", password: "", confirmPassword: "", acceptedTerms: true, street: "", exteriorNumber: "", interiorNumber: "", neighborhood: "", postalCode: "", municipality: "", state: "", references: "", rfc: "" });
+    reset({ firstName: "", paternalLastName: "", maternalLastName: "", email: "", phone: "", street: "", exteriorNumber: "", interiorNumber: "", neighborhood: "", postalCode: "", municipality: "", state: "", references: "", rfc: "" });
     setOpen(true);
   };
 
@@ -76,18 +76,19 @@ export function CustomerManager({ initialUsers, initialAddresses, boxes, shipmen
 
     <Dialog open={open} onClose={() => setOpen(false)} size="large" title="Registrar cliente" description="Usa los mismos datos y validaciones del registro público.">
       <form onSubmit={handleSubmit(async (data) => {
-        const result = await createCustomerAsAdmin(data);
+        let result;
+        try { result = await createCustomerAsAdmin(data); } catch { return showToast({title:"No se confirmó el alta",description:"Conservamos tus datos. Revisa el directorio antes de reintentar.",variant:"error"}); }
         if (!result.ok) return showToast({ title: "No se pudo registrar", description: result.error, variant: "error" });
         setCustomers((current) => [...current, result.user]);
         setCustomerAddresses((current) => [...current, result.address]);
+        setSearch(""); setAccountStatus("all"); setCity("all");
         setOpen(false);
-        showToast({ title: "Cliente registrado", description: `${result.user.lockerCode} fue asignado y la bienvenida se envió por correo.` });
+        showToast({ title: "Cliente registrado", description: `${result.user.lockerCode} fue asignado. La invitación quedó en cola de correo.` });
       })} className="grid max-h-[68vh] gap-4 overflow-y-auto px-1">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><Input label="Nombre" error={errors.firstName?.message} {...register("firstName")} /><Input label="Apellido paterno" error={errors.paternalLastName?.message} {...register("paternalLastName")} /><Input label="Apellido materno" error={errors.maternalLastName?.message} {...register("maternalLastName")} /></div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><Input label="Correo" type="email" error={errors.email?.message} {...register("email")} /><Input label="Teléfono +52" inputMode="numeric" error={errors.phone?.message} {...register("phone")} /><Input label="RFC opcional" className="uppercase" error={errors.rfc?.message} {...register("rfc")} /></div>
-        <div className="grid gap-4 sm:grid-cols-2"><Input label="Contraseña inicial" type="password" error={errors.password?.message} {...register("password")} /><Input label="Confirmar contraseña" type="password" error={errors.confirmPassword?.message} {...register("confirmPassword")} /></div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><Input label="Correo" type="email" error={errors.email?.message} {...register("email")} /><Input label="Teléfono" inputMode="tel" error={errors.phone?.message} {...register("phone")} /><Input label="RFC opcional" className="uppercase" error={errors.rfc?.message} {...register("rfc")} /></div>
+        <p className="rounded-xl bg-cream-100 p-4 text-sm leading-7 text-ink-700">Enviaremos una invitación personal. El cliente confirmará su correo y elegirá su contraseña.</p>
         <div className="border-t border-stone-200 pt-4"><p className="mb-4 flex items-center gap-2 font-display text-lg font-bold"><Building2 className="size-5 text-orange-500" />Dirección principal en México</p><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><Input label="Calle" error={errors.street?.message} {...register("street")} /><Input label="Número exterior" error={errors.exteriorNumber?.message} {...register("exteriorNumber")} /><Input label="Número interior" error={errors.interiorNumber?.message} {...register("interiorNumber")} /><Input label="Código postal" inputMode="numeric" error={errors.postalCode?.message} {...register("postalCode", { onBlur: (event) => { const match = POSTAL_CODE_CATALOG[event.target.value]; if (match) { setValue("municipality", match.municipality); setValue("state", match.state); } } })} /><Input label="Colonia" error={errors.neighborhood?.message} {...register("neighborhood")} /><Input label="Municipio o alcaldía" error={errors.municipality?.message} {...register("municipality")} /></div><div className="mt-4 grid gap-4 sm:grid-cols-2"><Select label="Estado" options={[{ value: "", label: "Selecciona" }, ...MEXICO_STATES.map((item) => ({ value: item, label: item }))]} error={errors.state?.message} {...register("state")} /><Textarea label="Referencias" error={errors.references?.message} {...register("references")} /></div></div>
-        <input type="checkbox" className="sr-only" {...register("acceptedTerms")} />
         <div className="sticky bottom-0 flex justify-end gap-2 bg-white py-2"><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button><Button type="submit" loading={isSubmitting}><UserRound className="size-4" />Crear cuenta</Button></div>
       </form>
     </Dialog>

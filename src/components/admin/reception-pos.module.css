@@ -1,0 +1,7 @@
+.pos input:not([type="radio"]):not([type="checkbox"]):not([type="file"]),
+.pos select { min-height: 42px; padding-top: 8px; padding-bottom: 8px; }
+.pos button { min-height: 40px; }
+.pos input[type="radio"], .pos input[type="checkbox"] { accent-color: #e8621c; }
+@media (min-width: 1024px) {
+  .pos > aside { position: sticky; top: 16px; }
+}

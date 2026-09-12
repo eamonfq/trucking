@@ -2,7 +2,7 @@ import { MarketingFooter } from "@/components/marketing/marketing-footer";
 import { MarketingHeader } from "@/components/marketing/marketing-header";
 import { TrackingSearch } from "@/components/marketing/tracking-search";
 
-export const metadata = { title: "Rastrear carga", description: "Consulta el estado de una caja, envío o camión A&L sin iniciar sesión." };
+export const metadata = { robots: { index: false, follow: false }, title: "Rastrear carga", description: "Consulta el estado de una caja, envío o camión A&L sin iniciar sesión." };
 
 const EXAMPLES = [
   { label: "Caja", code: "BX-260002" },

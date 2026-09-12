@@ -1,7 +1,12 @@
+import { getSession } from "@/lib/auth/actions";
+import { connection } from "next/server";
+import { CatalogProvider } from "@/components/ui/catalog-provider";
+import { configService } from "@/lib/services/config";
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { ToastProvider } from "@/components/ui/toast";
 import "./globals.css";
+import { seoConfig, homeDescription } from "@/lib/seo";
 
 const inter = localFont({
   src: [
@@ -19,18 +24,21 @@ const bricolage = localFont({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
+  metadataBase: new URL(seoConfig.origin),
   title: { default: "A&L Trucking Logistics", template: "%s | A&L Trucking Logistics" },
-  description: "Demo operativo de envíos terrestres USA a México con precio fijo por categoría de caja.",
+  description: homeDescription,
   applicationName: "A&L Trucking Logistics",
   keywords: ["envíos USA México", "carga terrestre", "cajas a México", "A&L Trucking Logistics"],
-  robots: { index: true, follow: true },
+  robots: { index: seoConfig.indexable, follow: seoConfig.indexable },
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  await connection();
+  const [categories,flow]=await Promise.all([configService.getCatalog(),configService.getFlowConfig()]);
+  const operator=(await getSession())?.role==="operador";
   return (
     <html lang="es-MX" data-scroll-behavior="smooth">
-      <body className={`${inter.variable} ${bricolage.variable} font-sans antialiased`}><ToastProvider>{children}</ToastProvider></body>
+      <body className={`${inter.variable} ${bricolage.variable} font-sans antialiased`}><ToastProvider><CatalogProvider categories={operator ? [] : categories} destinations={flow.destinationCities}>{children}</CatalogProvider></ToastProvider></body>
     </html>
   );
 }

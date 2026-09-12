@@ -1,44 +1,31 @@
-import { addresses, recipients } from "@/lib/data/addresses";
-import { boxes } from "@/lib/data/boxes";
-import { invoices } from "@/lib/data/invoices";
-import { notifications } from "@/lib/data/notifications";
-import { shipments } from "@/lib/data/shipments";
-import { supportTickets } from "@/lib/data/support";
-import { trucks } from "@/lib/data/trucks";
-import { users } from "@/lib/data/users";
-import { drivers } from "@/lib/data/drivers";
-import { clone, simulateLatency } from "@/lib/services/delay";
-
-async function all<T>(items: T[]) {
-  await simulateLatency();
-  return clone(items);
+import "server-only";
+import { addresses, recipients, boxes, invoices, notifications, shipments, supportTickets, trucks, users, drivers } from "@/lib/db/collections";
+import { withStore } from "@/lib/db/store";
+import { getSession } from "@/lib/auth/actions";
+import { clone } from "./delay";
+async function all<T>(items: T[], adminOnly = false): Promise<T[]> {
+  return withStore(async () => {
+    const session = await getSession();
+    if (!session || (adminOnly && session.role !== "admin")) throw new Error("No autorizado");
+    if (session.role === "admin") return clone(items);
+    return clone(items.filter(item => (item as { userId?: string }).userId === session.userId));
+  });
 }
-
 export const logisticsService = {
-  getUsers: () => all(users),
-  getBoxes: () => all(boxes),
-  getShipments: () => all(shipments),
-  getTrucks: () => all(trucks),
-  getInvoices: () => all(invoices),
-  getNotifications: () => all(notifications),
-  getAddresses: () => all(addresses),
-  getRecipients: () => all(recipients),
-  getDrivers: () => all(drivers),
+  getUsers: () => all(users, true),
+  getBoxes: () => all(boxes), getShipments: () => all(shipments),
+  getTrucks: () => withStore(async () => {
+    const session = await getSession();
+    if (!session) throw new Error("No autorizado");
+    if (session.role === "admin") return clone(trucks);
+    const ids = new Set(boxes.filter(box => box.userId === session.userId).map(box => box.truckId));
+    return clone(trucks.filter(truck => ids.has(truck.id)).map(truck => ({ ...truck, notes: undefined, driverName: "", driverId: "", plate: "", boxIds: truck.boxIds.filter(id => boxes.some(box => box.id === id && box.userId === session.userId)), timeline: truck.timeline.map(event => ({ ...event, actor: "A&L", note: undefined })) })));
+  }), getInvoices: () => all(invoices),
+  getNotifications: () => all(notifications), getAddresses: () => all(addresses),
+  getRecipients: () => all(recipients), getDrivers: () => all(drivers, true),
   getSupportTickets: () => all(supportTickets),
-  async getTruckById(id: string) {
-    await simulateLatency();
-    return clone(trucks.find((truck) => truck.id === id) ?? null);
-  },
-  async getUserById(id: string) {
-    await simulateLatency();
-    return clone(users.find((user) => user.id === id) ?? null);
-  },
-  async getBoxByCode(code: string) {
-    await simulateLatency();
-    return clone(boxes.find((box) => box.code.toLowerCase() === code.toLowerCase()) ?? null);
-  },
-  async getBoxById(id: string) {
-    await simulateLatency();
-    return clone(boxes.find((box) => box.id === id) ?? null);
-  },
+  async getTruckById(id: string) { return (await all(trucks, true)).find(item => item.id === id) ?? null; },
+  async getUserById(id: string) { return (await all(users, true)).find(item => item.id === id) ?? null; },
+  async getBoxByCode(code: string) { return (await all(boxes)).find(item => item.code.toLowerCase() === code.toLowerCase()) ?? null; },
+  async getBoxById(id: string) { return (await all(boxes)).find(item => item.id === id) ?? null; },
 };

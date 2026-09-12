@@ -1,0 +1,3 @@
+import { z } from "zod";
+export const categoryIdSchema=z.string().regex(/^[a-z][a-z0-9-]{1,59}$/).refine(id=>!["constructor","prototype"].includes(id));
+export const categorySchema=z.object({id:categoryIdSchema.refine(id=>id!=="custom-cargo","Este identificador está reservado para carga personalizada."),name:z.string().trim().min(1).max(60),active:z.boolean().default(true),dimensions:z.object({length:z.number().positive().max(1000),width:z.number().positive().max(1000),height:z.number().positive().max(1000)}),priceUsd:z.number().positive().max(100000).multipleOf(0.01),maxWeightLb:z.number().positive().max(100000)});

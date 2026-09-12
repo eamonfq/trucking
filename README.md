@@ -1,76 +1,41 @@
-# A&L Trucking Logistics — demo operativo
+# A&L Trucking Logistics
 
-Demo navegable en Next.js 16 para validar el flujo de carga terrestre USA → México con precio fijo por categoría de caja.
+Sistema operativo Next.js con autenticación y persistencia MySQL, recepción, prealertas, viajes multidestino, escaneo, operadores por almacén, facturación y pagos.
 
-## Requisitos
+## Instalación y servidor
 
-- Node.js 20.9 o posterior (probado con Node 24). Next 16 rechaza versiones anteriores
-- npm
-- Laragon es opcional; el servidor de desarrollo se ejecuta con Node en el puerto 3000
+- [Guía de despliegue y variables de producción](docs/DESPLIEGUE-SERVIDOR.md).
+- [Autenticación, MySQL y Resend](docs/AUTH-REAL.md).
+- [Recepción y cálculo de cobros](docs/RECEPCION-Y-PAGOS.md).
+- [Ubicaciones y reglas de pagos confirmadas](docs/ALMACENES-Y-PAGOS-CONFIRMADOS.md).
+- [Flujo del sistema](docs/FLUJO-DEL-SISTEMA.md).
 
-Si trabajas desde WSL sobre una carpeta de Windows, instala las dependencias dentro del mismo entorno donde vas a compilar: `lightningcss` y `rollup` traen binarios nativos por plataforma y una instalación hecha en Windows no sirve para Linux.
+## Desarrollo local
 
-## Ejecutar
+Node.js 24, npm y MySQL. Configurar .env.local con .env.example como referencia, sin sobrescribir secretos existentes.
 
 ```bash
-npm install
-copy .env.example .env.local
+npm ci
+npm run db:migrate
+npm run db:admin
 npm run dev
 ```
 
-Abre `http://localhost:3000`. Comandos de calidad:
+URL local: http://localhost:3100. Base local: ayl_real. No existen accesos demo activos. El primer administrador se genera con contraseña aleatoria en .local/admin-access.txt, excluido de Git.
+
+## Validación
 
 ```bash
-npm run test
-npm run lint
+npm test
+npm run test:integration
 npm run build
+npm run system:check
 ```
 
-## Usuarios demo
+Integración usa una base desechable ayl_test_<uuid>, sin alterar ayl_real ni enviar correos reales. Los datos operativos y archivos privados están en MySQL, no en Git.
 
-| Rol | Usuario | Contraseña |
-|---|---|---|
-| Cliente | `mariana@demo.test` o `AL-MX-0001` | `Demo1234!` |
-| Administrador | `admin@demo.test` | `Admin1234!` |
+## Producción
 
-## Qué puede hacer el cliente
+Requiere Node persistente detrás de HTTPS, MySQL y un proceso separado npm run email:worker. No basta con subir archivos a un hosting PHP. No copiar node_modules de Windows a Linux.
 
-Con la sesión de cliente, cada acción del panel persiste en el store mock y el administrador la ve en la misma sesión:
-
-- Registrar pre-alertas, que crean la caja en estado `pre-alertada`.
-- Crear envíos con las cajas elegibles de bodega, un destinatario y la forma de entrega habilitada por `deliveryMode`.
-- Reportar el pago de una factura con referencia y comprobante, y ver la resolución de Operaciones.
-- Administrar direcciones y destinatarios con validación mexicana, autocompletado por código postal y confirmación al eliminar.
-- Editar sus datos de contacto, cambiar la contraseña confirmando la actual y abrir tickets de soporte con hilo.
-
-Las páginas de detalle de caja, envío y factura, igual que las rutas PDF, responden 404 si el recurso no pertenece a la cuenta autenticada.
-
-## Correo con Resend
-
-Define `RESEND_API_KEY` y `RESEND_FROM_EMAIL` en `.env.local`. El remitente debe pertenecer a un dominio verificado en Resend para producción. Los correos dirigidos a dominios `.test` se simulan deliberadamente; usa una dirección real autorizada para una prueba efectiva. Nunca subas `.env.local` a Git.
-
-Los eventos preparados para email incluyen bienvenida, recuperación de contraseña, pre-alerta, confirmación de envío, reporte/aprobación de pago, soporte, cambio de contraseña y avance de camión.
-
-## Sistema visual
-
-La superficie pública (landing, autenticación y rastreo) sigue el rediseño editorial documentado en [docs/DESIGN.md](docs/DESIGN.md). Los tokens viven en `src/app/globals.css`; al escribir componentes respeta la regla del naranja: `brand-500` solo para ilustración y display grande, `brand-600` para botones y `brand-700` para texto pequeño. Los valores con trama diagonal (`.pending-data`) son datos que faltan por confirmar con el cliente.
-
-## Configuración del flujo
-
-Abre `/admin/configuracion` con el usuario administrador. Los cinco flags se editan en vivo:
-
-- `originMode`: casillero o entrega directa.
-- `packingMode`: cliente o agencia.
-- `billingMoment`: al recibir o al despachar.
-- `excessPolicy`: subir categoría, recargo o rechazo.
-- `deliveryMode`: sucursal, domicilio o ambas.
-
-La configuración y el tarifario viven en `src/lib/config`; sus servicios están en `src/lib/services/config.ts`.
-
-## Datos y MySQL
-
-Este demo usa fixtures tipados y mutaciones en memoria porque así lo exige el alcance de validación. Reiniciar el servidor restaura los fixtures, lo que permite repetir la demostración desde cero. La UI nunca consume fixtures directamente: pasa por servicios, por lo que una integración MySQL puede sustituir el interior de esa capa sin rediseñar pantallas. Las credenciales locales `root/root` no se incluyen en el repositorio.
-
-## Qué falta para producción
-
-Persistencia MySQL, almacenamiento privado de archivos, hashing de contraseñas, autorización por recurso, auditoría, datos reales del negocio, CFDI, reglas aduanales, dominio verificado de Resend, colas de trabajo, webhooks y observabilidad. Consulta [docs/DECISIONS.md](docs/DECISIONS.md) y el estado de remediación en [docs/AUDIT.md](docs/AUDIT.md).
+El correo local permanece en preview. Configurar dominio y remitente verificados, rotar la clave Resend compartida y revisar la cola antes de activar envíos. Nunca versionar .env.local, .local, respaldos SQL ni claves. El push del código no despliega el servidor ni transfiere la base.

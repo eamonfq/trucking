@@ -50,7 +50,7 @@ export function AuthShell({ eyebrow, title, description, children }: { eyebrow: 
             ))}
           </ul>
         </div>
-        <p className="text-xs text-[#8A96B4]">Demo A&amp;L Trucking Logistics · datos simulados</p>
+        <p className="text-xs text-[#8A96B4]">A&amp;L Trucking Logistics · Acceso personal y seguro</p>
       </aside>
     </main>
   );

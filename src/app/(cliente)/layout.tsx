@@ -1,3 +1,4 @@
+export const metadata = { robots: { index: false, follow: false } };
 import { ClientShell } from "@/components/cliente/client-shell";
 import { getSession } from "@/lib/auth/actions";
 import { configService } from "@/lib/services/config";

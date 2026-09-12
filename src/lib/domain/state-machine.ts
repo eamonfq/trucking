@@ -43,7 +43,8 @@ export const SHIPMENT_TRANSITIONS: Record<ShipmentStatus, readonly ShipmentStatu
 
 export const INVOICE_TRANSITIONS: Record<InvoiceStatus, readonly InvoiceStatus[]> = {
   borrador: ["emitida"],
-  emitida: ["pago-reportado", "vencida"],
+  emitida: ["pago-reportado", "vencida", "pendiente-pago-destino"],
+  "pendiente-pago-destino": ["pago-reportado"],
   "pago-reportado": ["pagada", "emitida"],
   pagada: [],
   vencida: ["pago-reportado"],
@@ -117,8 +118,18 @@ export function transitionTruckWithCascade(
 ): TransitionResult<TruckCascade> {
   const action = TRUCK_ACTIONS[truck.status];
   if (!action) return { ok: false, error: `El camión ${truck.code} ya está cerrado.` };
+  if (truck.stops && !truck.stops.length && action.to === "despachado") return {ok:false,error:"Configura al menos una parada antes del despacho."};
+  if (truck.stops?.length && action.to === "en-destino") return {ok:false,error:"La llegada de los paquetes se confirma escaneando la descarga en cada almacén, no cambiando todo el camión."};
+  if (truck.stops?.length && action.to === "cerrado" && truck.boxIds.some(id=>!boxes.find(box=>box.id===id)?.unloadScan)) return {ok:false,error:"Quedan paquetes pendientes de descarga."};
+  if (truck.stops?.length && action.to === "despachado" && truck.boxIds.some(id=>{const box=boxes.find(b=>b.id===id);return !box?.loadScan||box.loadScan.truckId!==truck.id||!truck.stops!.some(s=>s.warehouseId===box.destinationWarehouseId);})) return {ok:false,error:"Todos los paquetes deben estar escaneados y asignados a una parada antes del despacho."};
   if (truck.status === "cargando" && truck.boxIds.length === 0) {
     return { ok: false, error: "No puedes despachar un camión sin cajas asignadas." };
+  }
+  if (new Set(truck.boxIds).size !== truck.boxIds.length) return { ok: false, error: "El camión contiene cajas duplicadas." };
+  if (action.to === "despachado") {
+    for (const shipment of shipments.filter(item => item.truckId === truck.id || item.boxIds.some(id => truck.boxIds.includes(id)))) {
+      if (shipment.truckId !== truck.id || !shipment.boxIds.length || shipment.boxIds.some(id => !truck.boxIds.includes(id) || boxes.find(box => box.id === id)?.truckId !== truck.id)) return { ok: false, error: `Completa la carga del envío ${shipment.code} antes de despachar. Todas sus cajas deben viajar juntas.` };
+    }
   }
 
   const boxTarget: Partial<Record<TruckStatus, BoxStatus>> = {

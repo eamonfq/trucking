@@ -3,15 +3,14 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { Camera, ImageUp, Trash2 } from "lucide-react";
 
-const MAX_MB = 8;
+const MAX_MB = 2;
 
 const readableSize = (bytes: number) => bytes < 1024 * 1024 ? `${Math.round(bytes / 1024)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 
 /**
- * Captura la foto de recepción con vista previa. La vista previa vive solo en el
- * navegador: el demo guarda el nombre del archivo, no el binario.
+ * La vista previa es local; la recepción envía el File para persistirlo en MySQL.
  */
-export function PhotoField({ value, onChange }: { value: string; onChange: (name: string) => void }) {
+export function PhotoField({ value, onChange }: { value: File | null; onChange: (file: File | null) => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState("");
   const [size, setSize] = useState(0);
@@ -22,12 +21,12 @@ export function PhotoField({ value, onChange }: { value: string; onChange: (name
 
   const accept = (file?: File) => {
     if (!file) return;
-    if (!file.type.startsWith("image/")) return setError("El archivo debe ser una imagen.");
+    if (!["image/jpeg","image/png"].includes(file.type)) return setError("El archivo debe ser JPG o PNG.");
     if (file.size > MAX_MB * 1024 * 1024) return setError(`La imagen supera ${MAX_MB} MB.`);
     setError("");
     setPreview((current) => { if (current) URL.revokeObjectURL(current); return URL.createObjectURL(file); });
     setSize(file.size);
-    onChange(file.name);
+    onChange(file);
   };
 
   const clear = () => {
@@ -35,7 +34,7 @@ export function PhotoField({ value, onChange }: { value: string; onChange: (name
     setPreview("");
     setSize(0);
     setError("");
-    onChange("");
+    onChange(null);
     if (inputRef.current) inputRef.current.value = "";
   };
 
@@ -48,20 +47,20 @@ export function PhotoField({ value, onChange }: { value: string; onChange: (name
   return (
     <div className="grid gap-2">
       <span className="text-xs font-medium text-ink-700">Foto de recepción</span>
-      <input ref={inputRef} type="file" accept="image/*" capture="environment" className="sr-only" id="reception-photo" onChange={(event) => accept(event.target.files?.[0])} />
+      <input ref={inputRef} type="file" accept="image/jpeg,image/png" capture="environment" className="sr-only" id="reception-photo" onChange={(event) => accept(event.target.files?.[0])} />
 
       {value ? (
         <div className="flex items-center gap-4 rounded-md border-[1.5px] border-line-300 bg-white p-3">
           {preview
             // eslint-disable-next-line @next/next/no-img-element -- blob local, no pasa por el optimizador
-            ? <img src={preview} alt={`Vista previa de ${value}`} className="size-20 shrink-0 rounded-sm object-cover" />
+            ? <img src={preview} alt={`Vista previa de ${value.name}`} className="size-20 shrink-0 rounded-sm object-cover" />
             : <span className="grid size-20 shrink-0 place-items-center rounded-sm bg-cream-100 text-label-600"><Camera className="size-6" /></span>}
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-navy-900">{value}</p>
+            <p className="truncate text-sm font-semibold text-navy-900">{value.name}</p>
             {size > 0 && <p className="mt-0.5 text-xs text-ink-500">{readableSize(size)}</p>}
             <button type="button" onClick={() => inputRef.current?.click()} className="mt-1.5 text-xs font-semibold text-brand-700 hover:text-brand-600">Cambiar foto</button>
           </div>
-          <button type="button" onClick={clear} aria-label={`Quitar ${value}`} className="grid size-10 shrink-0 place-items-center rounded-full text-danger transition hover:bg-danger-50"><Trash2 className="size-4" /></button>
+          <button type="button" onClick={clear} aria-label={`Quitar ${value.name}`} className="grid size-10 shrink-0 place-items-center rounded-full text-danger transition hover:bg-danger-50"><Trash2 className="size-4" /></button>
         </div>
       ) : (
         <div

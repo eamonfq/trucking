@@ -37,7 +37,7 @@ export function AccountProfile({ user: initialUser }: { user: ClientUser }) {
       <Input label="Apellido paterno" error={errors.paternalLastName?.message} {...register("paternalLastName")} />
       <Input label="Apellido materno (opcional)" error={errors.maternalLastName?.message} {...register("maternalLastName")} />
       <Input label="Correo electrónico" type="email" autoComplete="email" error={errors.email?.message} {...register("email")} />
-      <Input label="Teléfono +52" inputMode="numeric" error={errors.phone?.message} {...register("phone")} />
+      <Input label="Teléfono" inputMode="tel" error={errors.phone?.message} {...register("phone")} />
       <Input label="RFC (opcional)" className="uppercase" hint="Solo si necesitas factura fiscal." error={errors.rfc?.message} {...register("rfc")} />
       <div className="flex justify-end sm:col-span-2"><Button type="submit" loading={isSubmitting}><Save className="size-4" />Guardar cambios</Button></div>
     </form>

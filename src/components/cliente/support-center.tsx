@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Plus, SendHorizontal } from "lucide-react";
+import { Plus, SendHorizontal, RefreshCw } from "lucide-react";
 import { z } from "zod";
 import { createSupportTicket, replySupportTicket } from "@/lib/auth/client-actions";
 import { supportReplySchema, supportSchema } from "@/lib/schemas/logistics";
@@ -21,6 +22,7 @@ type TicketInput = z.input<typeof supportSchema>;
 type ReplyInput = z.input<typeof supportReplySchema>;
 
 export function SupportCenter({ initialTickets }: { initialTickets: SupportTicket[] }) {
+  const router = useRouter();
   const [tickets, setTickets] = useState(initialTickets);
   const [activeId, setActiveId] = useState(initialTickets[0]?.id ?? "");
   const [creating, setCreating] = useState(false);
@@ -55,6 +57,7 @@ export function SupportCenter({ initialTickets }: { initialTickets: SupportTicke
   return <div className="grid gap-5 lg:grid-cols-[.75fr_1.25fr]">
     <div className="grid content-start gap-3">
       <Button onClick={() => setCreating(true)}><Plus className="size-4" />Abrir ticket</Button>
+      <Button variant="ghost" onClick={() => router.refresh()}><RefreshCw className="size-4" />Actualizar conversación</Button>
       {tickets.map((ticket) => <button type="button" key={ticket.id} onClick={() => setActiveId(ticket.id)} className={`rounded-2xl border p-4 text-left transition ${ticket.id === activeId ? "border-orange-300 bg-orange-50" : "border-stone-200 bg-white hover:border-navy-400"}`}>
         <div className="flex items-center justify-between gap-3"><span className="text-xs font-bold uppercase tracking-wider text-navy-400">{ticket.code}</span><StatusBadge status={ticket.status} /></div>
         <p className="mt-2 line-clamp-2 text-sm font-bold text-navy-950">{ticket.subject}</p>

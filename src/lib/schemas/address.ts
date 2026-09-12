@@ -11,5 +11,5 @@ export const mexicanAddressSchema = z.object({
   references: z.string().trim().max(300).optional(),
 });
 
-export const mexicanPhoneSchema = z.string().regex(/^(?:\+52)?\d{10}$/, "Escribe un teléfono mexicano de 10 dígitos.");
+export const mexicanPhoneSchema = z.string().trim().transform(value => value.replace(/[\s().-]/g, "")).pipe(z.string().regex(/^\+?\d{7,15}$/, "Escribe entre 7 y 15 dígitos; puedes incluir el prefijo internacional."));
 export const rfcSchema = z.string().trim().toUpperCase().regex(/^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/, "Escribe un RFC válido.").optional().or(z.literal(""));

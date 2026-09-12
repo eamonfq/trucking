@@ -1,4 +1,6 @@
+import { PaymentHistory } from "@/components/admin/payment-history";
 import Link from "next/link";
+import { PrivateFileLink } from "@/components/ui/private-file-link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Download } from "lucide-react";
 import { PaymentForm } from "@/components/cliente/payment-form";
@@ -14,7 +16,7 @@ import { invoiceSubtotal, invoiceTotal } from "@/lib/utils/invoices";
 
 export default async function InvoiceDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [user, invoices] = await Promise.all([requireClientUser(), logisticsService.getInvoices()]);
+  const [user, invoices, shipments] = await Promise.all([requireClientUser(), logisticsService.getInvoices(), logisticsService.getShipments()]);
   const invoice = invoices.find((item) => item.id === id && item.userId === user.id);
   if (!invoice) notFound();
   const total = invoiceTotal(invoice);
@@ -25,9 +27,10 @@ export default async function InvoiceDetail({ params }: { params: Promise<{ id: 
       <div className="grid gap-5">
         <Card className="shadow-none">
           <h2 className="font-display text-xl font-bold">Desglose</h2>
-          <div className="mt-5 divide-y divide-stone-200">{invoice.lines.map((line) => <div key={line.categoryId} className="flex justify-between gap-4 py-4"><div><p className="font-bold text-navy-900">{line.quantity} × {getBoxCategory(line.categoryId)?.name}</p><p className="mt-1 text-xs text-navy-500">{formatUsd(line.unitPriceUsd)} cada una</p></div><p className="font-bold">{formatUsd(line.quantity * line.unitPriceUsd)}</p></div>)}</div>
+          <PaymentHistory shipments={shipments} invoice={invoice}/><div className="mt-5 divide-y divide-stone-200">{invoice.lines.map((line, lineIndex) => <div key={`${line.categoryId}-${line.unitPriceUsd}-${lineIndex}`} className="flex justify-between gap-4 py-4"><div><p className="font-bold text-navy-900">{line.quantity} × {line.categoryName ?? getBoxCategory(line.categoryId)?.name ?? line.categoryId}{line.description ? ` — ${line.description}` : ""}</p><p className="mt-1 text-xs text-navy-500">{formatUsd(line.unitPriceUsd)} cada una</p></div><p className="font-bold">{formatUsd(line.quantity * line.unitPriceUsd)}</p></div>)}</div>
           <dl className="mt-5 grid gap-3 border-t-2 border-navy-950 pt-5 text-sm">
             <Total label="Subtotal" value={formatUsd(invoiceSubtotal(invoice))} />
+            <Total label="Recargo por excedente" value={formatUsd(invoice.excessFeeUsd ?? 0)} />
             <Total label="Seguro opcional" value={formatUsd(invoice.insuranceUsd)} />
             <Total label="Entrega a domicilio" value={formatUsd(invoice.homeDeliveryUsd)} />
             <Total label="Total" value={formatUsd(total)} strong />
@@ -37,10 +40,11 @@ export default async function InvoiceDetail({ params }: { params: Promise<{ id: 
       </div>
       <Card className="h-fit shadow-none">
         <h2 className="font-display text-xl font-bold">Pago</h2>
-        {["emitida", "vencida"].includes(invoice.status)
+        {invoice.collectionReferences?.map((entry,index)=><p key={index} className="my-3 break-words text-sm"><strong>Comprobante ({entry.method}):</strong> {entry.reference}</p>)}{Boolean(invoice.receiptFiles?.length) && <div className="my-4 grid gap-3"><p className="text-xs font-semibold text-ink-500">Comprobantes conservados</p>{invoice.receiptFiles!.map(file=><PrivateFileLink key={file.id} id={file.id} name={file.name} />)}</div>}
+        {invoice.status === "pendiente-pago-destino" ? <p className="mt-4 rounded-xl bg-warning-50 p-4 text-sm">Pendiente de pago en destino: {formatUsd(total)}. El comprobante del acuerdo no acredita un cobro. Operaciones confirmará el pago al recibirlo.</p> : ["emitida", "vencida"].includes(invoice.status)
           ? <>
               {invoice.paymentReviewNote && <p className="mt-4 rounded-2xl bg-danger-50 p-4 text-sm leading-6 text-danger-700"><strong className="block">Tu reporte anterior fue rechazado</strong>{invoice.paymentReviewNote}</p>}
-              <p className="mt-4 text-sm leading-6 text-navy-500">Adjunta la referencia y el comprobante para que Operaciones valide el pago.</p>
+              <p className="mt-4 text-sm leading-6 text-navy-500">Registra los datos del pago para su validación. Adjuntar un comprobante es opcional.</p>
               <div className="mt-5"><PaymentForm invoiceId={invoice.id} amount={total} /></div>
             </>
           : invoice.status === "pago-reportado"

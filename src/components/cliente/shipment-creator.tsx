@@ -32,7 +32,7 @@ export function ShipmentCreator({ boxes, recipients, excessPolicy, deliveryMode,
   const selected = useWatch({ control, name: "boxIds" }) ?? [];
   const selectedBoxes = boxes.filter((box) => selected.includes(box.id));
   const category = (box: Box) => rates.find((rate) => rate.id === box.categoryId);
-  const total = selectedBoxes.reduce((sum, box) => sum + (category(box)?.priceUsd ?? 0), 0);
+  const total = selectedBoxes.reduce((sum, box) => sum + (box.customPriceUsd ?? category(box)?.priceUsd ?? 0), 0);
   const blocked = selectedBoxes.some((box) => box.status === "excede-categoria");
 
   if (createdCode) return <div className="rounded-card bg-success-50 p-8"><h2 className="font-display text-3xl font-bold text-success-700">Envío confirmado</h2><p className="mt-3 text-sm leading-6 text-navy-600">{createdCode} quedó registrado. Te avisaremos cuando se asigne a un camión.</p><Link href={`/cliente/envios/${createdCode}`} className="mt-6 inline-flex min-h-11 items-center rounded-full bg-navy-950 px-5 text-sm font-bold text-white">Ver el envío</Link></div>;
@@ -51,7 +51,7 @@ export function ShipmentCreator({ boxes, recipients, excessPolicy, deliveryMode,
       <h2 className="font-display text-xl font-bold">1. Elige cajas en bodega</h2>
       {boxes.map((box) => <label key={box.id} className={`flex cursor-pointer items-center justify-between gap-4 rounded-2xl border bg-white p-4 ${box.status === "excede-categoria" ? "border-danger-700/30" : "border-stone-200"}`}>
         <Checkbox label={box.code} value={box.id} {...register("boxIds")} />
-        <div className="text-right"><p className="text-sm font-bold">{category(box)?.name}</p><p className="text-xs text-navy-500">{formatUsd(category(box)?.priceUsd ?? 0)}</p>{box.status === "excede-categoria" && <p className="mt-1 text-xs font-bold text-danger-700">Requiere revisión</p>}</div>
+        <div className="text-right"><p className="text-sm font-bold">{box.categoryName ?? category(box)?.name}</p><p className="text-xs text-navy-500">{formatUsd(box.customPriceUsd ?? category(box)?.priceUsd ?? 0)}</p>{box.status === "excede-categoria" && <p className="mt-1 text-xs font-bold text-danger-700">Requiere revisión</p>}</div>
       </label>)}
       {errors.boxIds?.message && <p className="text-sm text-danger-700">{errors.boxIds.message}</p>}
       <h2 className="mt-4 font-display text-xl font-bold">2. Entrega</h2>
@@ -61,7 +61,7 @@ export function ShipmentCreator({ boxes, recipients, excessPolicy, deliveryMode,
     </div>
     <aside className="h-fit rounded-card bg-navy-950 p-6 text-white lg:sticky lg:top-8">
       <p className="text-xs font-bold uppercase tracking-wider text-orange-400">Resumen</p>
-      <div className="mt-5 grid gap-3">{selectedBoxes.length ? selectedBoxes.map((box) => <div key={box.id} className="flex justify-between text-sm"><span className="text-white/60">1 × {category(box)?.name}</span><span>{formatUsd(category(box)?.priceUsd ?? 0)}</span></div>) : <p className="text-sm text-white/50">Selecciona cajas para ver el desglose por categoría.</p>}</div>
+      <div className="mt-5 grid gap-3">{selectedBoxes.length ? selectedBoxes.map((box) => <div key={box.id} className="flex justify-between text-sm"><span className="text-white/60">1 × {box.categoryName ?? category(box)?.name}</span><span>{formatUsd(box.customPriceUsd ?? category(box)?.priceUsd ?? 0)}</span></div>) : <p className="text-sm text-white/50">Selecciona cajas para ver el desglose por categoría.</p>}</div>
       <div className="mt-6 flex justify-between border-t border-white/15 pt-5"><span className="font-bold">Total de referencia</span><span className="font-display text-xl font-bold text-orange-400">{formatUsd(total)}</span></div>
       {blocked && <p className="mt-4 rounded-xl bg-danger-700/20 p-3 text-xs leading-5 text-red-200">Una caja excedida bloquea el envío. Política activa: {FLOW_OPTION_LABELS[excessPolicy] ?? excessPolicy}. Operaciones debe resolverla primero.</p>}
       <Button type="submit" disabled={blocked} loading={isSubmitting} className="mt-6 w-full">Confirmar envío</Button>

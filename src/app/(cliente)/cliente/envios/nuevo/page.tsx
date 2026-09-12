@@ -5,7 +5,7 @@ import { configService } from "@/lib/services/config";
 import { logisticsService } from "@/lib/services/logistics";
 
 export default async function NewShipmentPage() {
-  const [user, boxes, recipients, flow, rates] = await Promise.all([requireClientUser(), logisticsService.getBoxes(), logisticsService.getRecipients(), configService.getFlowConfig(), configService.getRateTable()]);
+  const [user, boxes, recipients, flow, rates] = await Promise.all([requireClientUser(), logisticsService.getBoxes(), logisticsService.getRecipients(), configService.getFlowConfig(), configService.getCatalog()]);
   const available = boxes.filter((box) => box.userId === user.id && !box.shipmentId && !box.truckId && ["en-bodega", "excede-categoria"].includes(box.status));
-  return <><SectionTitle eyebrow="Despachar" title="Crear un envío" description="Elige cajas disponibles, destinatario y forma de entrega antes de confirmar." /><div className="mt-7"><ShipmentCreator boxes={available} recipients={recipients.filter((item) => item.userId === user.id)} excessPolicy={flow.excessPolicy} deliveryMode={flow.deliveryMode} rates={rates} /></div></>;
+  return <><SectionTitle eyebrow="Solicitud de envío" title="Crear un envío" description="Elige cajas disponibles, destinatario y forma de entrega antes de confirmar." /><div className="mt-7"><ShipmentCreator boxes={available} recipients={recipients.filter((item) => item.userId === user.id)} excessPolicy={flow.excessPolicy} deliveryMode={flow.deliveryMode} rates={rates} /></div></>;
 }

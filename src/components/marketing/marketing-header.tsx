@@ -4,7 +4,7 @@ import { BrandLogo } from "@/components/marketing/brand-logo";
 
 const links = [
   { label: "Tarifas", href: "/#tarifas" },
-  { label: "Cómo funciona", href: "/#proceso" },
+  { label: "Cómo funciona", href: "/como-funciona" },
   { label: "Cobertura", href: "/#cobertura" },
   { label: "Preguntas", href: "/#faq" },
 ];
@@ -21,7 +21,7 @@ export function MarketingHeader() {
           <Link href="/login" className="text-sm font-medium text-navy-900 transition hover:text-brand-700">Iniciar sesión</Link>
           <Link href="/registro" className="inline-flex min-h-11 items-center rounded-md bg-brand-600 px-5 text-sm font-semibold text-white shadow-card transition hover:-translate-y-0.5 hover:bg-brand-700">Crear mi cuenta</Link>
         </div>
-        <details className="relative sm:hidden">
+        <details className="relative lg:hidden">
           <summary className="grid size-11 cursor-pointer list-none place-items-center rounded-md border border-line-300 bg-white" aria-label="Abrir menú"><Menu className="size-5" /></summary>
           <nav className="absolute right-0 top-14 grid w-64 gap-1 rounded-xl border border-line-200 bg-white p-3 shadow-pop">
             {links.map((link) => <Link key={link.href} href={link.href} className="rounded-md px-4 py-3 text-sm font-medium text-navy-900 hover:bg-cream-100">{link.label}</Link>)}

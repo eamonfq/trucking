@@ -24,24 +24,25 @@ const EMPTY: QuickInput = {
 
 export function CustomerQuickCreate({ onCreated }: { onCreated: (user: User, address: Address) => void }) {
   const [open, setOpen] = useState(false);
-  const [created, setCreated] = useState<{ user: User; temporaryPassword: string } | null>(null);
+  const [created, setCreated] = useState<{ user: User; invitationStatus: string } | null>(null);
   const { showToast } = useToast();
   const { register, handleSubmit, reset, setValue, formState: { errors, isSubmitting } } = useForm<QuickInput>({ resolver: zodResolver(quickCustomerSchema), defaultValues: EMPTY });
   const postal = register("postalCode");
 
   const close = () => { setOpen(false); setCreated(null); reset(EMPTY); };
   const submit = handleSubmit(async (data) => {
-    const result = await createCustomerAtReception(data);
+    let result;
+    try { result = await createCustomerAtReception(data); } catch { showToast({title:"No se confirmó el alta",description:"Conservamos los datos. Busca el correo en el directorio antes de reintentar.",variant:"error"}); return; }
     if (!result.ok) return showToast({ title: "No se pudo crear el cliente", description: result.error, variant: "error" });
     onCreated(result.user, result.address);
-    setCreated({ user: result.user, temporaryPassword: result.temporaryPassword });
+    setCreated({ user: result.user, invitationStatus: result.invitationStatus });
     showToast({ title: "Cliente creado", description: `${result.user.lockerCode} quedó seleccionado en la recepción.` });
   });
 
   return <>
     <Button type="button" variant="ghost" onClick={() => setOpen(true)}><UserPlus className="size-4" />Nuevo cliente</Button>
 
-    <Dialog open={open} onClose={close} size="large" title={created ? "Cliente creado" : "Alta rápida de cliente"} description={created ? undefined : "Datos mínimos para poder recibir la caja. La contraseña se genera y se envía por correo."}>
+    <Dialog open={open} onClose={close} size="large" title={created ? "Cliente creado" : "Alta rápida de cliente"} description={created ? undefined : "Completa contacto y dirección. El cliente quedará seleccionado al crear la cuenta."}>
       {created
         ? <div className="grid gap-5">
             <div className="grid gap-4 sm:grid-cols-2">
@@ -50,23 +51,23 @@ export function CustomerQuickCreate({ onCreated }: { onCreated: (user: User, add
                 <p className="mt-2 font-display text-2xl font-bold text-navy-900">{created.user.lockerCode}</p>
               </div>
               <div className="rounded-lg bg-cream-100 p-5">
-                <p className="text-over font-semibold uppercase text-label-600">Contraseña temporal</p>
-                <p className="mt-2 font-mono text-xl font-bold text-navy-900">{created.temporaryPassword}</p>
+                <p className="text-over font-semibold uppercase text-label-600">Estado de la invitación</p>
+                <p className="mt-2 font-mono text-xl font-bold text-navy-900">{created.invitationStatus}</p>
               </div>
             </div>
-            <p className="text-sm leading-6 text-ink-700">Se envió a {created.user.email} junto con las instrucciones de acceso. Copia estos datos ahora: dejarán de mostrarse al cerrar.</p>
+            <p className="text-sm leading-6 text-ink-700">Invitación en cola para {created.user.email} junto con las instrucciones de acceso. El cliente elegirá su contraseña desde un enlace personal.</p>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="ghost" onClick={() => { navigator.clipboard.writeText(`${created.user.lockerCode} · ${created.user.email} · ${created.temporaryPassword}`); showToast({ title: "Datos copiados" }); }}><Copy className="size-4" />Copiar</Button>
+              <Button type="button" variant="ghost" onClick={() => { navigator.clipboard.writeText(`${created.user.lockerCode} · ${created.user.email} · ${created.invitationStatus}`); showToast({ title: "Datos copiados" }); }}><Copy className="size-4" />Copiar</Button>
               <Button type="button" onClick={close}>Continuar con la recepción</Button>
             </div>
           </div>
-        : <form onSubmit={submit} className="grid max-h-[65vh] gap-4 overflow-y-auto px-1">
+        : <form onSubmit={(event) => { event.stopPropagation(); void submit(event); }} className="grid max-h-[65vh] gap-4 overflow-y-auto px-1">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <Input label="Nombre(s)" error={errors.firstName?.message} {...register("firstName")} />
               <Input label="Apellido paterno" error={errors.paternalLastName?.message} {...register("paternalLastName")} />
               <Input label="Apellido materno (opcional)" error={errors.maternalLastName?.message} {...register("maternalLastName")} />
               <Input label="Correo electrónico" type="email" error={errors.email?.message} {...register("email")} />
-              <Input label="Teléfono +52" inputMode="numeric" placeholder="10 dígitos" error={errors.phone?.message} {...register("phone")} />
+              <Input label="Teléfono" inputMode="tel" placeholder="+502 5555 1234" error={errors.phone?.message} {...register("phone")} />
               <Input label="RFC (opcional)" className="uppercase" error={errors.rfc?.message} {...register("rfc")} />
             </div>
             <p className="mt-2 text-over font-semibold uppercase text-label-600">Dirección de entrega en México</p>
