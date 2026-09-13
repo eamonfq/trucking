@@ -6,6 +6,8 @@
     "system:check": "node scripts/check-system.mjs",
     "db:migrate": "node scripts/db-migrate.mjs",
     "db:admin": "node scripts/bootstrap-admin.mjs",
+    "db:locations": "node scripts/provision-operational-locations.mjs",
+    "test:locations": "node --test scripts/tests/provision-locations.test.mjs",
     "email:worker": "node scripts/email-worker.mjs",
     "dev": "next dev --port 3100 --hostname 127.0.0.1",
     "build": "next build",

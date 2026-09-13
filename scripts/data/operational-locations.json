@@ -1,0 +1,14 @@
+{
+  "warehouses": [
+    {"name":"Chicago · Arlington Heights","kind":"origen","country":"Estados Unidos","state":"Illinois","city":"Arlington Heights, Illinois","address":"75 Algonquin Dr, Arlington Heights, IL 60005"},
+    {"name":"El Paso","kind":"origen","country":"Estados Unidos","state":"Texas","city":"El Paso, Texas","address":"1123 Desert Dr, El Paso, TX 79912"},
+    {"name":"México · Valle de Juárez","kind":"destino","country":"México","state":"Jalisco","city":"Valle de Juárez, Jalisco","address":"Las Cuatro Esquinas, 49540 Valle de Juárez, Jalisco, México"}
+  ],
+  "operators": [
+    {"firstName":"Rayza","paternalLastName":"Morales","email":"rayzaamg@gmail.com","warehouse":"Chicago · Arlington Heights"},
+    {"firstName":"Lizette","paternalLastName":"Ponce","email":"ponce042@gmail.com","warehouse":"El Paso"},
+    {"firstName":"Agustín","paternalLastName":"Orozco","emailEnv":"AYL_AGUSTIN_EMAIL","warehouse":"El Paso"},
+    {"firstName":"Pablo","paternalLastName":"Flores","emailEnv":"AYL_PABLO_EMAIL","warehouse":"México · Valle de Juárez"},
+    {"firstName":"Emilia","paternalLastName":"Flores","emailEnv":"AYL_EMILIA_EMAIL","warehouse":"México · Valle de Juárez"}
+  ]
+}
