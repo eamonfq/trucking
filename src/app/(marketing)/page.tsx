@@ -66,14 +66,14 @@ export default async function LandingPage() {
             <h1 className="font-display text-[3.25rem] font-extrabold leading-[.86] tracking-[-.05em] text-white sm:text-7xl lg:text-[6.75rem]">
               Envía más,<br /><span className="text-brand-300">paga menos.</span>
             </h1>
-            <p className="max-w-[32.5rem] text-lg leading-relaxed text-[#B9C4DC] text-pretty">Precio fijo por categoría de caja. El peso es un límite de seguridad, no la unidad de cobro: consulta la tarifa base antes de empacar. La categoría y los ajustes aplicables se confirman al recibir tu caja.</p>
+            <p className="max-w-[32.5rem] text-lg leading-relaxed text-[#B9C4DC] text-pretty">Cobro por libra o precio fijo por categoría, según tu envío. Comparamos el peso real y dimensional; las cargas especiales se cotizan de forma individual. Consulta tu estimación antes de empacar.</p>
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
               <Link href="/registro" className="inline-flex min-h-14 items-center justify-center gap-2.5 rounded-lg bg-brand-600 px-7 text-base font-semibold text-white shadow-[0_14px_34px_rgba(232,98,28,.32)] transition hover:-translate-y-0.5 hover:bg-brand-700">Crear mi cuenta <span aria-hidden="true">→</span></Link>
               <Link href="/login" className="inline-flex min-h-14 items-center justify-center rounded-lg border-[1.5px] border-[#44567F] px-6 text-base font-semibold text-white transition hover:border-white">Ingresar a mi cuenta</Link>
               <Link href="#tarifas" className="inline-flex min-h-14 items-center justify-center rounded-lg border-[1.5px] border-[#44567F] px-6 text-base font-semibold text-white transition hover:border-white">Ver tarifas</Link>
             </div>
             <dl className="hidden flex-wrap gap-10 border-t border-[#2A3A5E] pt-7 lg:flex">
-              <HeroStat value={String(categories.length)} detail={<>categorías, sin escalas<br />de peso ocultas</>} />
+              <HeroStat value={String(categories.length)} detail={<>categorías con<br />tarifa fija disponible</>} />
               <HeroStat value={cheapest ? `$${cheapest.priceUsd}` : "—"} detail={<>USD desde, por caja<br />hasta {cheapest?.maxWeightLb ?? "—"} lb</>} />
               <HeroStat value="Rastreo" detail={<>consulta los avances<br />con tu código</>} />
             </dl>
@@ -172,9 +172,9 @@ export default async function LandingPage() {
           <div className="flex flex-col gap-5">
             <p className="text-over font-semibold uppercase text-brand-700">Cotizador en vivo</p>
             <h2 className="font-display text-[2.75rem] font-extrabold leading-[.96] tracking-[-.04em] text-navy-900 sm:text-[3.75rem]">Mide, pesa y<br />ve tu precio.</h2>
-            <p className="text-lg leading-relaxed text-ink-700 text-pretty">Escribe las medidas exteriores en pulgadas y el peso total en libras. Te mostramos la primera categoría compatible según el orden del catálogo vigente. Si ninguna aplica, te lo decimos antes de cualquier cobro.</p>
+            <p className="text-lg leading-relaxed text-ink-700 text-pretty">Escribe las medidas exteriores en pulgadas y el peso total en libras. Compara la tarifa por libra y el precio fijo por categoría. Para vehículos, maquinaria, mudanzas y otras cargas especiales, solicita una cotización manual.</p>
           </div>
-          <QuoteCalculator rates={categories} />
+          <QuoteCalculator rates={categories} weightPricing={{pricePerLbUsd:flow.pricePerLbUsd,dimensionalBase:flow.dimensionalBase,dimensionalFactor:flow.dimensionalFactor}} />
         </div>
       </section>
 
