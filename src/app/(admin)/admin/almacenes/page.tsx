@@ -1,5 +1,5 @@
 import { WarehouseSettings } from "@/components/admin/warehouse-settings";
 import { SectionTitle } from "@/components/cliente/section-title";
 import { getWarehouseAdministration } from "@/lib/auth/warehouse-actions";
-import { configService } from "@/lib/services/config";
-export default async function Page(){const [data,flow]=await Promise.all([getWarehouseAdministration(),configService.getFlowConfig()]);return <><SectionTitle eyebrow="Red de recepción" title="Almacenes y operadores" description="Define destinos, mensajes y accesos limitados por almacén."/><div className="mt-7"><WarehouseSettings data={data} cities={flow.destinationCities}/></div></>;}
+
+export default async function Page(){const data=await getWarehouseAdministration();return <><SectionTitle eyebrow="Red de recepción" title="Almacenes y operadores" description="Separa origen y destino, captura su ubicación y asigna accesos por almacén."/><div className="mt-7"><WarehouseSettings data={data}/></div></>;}

@@ -14,5 +14,14 @@ try {
   await connection.query(await readFile(new URL('../migrations/002-private-files.sql', import.meta.url),'utf8'));
   const [applied] = await connection.query("SELECT version FROM schema_migrations WHERE version=3");
   if (!applied.length) await connection.query(await readFile(new URL('../migrations/003-warehouse-operators.sql', import.meta.url),'utf8'));
-  console.log(`Migraciones 001–003 aplicadas en ${database}. No se importaron usuarios ni operaciones de demo.`);
+  const [warehouseKinds] = await connection.query("SELECT version FROM schema_migrations WHERE version=4");
+  if (!warehouseKinds.length) {
+    await connection.beginTransaction();
+    try {
+      await connection.query("SELECT id FROM operation_lock WHERE id=1 FOR UPDATE");
+      await connection.query(await readFile(new URL('../migrations/004-warehouse-kinds.sql', import.meta.url),'utf8'));
+      await connection.commit();
+    } catch(error) { await connection.rollback(); throw error; }
+  }
+  console.log(`Migraciones 001–004 aplicadas en ${database}. No se importaron usuarios ni operaciones de demo.`);
 } finally { await connection.end(); }

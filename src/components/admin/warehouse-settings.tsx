@@ -1,4 +1,5 @@
 "use client";
+import { WAREHOUSE_KINDS, WAREHOUSE_KIND_LABELS, type WarehouseKind } from "@/lib/config/warehouses";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
@@ -8,9 +9,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { saveWarehouse, saveWarehouseOperator, getWarehouseAdministration } from "@/lib/auth/warehouse-actions";
 
 type Data=Awaited<ReturnType<typeof getWarehouseAdministration>>;
-export function WarehouseSettings({data,cities}:{data:Data;cities:string[]}) {
+export function WarehouseSettings({data}:{data:Data}) {
   const router=useRouter();
-  const blank={id:undefined as string|undefined,name:"",address:"",city:cities[0]??"",active:true,arrivalMessage:"Tu paquete {codigo} fue recibido en {almacen}, {destino}. Nuestro equipo puede ayudarte a coordinar su retiro."};
+  const blank={id:undefined as string|undefined,name:"",address:"",kind:"origen" as WarehouseKind,country:"Estados Unidos",state:"",city:"",active:true,arrivalMessage:"Tu paquete {codigo} fue recibido en {almacen}, {destino}. Nuestro equipo puede ayudarte a coordinar su retiro."};
   const empty={id:undefined as string|undefined,firstName:"",paternalLastName:"",email:"",phone:"",active:true,grants:[] as NonNullable<Data["operators"][number]["warehouseGrants"]>};
   const [warehouse,setWarehouse]=useState(blank),[operator,setOperator]=useState(empty),[busy,setBusy]=useState(false),[message,setMessage]=useState("");
   async function save(kind:"warehouse"|"operator") {
@@ -23,12 +24,12 @@ export function WarehouseSettings({data,cities}:{data:Data;cities:string[]}) {
   }
   return <div className="grid gap-6">
     <p role="status" aria-live="polite" className="text-sm font-semibold">{message}</p>
-    <section className="rounded-3xl border border-stone-200 bg-white p-6"><h2 className="font-display text-xl font-bold">Ubicaciones operativas</h2><p className="mt-2 text-sm text-navy-500">Cada almacén tiene su ciudad y su propio mensaje de recepción. Las ciudades se administran en Configuración.</p>
-      <div className="my-5 flex flex-wrap gap-2">{data.warehouses.map(w=><Button key={w.id} variant="secondary" onClick={()=>setWarehouse({...w,address:w.address??""})}>{w.name}{!w.active?" · Inactivo":""}</Button>)}</div>
+    <section className="rounded-3xl border border-stone-200 bg-white p-6"><h2 className="font-display text-xl font-bold">Ubicaciones operativas</h2><p className="mt-2 text-sm text-navy-500">Origen: donde recibes y cargas mercancía. Destino: donde descargas y coordinas la entrega. La ubicación se captura aquí, sin depender de las ciudades de reparto.</p>
+      <div className="my-5 flex flex-wrap gap-2">{data.warehouses.map(w=><Button key={w.id} variant="secondary" onClick={()=>setWarehouse({...w,kind:w.kind??"destino",country:w.country??"",state:w.state??"",address:w.address??""})}>{w.name} · {w.kind??"destino"}{!w.active?" · Inactivo":""}</Button>)}</div>
       <form onSubmit={e=>{e.preventDefault();void save("warehouse");}} className="grid gap-4 md:grid-cols-2">
-        <Input label="Nombre del almacén" required value={warehouse.name} onChange={e=>setWarehouse({...warehouse,name:e.target.value})}/>
-        <Input label="Dirección completa" maxLength={300} value={warehouse.address} onChange={e=>setWarehouse({...warehouse,address:e.target.value})}/><Select label="Ciudad" value={warehouse.city} options={[...new Set([...cities,warehouse.city])].filter(Boolean).map(c=>({value:c,label:c}))} onChange={e=>setWarehouse({...warehouse,city:e.target.value})}/>
-        <div className="md:col-span-2"><Textarea label="Mensaje al recibir el paquete" required value={warehouse.arrivalMessage} onChange={e=>setWarehouse({...warehouse,arrivalMessage:e.target.value})}/><p className="mt-2 text-xs text-navy-500">Variables disponibles: {"{codigo}, {almacen}, {destino}"}.</p></div>
+        <Select label="Función del almacén" value={warehouse.kind} options={WAREHOUSE_KINDS.map(kind=>({value:kind,label:WAREHOUSE_KIND_LABELS[kind]}))} onChange={e=>setWarehouse({...warehouse,kind:e.target.value as WarehouseKind})}/><Input label="País" required placeholder="Ej. Estados Unidos o México" value={warehouse.country} onChange={e=>setWarehouse({...warehouse,country:e.target.value})}/><Input label="Estado / provincia" required placeholder="Ej. Illinois, Texas o Jalisco" value={warehouse.state} onChange={e=>setWarehouse({...warehouse,state:e.target.value})}/><Input label="Nombre del almacén" required value={warehouse.name} onChange={e=>setWarehouse({...warehouse,name:e.target.value})}/>
+        <Input label="Dirección completa" maxLength={300} value={warehouse.address} onChange={e=>setWarehouse({...warehouse,address:e.target.value})}/><Input label="Ciudad" required placeholder="Ej. Arlington Heights, El Paso o Valle de Juárez" value={warehouse.city} onChange={e=>setWarehouse({...warehouse,city:e.target.value})}/>
+        <div className="md:col-span-2"><Textarea label="Mensaje de recepción / llegada" required value={warehouse.arrivalMessage} onChange={e=>setWarehouse({...warehouse,arrivalMessage:e.target.value})}/><p className="mt-2 text-xs text-navy-500">Variables disponibles: {"{codigo}, {almacen}, {destino}"}.</p></div>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={warehouse.active} onChange={e=>setWarehouse({...warehouse,active:e.target.checked})}/>Almacén activo</label>
         <div className="flex gap-2"><Button type="submit" loading={busy}>{warehouse.id?"Guardar cambios":"Crear almacén"}</Button><Button type="button" variant="ghost" onClick={()=>setWarehouse(blank)}>Nuevo</Button></div>
       </form>

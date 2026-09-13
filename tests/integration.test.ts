@@ -70,6 +70,7 @@ beforeAll(async () => {
   await root.query(await readFile(new URL("../migrations/001-real-system.sql",import.meta.url),"utf8"));
   await root.query(await readFile(new URL("../migrations/002-private-files.sql",import.meta.url),"utf8"));
   await root.query(await readFile(new URL("../migrations/003-warehouse-operators.sql",import.meta.url),"utf8"));
+  await root.query(await readFile(new URL("../migrations/004-warehouse-kinds.sql",import.meta.url),"utf8"));
   url.pathname=`/${database}`; process.env.DATABASE_URL=url.toString();
   process.env.AUTH_SECRET="integration-only-secret-with-at-least-32-characters";
   process.env.EMAIL_DELIVERY="preview";
@@ -887,6 +888,38 @@ describe.sequential("Real MySQL authentication and operations", () => {
     expect((await createTruck({...input,plate:"ROUT-2098"})).ok).toBe(false);
     expect((await logisticsService.getTruckById(created.truck.id))?.destinationCity).toBe(destination);
     expect((await updateTruck(created.truck.id,{...input,notes:"Se conserva el destino histórico"})).ok).toBe(true);
+  });
+
+  it("separates warehouse geography, origins and unloading destinations", async () => {
+    cookieJar.set("ayl_session",{value:adminSession});
+    const base={active:true,arrivalMessage:"{codigo} recibido en {almacen}, {destino}."};
+    const a=await saveWarehouse({...base,name:"Origen Chicago QA",kind:"origen",country:"Estados Unidos",state:"Illinois",city:"Arlington Heights QA"});
+    const b=await saveWarehouse({...base,name:"Origen El Paso QA",kind:"origen",country:"Estados Unidos",state:"Texas",city:"El Paso QA"});
+    const d=await saveWarehouse({...base,name:"Destino Jalisco QA",kind:"destino",country:"México",state:"Jalisco",city:"Valle de Juárez QA"});
+    expect(a.ok&&b.ok&&d.ok).toBe(true);if(!a.ok||!b.ok||!d.ok)throw new Error("warehouse setup");
+    expect((await configService.getFlowConfig()).destinationCities).not.toContain(a.warehouse.city);
+    expect((await configService.getFlowConfig()).destinationCities).toContain(d.warehouse.city);
+    const trip=await createTruck({plate:"ORIG-2099",driverId:(await logisticsService.getDrivers())[0].id,departureDate:"2099-01-01",destinationCity:d.warehouse.city,capacity:{small:10}});
+    expect(trip.ok).toBe(true);if(!trip.ok)throw new Error("origin trip");
+    const stops=[{warehouseId:d.warehouse.id,arrivalDate:"2099-01-02"}];
+    expect((await saveTruckStops(trip.truck.id,stops)).ok).toBe(false);
+    expect((await saveTruckStops(trip.truck.id,[{warehouseId:b.warehouse.id,arrivalDate:"2099-01-02"}],a.warehouse.id)).ok).toBe(false);
+    expect((await saveTruckStops(trip.truck.id,stops,a.warehouse.id)).ok).toBe(true);
+    expect((await logisticsService.getTruckById(trip.truck.id))?.originWarehouseId).toBe(a.warehouse.id);
+    expect((await saveWarehouse({...a.warehouse,kind:"destino"})).ok).toBe(false);
+    expect((await saveWarehouse({...a.warehouse,active:false})).ok).toBe(false);
+    const desk=await getDestinationDesk();
+    expect(desk.warehouses.some(w=>w.id===a.warehouse.id)).toBe(false);
+    expect(desk.warehouses.some(w=>w.id===d.warehouse.id)).toBe(true);
+    const input={customer:operationClient,length:10,width:10,height:10,weightLb:10,reject:false,billingMode:"peso"};
+    expect((await receiveBox(input)).ok).toBe(false);
+    expect((await receiveBox({...input,originWarehouseId:d.warehouse.id})).ok).toBe(false);
+    const receipt=await receiveBox({...input,originWarehouseId:b.warehouse.id});
+    expect(receipt.ok).toBe(true);if(!receipt.ok)throw new Error("origin receipt");
+    expect(receipt.box.originWarehouseId).toBe(b.warehouse.id);
+    expect((await transitionTruckState(trip.truck.id)).ok).toBe(true);
+    const load=await scanLoad(trip.truck.id,receipt.box.code,d.warehouse.id);
+    expect(load.ok).toBe(false);if(!load.ok)expect(load.error).toContain("otro almacén de origen");
   });
 
 });

@@ -1,4 +1,5 @@
 "use server";
+import { WAREHOUSE_KINDS, warehouseSupports } from "@/lib/config/warehouses";
 import { z } from "zod";
 import { runMutation } from "@/lib/db/mutation";
 import { withStore } from "@/lib/db/store";
@@ -55,17 +56,21 @@ export async function selectPrealertAtWarehouse(boxId:string,userId:string) {
   });
 }
 
-const warehouseSchema=z.object({address:z.string().trim().max(300).optional(),id:z.string().optional(),name:z.string().trim().min(2).max(100),city:z.string().trim().min(2).max(80),active:z.boolean(),arrivalMessage:z.string().trim().min(10).max(300)});
+const warehouseSchema=z.object({kind:z.enum(WAREHOUSE_KINDS).default("destino"),country:z.string().trim().max(80).optional(),state:z.string().trim().max(80).optional(),address:z.string().trim().max(300).optional(),id:z.string().optional(),name:z.string().trim().min(2).max(100),city:z.string().trim().min(2).max(80),active:z.boolean(),arrivalMessage:z.string().trim().min(10).max(300)});
 export async function saveWarehouse(input:unknown) {
   return runMutation("admin",async()=>{
     const parsed=warehouseSchema.safeParse(input);if(!parsed.success)return {ok:false as const,error:"Revisa el nombre, ciudad y mensaje de llegada."};
     const data=parsed.data,existing=warehouses.find(item=>item.id===data.id);
     if(data.id&&!existing)return {ok:false as const,error:"El almacén no existe."};
-    if(!(await configService.getFlowConfig()).destinationCities.includes(data.city)&&existing?.city!==data.city)return {ok:false as const,error:"Habilita primero la ciudad en Configuración."};
+    if(existing&&(existing.kind??"destino")!==data.kind&&(trucks.some(t=>t.originWarehouseId===existing.id||t.stops?.some(s=>s.warehouseId===existing.id))||boxes.some(b=>b.originWarehouseId===existing.id||b.destinationWarehouseId===existing.id)))return {ok:false as const,error:"El tipo de un almacén con movimientos debe conservarse. Crea otra ubicación o revisa sus vínculos antes de cambiarlo."};
     if(existing&&existing.city!==data.city&&trucks.some(truck=>truck.stops?.some(stop=>stop.warehouseId===existing.id)))return {ok:false as const,error:"Un almacén con viajes asociados debe conservar su ciudad."};
-    if(existing&&!data.active&&trucks.some(truck=>truck.status!=="cerrado"&&truck.stops?.some(stop=>stop.warehouseId===existing.id)))return {ok:false as const,error:"Hay viajes abiertos para este almacén. Finalízalos antes de desactivarlo."};
+    if(existing&&!data.active&&trucks.some(truck=>truck.status!=="cerrado"&&(truck.originWarehouseId===existing.id||truck.stops?.some(stop=>stop.warehouseId===existing.id))))return {ok:false as const,error:"Hay viajes abiertos para este almacén. Finalízalos antes de desactivarlo."};
     const value={...data,id:existing?.id??crypto.randomUUID()};
     if(existing)Object.assign(existing,value);else warehouses.push(value);
+    if(warehouseSupports(value,"destino")){
+      const flow=await configService.getFlowConfig();
+      if(!flow.destinationCities.includes(value.city))await configService.updateFlowConfig({destinationCities:[...flow.destinationCities,value.city]});
+    }
     await audit((await requireAdminUser()).id,"warehouse.updated");
     return {ok:true as const,warehouse:value};
   });
@@ -103,10 +108,20 @@ export async function getWarehouseAdministration() {
 }
 
 function can(grants:WarehouseGrant[]|undefined,id:string,permission:"receive"|"viewContacts") { return grants?.some(g=>g.warehouseId===id&&g[permission])??false; }
+export async function getOriginInventory() {
+  const actor=await requireWarehouseUser();
+  return withStore(async()=>{
+    const allowed=warehouses.filter(w=>w.active&&warehouseSupports(w,"origen")&&(actor.role==="admin"||actor.warehouseGrants?.some(g=>g.warehouseId===w.id&&(g.receive||g.viewContacts))));
+    return allowed.map(w=>({id:w.id,name:w.name,boxes:boxes.filter(b=>b.originWarehouseId===w.id).map(b=>{
+      const user=users.find(u=>u.id===b.userId);
+      return {id:b.id,code:b.code,status:b.status,dimensions:b.dimensions,weightLb:b.weightLb,customer:user&&(actor.role==="admin"||can(actor.warehouseGrants,w.id,"viewContacts"))?{name:`${user.firstName} ${user.paternalLastName}`,phone:user.phone,email:user.email}:null};
+    })}));
+  });
+}
 export async function getDestinationDesk() {
   const actor=await requireWarehouseUser();
   return withStore(async()=>{
-    const allowed=warehouses.filter(w=>w.active&&(actor.role==="admin"||actor.warehouseGrants?.some(g=>g.warehouseId===w.id&&(g.receive||g.viewContacts))));
+    const allowed=warehouses.filter(w=>w.active&&warehouseSupports(w,"destino")&&(actor.role==="admin"||actor.warehouseGrants?.some(g=>g.warehouseId===w.id&&(g.receive||g.viewContacts))));
     const ids=new Set(allowed.map(w=>w.id));
     const visibleBoxes=boxes.filter(box=>box.destinationWarehouseId&&ids.has(box.destinationWarehouseId));
     return {warehouses:allowed.map(w=>({...w,canReceive:actor.role==="admin"||can(actor.warehouseGrants,w.id,"receive")})),
@@ -129,7 +144,7 @@ export async function scanLoad(truckId:string,code:string,warehouseId:string) {
 export async function scanUnload(truckId:string,warehouseId:string,code:string) {
   return runMutation("operador",async()=>{
     const actor=await requireWarehouseUser();
-    const warehouse=warehouses.find(w=>w.id===warehouseId&&w.active);
+    const warehouse=warehouses.find(w=>w.id===warehouseId&&w.active&&warehouseSupports(w,"destino"));
     if(!warehouse||(actor.role!=="admin"&&!can(actor.warehouseGrants,warehouseId,"receive")))return {ok:false as const,error:"No tienes permiso de recepción en este almacén."};
     const truck=trucks.find(t=>t.id===truckId&&t.stops?.some(s=>s.warehouseId===warehouseId));
     if(!truck||!["despachado","en-frontera","en-destino"].includes(truck.status))return {ok:false as const,error:"Selecciona un camión despachado que visite este almacén."};
@@ -154,18 +169,25 @@ export async function scanUnload(truckId:string,warehouseId:string,code:string) 
   });
 }
 
-export async function saveTruckStops(truckId:string,input:unknown) {
+export async function saveTruckStops(truckId:string,input:unknown,originWarehouseId?:string) {
   return runMutation("admin",async()=>{
     const truck=trucks.find(t=>t.id===truckId);
     if(!truck||!["planificado","cargando"].includes(truck.status))return {ok:false as const,error:"Solo puedes cambiar paradas antes del despacho."};
+    const origins=warehouses.filter(w=>w.active&&warehouseSupports(w,"origen"));
+    const selectedOrigin=originWarehouseId||truck.originWarehouseId||(origins.length===1?origins[0].id:undefined);
+    const origin=origins.find(w=>w.id===selectedOrigin);
+    if(origins.length&&!origin)return {ok:false as const,error:"Selecciona un almacén de origen activo."};
+    if(selectedOrigin&&!origin)return {ok:false as const,error:"El almacén de salida no está habilitado como origen."};
+    if(truck.boxIds.length&&truck.originWarehouseId!==origin?.id)return {ok:false as const,error:"Retira la carga antes de cambiar el origen del viaje."};
     const parsed=z.array(z.object({warehouseId:z.string(),arrivalDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v=>!Number.isNaN(Date.parse(v))&&new Date(v).toISOString().slice(0,10)===v)})).min(1).max(100).safeParse(input);
     if(!parsed.success)return {ok:false as const,error:"Agrega al menos un almacén con una fecha válida."};
     if(new Set(parsed.data.map(s=>s.warehouseId)).size!==parsed.data.length)return {ok:false as const,error:"No repitas un almacén en la misma ruta."};
-    if(parsed.data.some((s,i)=>!warehouses.some(w=>w.id===s.warehouseId&&w.active)||s.arrivalDate<truck.departureDate||(i>0&&s.arrivalDate<parsed.data[i-1].arrivalDate)))return {ok:false as const,error:"Selecciona almacenes activos y fechas ordenadas posteriores a la salida."};
+    if(parsed.data.some((s,i)=>!warehouses.some(w=>w.id===s.warehouseId&&w.active&&warehouseSupports(w,"destino")&&w.id!==origin?.id)||s.arrivalDate<truck.departureDate||(i>0&&s.arrivalDate<parsed.data[i-1].arrivalDate)))return {ok:false as const,error:"Selecciona almacenes de destino activos, diferentes del origen, y fechas ordenadas posteriores a la salida."};
     if(truck.boxIds.some(id=>{const box=boxes.find(b=>b.id===id);return !box?.destinationWarehouseId||!parsed.data.some(s=>s.warehouseId===box.destinationWarehouseId);}))return {ok:false as const,error:"Retira primero los paquetes asignados a paradas que deseas quitar."};
     truck.stops=parsed.data.map(s=>({...s,city:warehouses.find(w=>w.id===s.warehouseId)!.city}));
     truck.destinationCity=truck.stops[0].city;
-    truck.route="Miami → "+truck.stops.map(s=>warehouses.find(w=>w.id===s.warehouseId)!.name+" ("+s.city+")").join(" → ");
+    truck.originWarehouseId=origin?.id;truck.originWarehouseName=origin?.name;
+    truck.route=(origin?.name??"Origen por confirmar")+" → "+truck.stops.map(s=>warehouses.find(w=>w.id===s.warehouseId)!.name+" ("+s.city+")").join(" → ");
     truck.timeline.push({from:truck.status,to:truck.status,at:new Date().toISOString(),actor:(await requireAdminUser()).id,note:"Paradas y fechas estimadas actualizadas."});
     return {ok:true as const,truck:{...truck}};
   });

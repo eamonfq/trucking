@@ -29,7 +29,7 @@ import { useToast } from "@/components/ui/toast";
 
 type ReceptionInput = z.input<typeof receptionSchema>;
 
-export function ReceptionForm({ users, prealerts = [], excessPolicy, excessFeeUsd = 0, rates, defaultCustomerId, defaultPrealertId, weightPricing = DEFAULT_WEIGHT_PRICING, locations=[] }: { locations?:{id:string;name:string}[]; weightPricing?: WeightPricing; users: User[]; prealerts?: Box[]; excessPolicy: string; excessFeeUsd?: number; rates: BoxCategory[]; defaultCustomerId?: string; defaultPrealertId?: string }) {
+export function ReceptionForm({ users, prealerts = [], excessPolicy, excessFeeUsd = 0, rates, defaultCustomerId, defaultPrealertId, weightPricing = DEFAULT_WEIGHT_PRICING, locations=[], origins=[] }: { origins?:{id:string;name:string}[]; locations?:{id:string;name:string}[]; weightPricing?: WeightPricing; users: User[]; prealerts?: Box[]; excessPolicy: string; excessFeeUsd?: number; rates: BoxCategory[]; defaultCustomerId?: string; defaultPrealertId?: string }) {
   const [receivedIds, setReceivedIds] = useState<string[]>([]);
   const [payment, setPayment] = useState<PaymentChoice>({method:"destino",amount:"",reference:""});
   const [selectingPrealert,setSelectingPrealert]=useState(false);
@@ -37,7 +37,7 @@ export function ReceptionForm({ users, prealerts = [], excessPolicy, excessFeeUs
   const [photo, setPhoto] = useState<File | null>(null);
   const [customers, setCustomers] = useState(users);
   const { showToast } = useToast();
-  const { register, handleSubmit, control, reset, setValue, getValues, formState: { errors, isSubmitting } } = useForm<ReceptionInput>({ resolver: zodResolver(receptionSchema), defaultValues: { billingMode:"peso", customer: defaultCustomerId ?? "", prealertId: defaultPrealertId ?? "", reject: false, overrideCategory: "", overrideReason: "", rejectionReason: "" } });
+  const { register, handleSubmit, control, reset, setValue, getValues, formState: { errors, isSubmitting } } = useForm<ReceptionInput>({ resolver: zodResolver(receptionSchema), defaultValues: { originWarehouseId:origins.length===1?origins[0].id:"", billingMode:"peso", customer: defaultCustomerId ?? "", prealertId: defaultPrealertId ?? "", reject: false, overrideCategory: "", overrideReason: "", rejectionReason: "" } });
   const values = useWatch({ control });
   const dims = { length: Number(values.length) || 0, width: Number(values.width) || 0, height: Number(values.height) || 0 };
   const hasMeasurements = Boolean(dims.length && dims.width && dims.height && Number(values.weightLb));
@@ -60,12 +60,12 @@ export function ReceptionForm({ users, prealerts = [], excessPolicy, excessFeeUs
     if (!result.ok) return showToast({ title: "No se pudo registrar la recepción", description: result.error, variant: "error" });
     showToast({ title: result.box.status === "rechazada" ? "Rechazo registrado" : "Caja enviada a bodega", description: result.invoice ? `${result.code} quedó registrada y se generó ${result.invoice.number}.` : `${result.code} quedó registrada y el cliente fue notificado.` });
     setReceivedIds(current => [...current, result.box.id]);
-    reset({ billingMode:mode, customer: data.customer, prealertId: "", reject: false, overrideCategory: "", overrideReason: "", rejectionReason: "" });
+    reset({originWarehouseId:data.originWarehouseId, billingMode:mode, customer: data.customer, prealertId: "", reject: false, overrideCategory: "", overrideReason: "", rejectionReason: "" });
     setPhoto(null); setPayment({method:"destino",amount:"",reference:"",warehouseId:payment.warehouseId}); setLastReceived({id:result.box.id,code:result.code});
   })} className={`${styles.pos} grid items-start gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(300px,1fr)]`}>
     <div className="grid min-w-0 gap-4">
       <section className="grid gap-3 rounded-2xl border border-stone-200 bg-white p-4">
-        <StepHeading number="01" title="Cliente y prealerta" description="Identifica al propietario y vincula su compra, si la anticipó."/>
+        <Select label="Almacén de origen · recepción" required value={values.originWarehouseId??""} options={[{value:"",label:"Selecciona dónde recibes el paquete"},...origins.map(w=>({value:w.id,label:w.name}))]} onChange={e=>{setValue("originWarehouseId",e.target.value);setPayment(p=>({...p,warehouseId:e.target.value}));}}/>{!origins.length&&<p className="text-sm text-orange-700">Configura primero un almacén de origen activo en Administración → Almacenes.</p>}<StepHeading number="01" title="Cliente y prealerta" description="Identifica al propietario y vincula su compra, si la anticipó."/>
         <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
           <CustomerSearch users={customers} value={values.customer} error={errors.customer?.message} onChange={id=>{setValue("customer",id,{shouldValidate:true});setValue("prealertId","");}}/>
           <CustomerQuickCreate onCreated={user=>{setCustomers(current=>[...current.filter(item=>item.id!==user.id),user]);setValue("prealertId","");setValue("customer",user.id,{shouldValidate:true});}}/>

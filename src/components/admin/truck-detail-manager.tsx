@@ -29,7 +29,7 @@ export function TruckDetailManager({ initialTruck, initialAssigned, users, drive
   const router=useRouter();
   const destinations=useDestinations();
   const catalog=useCatalog();
-  const categories=[...catalog,CUSTOM_CAPACITY_CATEGORY];
+  const categories=useMemo(()=>[...catalog,CUSTOM_CAPACITY_CATEGORY],[catalog]);
   const [truck, setTruck] = useState(initialTruck);
   const [assigned, setAssigned] = useState(initialAssigned);
   const [editOpen, setEditOpen] = useState(false);

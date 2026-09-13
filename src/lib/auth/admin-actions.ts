@@ -1,4 +1,5 @@
 "use server";
+import { warehouseSupports } from "@/lib/config/warehouses";
 import { appendPayment, paymentLocation } from "@/lib/services/payment-records";
 import { calculateBilling, billingDescription } from "@/lib/utils/billing";
 import { CUSTOM_CARGO_ID, CUSTOM_CARGO_NAME } from "@/lib/config/custom-cargo";
@@ -28,7 +29,6 @@ import type { FlowConfig } from "@/lib/config/flow";
 import type { Address, Box, Invoice, Recipient, Truck, User } from "@/lib/types";
 import { suggestCategory } from "@/lib/utils/suggest-category";
 import { receptionSchema, truckSchema } from "@/lib/schemas/admin";
-import { OPERATION_ORIGIN } from "@/lib/config/operations";
 import { getStatusLabel } from "@/lib/config/status";
 import { CUSTOMER_COPY } from "@/lib/config/customers";
 import { customerAddressSchema, customerProfileSchema, customerRecipientSchema, internalNoteSchema, lockerCodeSchema, quickCustomerSchema } from "@/lib/schemas/customer";
@@ -276,6 +276,10 @@ export async function receiveBox(input: unknown) {
   const prealert = parsed.data.prealertId ? boxes.find(item => item.id === parsed.data.prealertId) : undefined;
   if (parsed.data.prealertId && (!prealert || prealert.userId !== customer.id || prealert.status !== "pre-alertada")) return { ok: false as const, error: "La prealerta ya fue recibida o no pertenece a este cliente." };
   const [rates, flow, catalog] = await Promise.all([configService.getRateTable(), configService.getFlowConfig(), configService.getCatalog()]);
+  const origins=warehouses.filter(w=>w.active&&warehouseSupports(w,"origen"));
+  const originId=parsed.data.originWarehouseId||(origins.length===1?origins[0].id:undefined);
+  const origin=origins.find(w=>w.id===originId);
+  if(!parsed.data.reject&&((origins.length&&!origin)||(originId&&!origin)))return {ok:false as const,error:"Selecciona el almacén de origen donde recibes la carga."};
   const dimensions = { length: parsed.data.length, width: parsed.data.width, height: parsed.data.height };
   const suggestion = suggestCategory(dimensions, parsed.data.weightLb, rates);
   const mode=parsed.data.billingMode ?? (!suggestion.category ? "manual" : "fijo");
@@ -293,7 +297,7 @@ export async function receiveBox(input: unknown) {
   const note = custom ? (mode==="manual" ? `Carga personalizada. Precio acordado USD ${parsed.data.customPriceUsd}. Medidas y peso reales registrados.` : "Carga fuera de categoría estándar. Cobro por libra.") : rejected ? parsed.data.rejectionReason : parsed.data.overrideCategory ? parsed.data.overrideReason : suggestion.reason ? `Categoría ajustada por ${suggestion.reason.replaceAll("-", " ")}.` : "Medidas y peso validados.";
   const billing = rejected ? undefined : calculateBilling(mode, dimensions, parsed.data.weightLb, flow, mode==="manual" ? parsed.data.customPriceUsd : rates.find(rate=>rate.id===categoryId)?.priceUsd);
   const box: Box = {
-    billing,
+    billing, originWarehouseId:origin?.id,originWarehouseName:origin?.name,
     id, code, userId: customer.id, categoryId, categoryName: custom ? CUSTOM_CARGO_NAME : rates.find(rate=>rate.id===categoryId)?.name ?? categoryId, customPriceUsd:billing?.amountUsd, status: rejected ? "rechazada" : "en-bodega", dimensions, weightLb: parsed.data.weightLb,
     excessFeeUsd: mode==="fijo" && !custom && !rejected && flow.excessPolicy === "recargo" && prealert && !suggestCategory(dimensions, parsed.data.weightLb, catalog.filter(rate => rate.id === prealert.categoryId)).category ? flow.excessFeeUsd : 0,
     receivedAt: createdAt, originTracking: prealert?.originTracking,
@@ -302,7 +306,7 @@ export async function receiveBox(input: unknown) {
       ? [...(prealert?.timeline ?? []), { from: prealert ? "pre-alertada" : null, to: "rechazada", actor: adminActor, at: createdAt, note }]
       : [
         ...(prealert?.timeline ?? []),
-        { from: prealert ? "pre-alertada" : null, to: "recibida", actor: adminActor, at: createdAt, note: "Paquete recibido físicamente en bodega de origen." },
+        { from: prealert ? "pre-alertada" : null, to: "recibida", actor: adminActor, at: createdAt, note: `Paquete recibido físicamente en ${origin?.name??"bodega de origen"}.` },
         { from: "recibida", to: "categorizada", actor: adminActor, at: createdAt, note: `${note} ${billing ? billingDescription(billing) : ""}` },
         { from: "categorizada", to: "en-bodega", actor: adminActor, at: createdAt, note: "Disponible para asignación a guía máster." },
       ],
@@ -413,7 +417,7 @@ export async function createTruck(input: unknown) {
     departureDate: parsed.data.departureDate,
     stops: [],
     destinationCity: parsed.data.destinationCity,
-    route: `${OPERATION_ORIGIN} → ${parsed.data.destinationCity}`,
+    route: `${"Origen por confirmar"} → ${parsed.data.destinationCity}`,
     capacity: parsed.data.capacity,
     notes: parsed.data.notes,
     status: "planificado",
@@ -442,7 +446,7 @@ export async function updateTruck(truckId: string, input: unknown) {
   if (!driver?.active) return { ok: false as const, error: "Selecciona un chofer activo." };
   const assignedBoxes = boxes.filter(box => trucks[truckIndex]!.boxIds.includes(box.id));
   if (assignedBoxes.some(box => assignedBoxes.filter(item => item.categoryId === box.categoryId).length > (parsed.data.capacity[box.categoryId] ?? 0))) return { ok: false as const, error: "La capacidad no puede ser menor que las cajas ya asignadas. Retira las cajas primero." };
-  trucks[truckIndex] = { ...trucks[truckIndex]!, plate: parsed.data.plate, driverId: driver.id, driverName: driver.name, departureDate: parsed.data.departureDate, destinationCity: parsed.data.destinationCity, route: trucks[truckIndex]!.stops?.length ? trucks[truckIndex]!.route : `${OPERATION_ORIGIN} → ${parsed.data.destinationCity}`, capacity: parsed.data.capacity, notes: parsed.data.notes };
+  trucks[truckIndex] = { ...trucks[truckIndex]!, plate: parsed.data.plate, driverId: driver.id, driverName: driver.name, departureDate: parsed.data.departureDate, destinationCity: parsed.data.destinationCity, route: trucks[truckIndex]!.stops?.length ? trucks[truckIndex]!.route : `${trucks[truckIndex]!.originWarehouseName ?? "Origen por confirmar"} → ${parsed.data.destinationCity}`, capacity: parsed.data.capacity, notes: parsed.data.notes };
   return { ok: true as const, truck: trucks[truckIndex]! };
 
   });
@@ -457,9 +461,10 @@ export async function assignBoxToTruck(truckId: string, boxId: string, scan?: { 
   if (truck.stops && !truck.stops.length) return {ok:false as const,error:"Configura las paradas y fechas antes de cargar paquetes."};
   if (truck.stops?.length) {
     if (!scan || scan.code !== box.code) return {ok:false as const,error:"La carga de este viaje requiere escanear el código del paquete."};
-    if (!truck.stops.some(stop=>stop.warehouseId===scan.warehouseId) || !warehouses.some(w=>w.id===scan.warehouseId&&w.active)) return {ok:false as const,error:"El almacén no pertenece a las paradas activas del camión."};
+    if (!truck.stops.some(stop=>stop.warehouseId===scan.warehouseId) || !warehouses.some(w=>w.id===scan.warehouseId&&w.active&&warehouseSupports(w,"destino"))) return {ok:false as const,error:"El almacén no pertenece a las paradas activas del camión."};
     if (truck.status !== "cargando") return {ok:false as const,error:"Inicia la carga del camión antes de escanear."};
   }
+  if(box.originWarehouseId&&truck.originWarehouseId!==box.originWarehouseId)return {ok:false as const,error:"El paquete está en otro almacén de origen. El viaje debe salir del mismo almacén."};
   const shipment = box.shipmentId ? shipments.find(item => item.id === box.shipmentId) : undefined;
   if (truck.stops?.length && shipment && !truck.stops.some(stop=>stop.warehouseId===scan?.warehouseId&&stop.city===shipment.destinationCity)) return {ok:false as const,error:"El destino del envío no coincide con el almacén seleccionado."};
   if (shipment && scan && boxes.some(item=>shipment.boxIds.includes(item.id)&&item.destinationWarehouseId&&item.destinationWarehouseId!==scan.warehouseId)) return {ok:false as const,error:"Todas las cajas del envío deben descargarse en el mismo almacén."};

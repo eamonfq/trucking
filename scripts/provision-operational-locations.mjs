@@ -11,10 +11,10 @@ const data=JSON.parse(readFileSync(path.resolve(".local/operational-locations.js
 // Only trusted, local pure configuration modules; preserve the application's actual defaults.
 function config(name){
  const filename=path.resolve("src/lib/config",name+".ts");
- const module={exports:{}};
+ const compiledModule={exports:{}};
  const js=ts.transpileModule(readFileSync(filename,"utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
- vm.runInNewContext(js,{module,exports:module.exports,require:relative=>config(relative.replace("./",""))});
- return module.exports;
+ vm.runInNewContext(js,{module:compiledModule,exports:compiledModule.exports,require:relative=>config(relative.replace("./",""))});
+ return compiledModule.exports;
 }
 const db=await mysql.createConnection(process.env.DATABASE_URL);
 try{
@@ -25,7 +25,7 @@ try{
  let position=Math.max(0,...rows.map(r=>r.position_index))+1;
  async function save(collection,value){if(apply)await db.execute("INSERT INTO entities(collection_name,entity_id,payload,position_index) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE payload=VALUES(payload)",[collection,value.id,JSON.stringify(value),position++]);}
  const settings=entries.find(r=>r.collection_name==="settings")?.value??{id:"main",flow:config("flow").DEFAULT_FLOW_CONFIG,rates:config("box-categories").BOX_CATEGORIES};
- settings.flow.destinationCities=[...new Set([...settings.flow.destinationCities,...data.warehouses.map(w=>w.city)])];
+ settings.flow.destinationCities=[...new Set([...settings.flow.destinationCities,...data.warehouses.filter(w=>(w.kind??"destino")!=="origen").map(w=>w.city)])];
  await save("settings",settings);
  const locations=[];
  for(const input of data.warehouses){

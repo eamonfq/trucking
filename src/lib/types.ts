@@ -26,7 +26,7 @@ export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
 export type Role = "cliente" | "admin" | "operador";
 
 export type WarehouseGrant = { warehouseId: string; receive: boolean; viewContacts: boolean };
-export type Warehouse = { address?: string; id: string; name: string; city: string; active: boolean; arrivalMessage: string };
+export type Warehouse = { kind?:import("./config/warehouses").WarehouseKind; country?:string; state?:string; address?: string; id: string; name: string; city: string; active: boolean; arrivalMessage: string };
 export type TruckStop = { warehouseId: string; city: string; arrivalDate: string };
 
 export type User = {
@@ -78,6 +78,8 @@ export type Recipient = {
 export type TimelineEvent = TransitionEvent;
 
 export type Box = {
+  originWarehouseId?:string;
+  originWarehouseName?:string;
   billing?: import("./utils/billing").BillingSnapshot;
   customPriceUsd?: number;
   destinationWarehouseId?: string;
@@ -119,6 +121,8 @@ export type Shipment = {
 };
 
 export type Truck = {
+  originWarehouseId?:string;
+  originWarehouseName?:string;
   stops?: TruckStop[];
   id: string;
   code: `TR-${string}`;
