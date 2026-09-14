@@ -23,16 +23,17 @@ const EMPTY: QuickInput = {
 };
 
 export function CustomerQuickCreate({ onCreated }: { onCreated: (user: User, address: Address) => void }) {
+  const [people,setPeople]=useState<Array<{name:string;phone:string}>>([]);
   const [open, setOpen] = useState(false);
   const [created, setCreated] = useState<{ user: User; invitationStatus: string } | null>(null);
   const { showToast } = useToast();
   const { register, handleSubmit, reset, setValue, formState: { errors, isSubmitting } } = useForm<QuickInput>({ resolver: zodResolver(quickCustomerSchema), defaultValues: EMPTY });
   const postal = register("postalCode");
 
-  const close = () => { setOpen(false); setCreated(null); reset(EMPTY); };
+  const close = () => { setOpen(false); setCreated(null); reset(EMPTY);setPeople([]); };
   const submit = handleSubmit(async (data) => {
     let result;
-    try { result = await createCustomerAtReception(data); } catch { showToast({title:"No se confirmó el alta",description:"Conservamos los datos. Busca el correo en el directorio antes de reintentar.",variant:"error"}); return; }
+    try { result = await createCustomerAtReception({...data,recipients:people}); } catch { showToast({title:"No se confirmó el alta",description:"Conservamos los datos. Busca el correo en el directorio antes de reintentar.",variant:"error"}); return; }
     if (!result.ok) return showToast({ title: "No se pudo crear el cliente", description: result.error, variant: "error" });
     onCreated(result.user, result.address);
     setCreated({ user: result.user, invitationStatus: result.invitationStatus });
@@ -70,6 +71,7 @@ export function CustomerQuickCreate({ onCreated }: { onCreated: (user: User, add
               <Input label="Teléfono" inputMode="tel" placeholder="+502 5555 1234" error={errors.phone?.message} {...register("phone")} />
               <Input label="RFC (opcional)" className="uppercase" error={errors.rfc?.message} {...register("rfc")} />
             </div>
+            <fieldset className="grid gap-3 rounded-xl border p-3"><legend>Destinatarios en México (opcional)</legend><p className="text-xs">Puedes agregar varios. Usarán la dirección de entrega indicada abajo; podrás agregar otras direcciones desde la ficha del cliente.</p>{people.map((p,i)=><div key={i} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]"><Input label={`Nombre del destinatario ${i+1}`} required value={p.name} onChange={e=>setPeople(people.map((p,j)=>i===j?{...p,name:e.target.value}:p))}/><Input label={`Teléfono del destinatario ${i+1}`} required type="tel" value={p.phone} onChange={e=>setPeople(people.map((p,j)=>i===j?{...p,phone:e.target.value}:p))}/><Button type="button" variant="ghost" onClick={()=>setPeople(people.filter((_,j)=>i!==j))}>Quitar</Button></div>)}<Button type="button" variant="secondary" onClick={()=>setPeople([...people,{name:"",phone:""}])}>Agregar destinatario</Button></fieldset>
             <p className="mt-2 text-over font-semibold uppercase text-label-600">Dirección de entrega en México</p>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <Input label="Calle" error={errors.street?.message} {...register("street")} />

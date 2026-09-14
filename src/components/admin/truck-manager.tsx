@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { CUSTOM_CAPACITY_CATEGORY } from "@/lib/config/custom-cargo";
 import { useMemo, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -15,8 +14,7 @@ import { StatusBadge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { createTruck, transitionTruckState } from "@/lib/auth/admin-actions";
-import { useCatalog, useDestinations } from "@/components/ui/catalog-provider";
-import { DEFAULT_TRUCK_CAPACITY, OPERATION_ORIGIN } from "@/lib/config/operations";
+import { useDestinations } from "@/components/ui/catalog-provider";
 import { getStatusLabel } from "@/lib/config/status";
 import { TRUCK_ACTIONS } from "@/lib/domain/state-machine";
 import { truckSchema } from "@/lib/schemas/admin";
@@ -26,8 +24,6 @@ type TruckInput = z.input<typeof truckSchema>;
 
 export function TruckManager({ initial, initialDrivers }: { initial: Truck[]; initialDrivers: Driver[] }) {
   const destinations=useDestinations();
-  const catalog=useCatalog();
-  const categories=[...catalog.filter(category=>category.active!==false),CUSTOM_CAPACITY_CATEGORY];
   const [trucks, setTrucks] = useState(initial);
   const [drivers, setDrivers] = useState(initialDrivers);
   const [selectedTruck, setSelectedTruck] = useState<Truck | null>(null);
@@ -41,7 +37,7 @@ export function TruckManager({ initial, initialDrivers }: { initial: Truck[]; in
   const { showToast } = useToast();
   const { register, handleSubmit, reset, control, formState: { errors, isSubmitting } } = useForm<TruckInput>({
     resolver: zodResolver(truckSchema),
-    defaultValues: { driverId: "", destinationCity: destinations[0], capacity: Object.fromEntries(categories.map(category=>[category.id,DEFAULT_TRUCK_CAPACITY[category.id] ?? 0])), notes: "" },
+    defaultValues: { driverId: "", destinationCity: destinations[0], maxWeightLb: undefined, notes: "" },
   });
   const driverId = useWatch({ control, name: "driverId" });
   const filtered = useMemo(() => trucks.filter((truck) => {
@@ -73,10 +69,10 @@ export function TruckManager({ initial, initialDrivers }: { initial: Truck[]; in
       if (!result.ok) return showToast({ title: "No se pudo crear el camión", description: result.error, variant: "error" });
       setTrucks((current) => [...current, result.truck]);
       setDrivers((current) => current.some((driver) => driver.id === result.driver.id) ? current : [...current, result.driver]);
-      reset({ driverId: "", destinationCity: destinations[0], capacity: Object.fromEntries(categories.map(category=>[category.id,DEFAULT_TRUCK_CAPACITY[category.id] ?? 0])), notes: "" });
+      reset({ driverId: "", destinationCity: destinations[0], maxWeightLb: undefined, notes: "" });
       showToast({ title: "Camión creado", description: `${result.truck.code} quedó planificado. Abre su detalle para agregar almacenes y fechas de llegada.` });
     })} className="rounded-card bg-navy-950 p-5 text-white sm:p-6">
-      <div className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-2xl bg-white/10"><Plus className="size-5 text-orange-400" /></span><div><h2 className="font-display text-xl font-bold">Nueva guía máster</h2><p className="mt-1 text-sm text-white/60">Origen fijo: {OPERATION_ORIGIN}</p></div></div>
+      <div className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-2xl bg-white/10"><Plus className="size-5 text-orange-400" /></span><div><h2 className="font-display text-xl font-bold">Nueva guía máster</h2><p className="mt-1 text-sm text-white/60">Configura el origen y las paradas después de crear el viaje.</p></div></div>
       <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Input tone="dark" label="Placa" placeholder="FLA-2604" error={errors.plate?.message} {...register("plate")} />
         <Select tone="dark" label="Chofer" options={[{ value: "", label: "Selecciona" }, ...drivers.filter((driver) => driver.active).map((driver) => ({ value: driver.id, label: `${driver.name} · ${driver.license}` })), { value: "new", label: "+ Alta rápida" }]} error={errors.driverId?.message} {...register("driverId")} />
@@ -84,7 +80,7 @@ export function TruckManager({ initial, initialDrivers }: { initial: Truck[]; in
         <Select tone="dark" label="Destino inicial (configura paradas en el detalle)" options={destinations.map((city) => ({ value: city, label: city }))} error={errors.destinationCity?.message} {...register("destinationCity")} />
       </div>
       {driverId === "new" && <div className="mt-4 grid gap-4 rounded-2xl bg-white/8 p-4 md:grid-cols-3"><Input tone="dark" label="Nombre del chofer" error={errors.newDriverName?.message} {...register("newDriverName")} /><Input tone="dark" label="Teléfono" placeholder="+13055550199" error={errors.newDriverPhone?.message} {...register("newDriverPhone")} /><Input tone="dark" label="Licencia" error={errors.newDriverLicense?.message} {...register("newDriverLicense")} /></div>}
-      <div className="mt-5"><p className="text-xs font-bold uppercase tracking-wider text-orange-400">Capacidad por categoría</p><div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">{categories.map((category) => <Input key={category.id} tone="dark" label={category.name} type="number" min="0" max="999" error={errors.capacity?.[category.id]?.message} {...register(`capacity.${category.id}`)} />)}</div>{errors.capacity?.root?.message && <p className="mt-2 text-sm text-red-200">{errors.capacity.root.message}</p>}</div>
+      <div className="mt-5"><Input tone="dark" label="Peso máximo de carga (lb, opcional)" type="number" min="0.01" step="0.01" placeholder="Sin límite configurado" error={errors.maxWeightLb?.message} {...register("maxWeightLb")}/><p className="mt-2 text-xs text-white/65">No se limita la cantidad ni el tipo de paquetes. Se usa el peso real, no el dimensional de cobro.</p></div>
       <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end"><Textarea tone="dark" label="Notas operativas" rows={2} error={errors.notes?.message} {...register("notes")} /><Button type="submit" loading={isSubmitting} className="min-w-44">Crear camión</Button></div>
     </form>
 
@@ -107,7 +103,7 @@ export function TruckManager({ initial, initialDrivers }: { initial: Truck[]; in
     </div>
 
     <p className="flex items-center gap-2 text-sm text-navy-500"><Filter className="size-4" />{filtered.length} guías encontradas</p>
-    {filtered.map((truck) => { const action = TRUCK_ACTIONS[truck.status]; return <article key={truck.id} className="rounded-card border border-stone-200 bg-white p-5"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start"><div><div className="flex flex-wrap items-center gap-3"><Link href={`/admin/camiones/${truck.id}`} className="font-display text-xl font-bold hover:text-orange-600">{truck.code}</Link><StatusBadge status={truck.status} /></div><p className="mt-2 text-sm text-navy-500">{truck.route} · {truck.plate} · {truck.driverName}</p><p className="mt-4 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-navy-400"><TruckIcon className="size-4" />{truck.boxIds.length} cajas asignadas</p></div><div className="flex flex-wrap gap-2"><Link href={`/admin/camiones/${truck.id}`} className="inline-flex min-h-11 items-center rounded-full border border-stone-200 px-4 text-sm font-bold">Ver detalle</Link>{action && !(truck.stops?.length && action.to==="en-destino") && <Button onClick={() => setSelectedTruck(truck)}>{action.label}</Button>}</div></div></article>; })}
+    {filtered.map((truck) => { const action = TRUCK_ACTIONS[truck.status]; return <article key={truck.id} className="rounded-card border border-stone-200 bg-white p-5"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start"><div><div className="flex flex-wrap items-center gap-3"><Link href={`/admin/camiones/${truck.id}`} className="font-display text-xl font-bold hover:text-orange-600">{truck.code}</Link><StatusBadge status={truck.status} /></div><p className="mt-2 text-sm text-navy-500">{truck.route} · {truck.plate} · {truck.driverName}</p><p className="mt-4 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-navy-400"><TruckIcon className="size-4" />{truck.boxIds.length} cajas asignadas</p></div><div className="flex flex-wrap gap-2"><Link href={`/admin/camiones/${truck.id}`} className="inline-flex min-h-11 items-center rounded-full border border-stone-200 px-4 text-sm font-bold">Ver detalle</Link>{["planificado","cargando"].includes(truck.status)&&<Link href={`/admin/camiones/${truck.id}#carga-escaneada`} className="inline-flex min-h-11 items-center rounded-full bg-navy-950 px-4 text-sm font-bold text-white">Escanear carga</Link>}{action && !(truck.stops?.length && action.to==="en-destino") && <Button onClick={() => setSelectedTruck(truck)}>{action.label}</Button>}</div></div></article>; })}
 
     <Dialog open={Boolean(selectedTruck)} onClose={() => setSelectedTruck(null)} title={selectedTruck ? TRUCK_ACTIONS[selectedTruck.status]?.label ?? "Actualizar camión" : "Actualizar camión"} description={selectedTruck ? TRUCK_ACTIONS[selectedTruck.status]?.description : undefined}><p className="text-sm leading-6 text-navy-600">La acción quedará registrada en el historial con el actor Operaciones A&amp;L.</p><div className="mt-6 flex justify-end gap-2"><Button variant="ghost" onClick={() => setSelectedTruck(null)}>Cancelar</Button><Button loading={isTransitioning} onClick={confirmTransition}>Confirmar acción</Button></div></Dialog>
   </div>;

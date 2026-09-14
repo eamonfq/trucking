@@ -1,0 +1,6 @@
+import type {Box} from "@/lib/types";
+import {truckLoad} from "@/lib/utils/truck-load";
+export function TruckLoadSummary({boxes,maxWeightLb}:{boxes:Box[];maxWeightLb?:number}){
+ const load=truckLoad(boxes),number=(n:number)=>n.toLocaleString("es",{maximumFractionDigits:2});
+ return <section aria-label="Totales de carga" aria-live="polite" className="grid gap-3 rounded-2xl border border-stone-200 bg-cream-50 p-4 sm:grid-cols-3"><div><p className="text-xs text-navy-500">Paquetes cargados</p><strong className="text-2xl">{load.count}</strong><p className="text-xs">Sin límite por cantidad</p></div><div><p className="text-xs text-navy-500">Peso real total</p><strong className="text-2xl">{number(load.weightLb)} lb</strong><p className="text-xs">{maxWeightLb?`Límite: ${number(maxWeightLb)} lb · Disponible: ${number(Math.max(0,maxWeightLb-load.weightLb))} lb`:"Sin límite de peso configurado"}</p></div><div><p className="text-xs text-navy-500">Volumen total de las piezas</p><strong className="text-2xl">{number(load.volumeFt3)} ft³</strong><p className="text-xs">{number(load.volumeM3)} m³ · Suma de largo × ancho × alto; no incluye huecos de estiba.</p></div></section>;
+}

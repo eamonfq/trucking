@@ -39,6 +39,8 @@ import { logisticsService } from "@/lib/services/logistics";
 import { checkPassword } from "@/lib/auth/crypto";
 import { sendEmail, decryptEmail, deliverPendingEmails } from "@/lib/services/email";
 import { renderEmail } from "@/lib/services/email-template";
+import {receivePackageGroup} from "@/lib/auth/file-actions";
+import {deleteCustomerRecipient} from "@/lib/auth/admin-actions";
 import { POST as webhook } from "@/app/api/webhooks/resend/route";
 
 import { saveWarehouse, saveWarehouseOperator, getWarehouseAdministration, getDestinationDesk, saveTruckStops, scanLoad, scanUnload, saveAdminPrealert, selectPrealertAtWarehouse } from "@/lib/auth/warehouse-actions";
@@ -270,7 +272,8 @@ describe.sequential("Real MySQL authentication and operations", () => {
     expect((await logisticsService.getShipments()).find(item=>item.id===created.shipment.id)?.truckId).toBeUndefined();
     expect((await assignBoxToTruck(master.truck.id,first.box.id)).ok).toBe(true);
     expect((await assignBoxToTruck(master.truck.id,second.box.id)).ok).toBe(true);
-    expect((await updateTruck(master.truck.id,{...truckInput,capacity:{...truckInput.capacity,small:1}})).ok).toBe(false);
+    expect((await updateTruck(master.truck.id,{...truckInput,capacity:{...truckInput.capacity,small:1}})).ok).toBe(true);
+    expect((await updateTruck(master.truck.id,{...truckInput,maxWeightLb:1})).ok).toBe(false);
     await removeBoxFromTruck(master.truck.id,second.box.id);
     expect((await transitionTruckState(master.truck.id)).ok).toBe(true);
     expect((await transitionTruckState(master.truck.id)).ok).toBe(false);
@@ -621,7 +624,8 @@ describe.sequential("Real MySQL authentication and operations", () => {
     expect(received.ok).toBe(true);if(!received.ok)throw new Error("dynamic reception");
     expect(received.box.categoryId).toBe(custom.id);
     const oldTruck=(await logisticsService.getTrucks()).find(truck=>truck.status==="planificado")!;
-    expect((await assignBoxToTruck(oldTruck.id,received.box.id)).ok).toBe(false);
+    expect((await assignBoxToTruck(oldTruck.id,received.box.id)).ok).toBe(true);
+    expect((await removeBoxFromTruck(oldTruck.id,received.box.id)).ok).toBe(true);
     const master=await createTruck({plate:"DYN-2099",driverId:(await logisticsService.getDrivers())[0].id,departureDate:"2099-01-01",destinationCity:DESTINATION_CITIES[0],capacity:{[custom.id]:1}});
     expect(master.ok).toBe(true);if(!master.ok)throw new Error("dynamic truck");
     const currentFlow=await configService.getFlowConfig();
@@ -920,6 +924,87 @@ describe.sequential("Real MySQL authentication and operations", () => {
     expect((await transitionTruckState(trip.truck.id)).ok).toBe(true);
     const load=await scanLoad(trip.truck.id,receipt.box.code,d.warehouse.id);
     expect(load.ok).toBe(false);if(!load.ok)expect(load.error).toContain("otro almacén de origen");
+  });
+
+  it("creates multiple recipients and receives individually numbered packages atomically",async()=>{
+    cookieJar.set("ayl_session",{value:adminSession});
+    const created=await createCustomerAtReception({...customer,email:"group-reception@example.invalid",recipients:[{name:"María López",phone:"+525512345678"},{name:"Juan López",phone:"+525587654321"}]});
+    expect(created.ok).toBe(true);if(!created.ok)throw new Error("customer with recipients");
+    const contacts=(await logisticsService.getRecipients()).filter(r=>r.userId===created.user.id);
+    expect(contacts).toHaveLength(2);
+    const origin=(await getWarehouseAdministration()).warehouses.find(w=>w.kind==="origen")!;
+    const item={customer:created.user.id,recipientId:contacts[0].id,originWarehouseId:origin.id,length:10,width:10,height:10,weightLb:10,billingMode:"manual",customPriceUsd:25,reject:false};
+    const before=(await logisticsService.getBoxes()).length;
+    const bad=await receivePackageGroup([item,{...item,customPriceUsd:35}],new FormData(),{method:"tarjeta",amount:1,warehouseId:"qa-location"});
+    expect(bad.ok).toBe(false);expect((await logisticsService.getBoxes()).length).toBe(before);
+    const received=await receivePackageGroup([item,{...item,length:20,weightLb:30,customPriceUsd:35}],new FormData(),{method:"tarjeta",amount:60,warehouseId:"qa-location"});
+    expect(received.ok).toBe(true);if(!received.ok)throw new Error("batch receipt");
+    expect(received.results).toHaveLength(2);expect(received.total).toBe(60);
+    const saved=await logisticsService.getBoxes();
+    for(const [i,r] of received.results.entries()){
+      const box=saved.find(b=>b.id===r.box.id)!;
+      expect(box.receptionGroup).toMatchObject({index:i+1,total:2});
+      expect(box.recipientSnapshot).toMatchObject({name:"María López",phone:"+525512345678"});
+      expect(r.invoice?.status).toBe("pagada");
+    }
+    expect(received.results[0].box.code).not.toBe(received.results[1].box.code);
+    expect((await deleteCustomerRecipient(created.user.id,contacts[0].id)).ok).toBe(false);
+    const foreign=await receivePackageGroup([{...item,customer:operationClient}],new FormData());
+    expect(foreign.ok).toBe(false);
+    await root.execute("UPDATE accounts SET verified_at=UTC_TIMESTAMP(3) WHERE user_id=?",[created.user.id]);
+    cookieJar.set("ayl_session",{value:await createSessionToken(created.user.id,"cliente")});
+    expect((await upsertClientRecipient({name:"Contacto actualizado",phone:"+525500001111",addressId:contacts[0].addressId},contacts[0].id)).ok).toBe(true);
+    const mode=(await configService.getFlowConfig()).deliveryMode;
+    const shipment=await createClientShipment({boxIds:received.results.map(r=>r.box.id),recipientId:contacts[0].id,deliveryMethod:mode==="domicilio"?"domicilio":"sucursal"});
+    expect(shipment.ok).toBe(true);if(!shipment.ok)throw new Error("client group shipment");
+    expect(shipment.shipment.recipientSnapshot?.name).toBe("María López");
+    expect(shipment.shipment.recipientSnapshot?.phone).toBe("+525512345678");
+    expect((await logisticsService.getBoxes()).every(b=>b.userId===created.user.id)).toBe(true);
+    const correction={kind:"shipment",id:shipment.shipment.id,expected:recordRevision(shipment.shipment),reason:"Corregir receptor de todas las piezas",values:{recipientId:contacts[1].id,deliveryMethod:mode==="domicilio"?"domicilio":"sucursal"}};
+    expect((await editOperation(correction)).ok).toBe(false);
+    cookieJar.set("ayl_session",{value:adminSession});
+    expect((await editOperation(correction)).ok).toBe(true);
+    const corrected=(await logisticsService.getShipments()).find(s=>s.id===shipment.shipment.id)!;
+    const packages=(await logisticsService.getBoxes()).filter(b=>corrected.boxIds.includes(b.id));
+    expect(packages.every(b=>b.recipientSnapshot?.name===contacts[1].name&&b.recipientId===contacts[1].id)).toBe(true);
+    const destination=await saveWarehouse({name:"Entrega integral QA",city:corrected.destinationCity,kind:"destino",active:true,arrivalMessage:"{codigo} recibido en {almacen}, {destino}."});
+    if(!destination.ok)throw new Error("destination setup");
+    const trip=await createNewTruck({plate:"FULL-2099",driverId:(await logisticsService.getDrivers())[0].id,departureDate:"2099-01-01",destinationCity:corrected.destinationCity,capacity:{[packages[0].categoryId]:5}});
+    if(!trip.ok)throw new Error("trip setup");
+    expect((await saveTruckStops(trip.truck.id,[{warehouseId:destination.warehouse.id,arrivalDate:"2099-01-02"}],origin.id)).ok).toBe(true);
+    expect((await scanLoad(trip.truck.id,packages[0].code,destination.warehouse.id)).ok).toBe(false);
+    expect((await transitionTruckState(trip.truck.id)).ok).toBe(true);
+    expect((await scanLoad(trip.truck.id,packages[0].code,destination.warehouse.id)).ok).toBe(true);
+    expect((await scanLoad(trip.truck.id,packages[0].code,destination.warehouse.id)).ok).toBe(false);
+    expect((await transitionTruckState(trip.truck.id)).ok).toBe(false);
+    expect((await scanLoad(trip.truck.id,packages[1].code,destination.warehouse.id)).ok).toBe(true);
+    expect((await transitionTruckState(trip.truck.id)).ok).toBe(true);
+    expect((await registerDelivery({boxId:packages[0].id,receivedBy:contacts[1].name,note:"Entrega antes de descargar"})).ok).toBe(false);
+    for(const box of packages)expect((await scanUnload(trip.truck.id,destination.warehouse.id,box.code)).ok).toBe(true);
+    expect((await scanUnload(trip.truck.id,destination.warehouse.id,packages[0].code)).ok).toBe(false);
+    for(const box of packages)expect((await registerDelivery({boxId:box.id,receivedBy:contacts[1].name,note:"Identidad y pago comprobados"})).ok).toBe(true);
+    expect((await logisticsService.getShipments()).find(s=>s.id===corrected.id)?.status).toBe("entregado");
+    expect((await transitionTruckState(trip.truck.id)).ok).toBe(true);
+    expect((await logisticsService.getTruckById(trip.truck.id))?.status).toBe("cerrado");
+  });
+
+  it("loads without category quotas and enforces an optional real-weight limit",async()=>{
+    cookieJar.set("ayl_session",{value:adminSession});
+    const locations=(await getWarehouseAdministration()).warehouses;
+    const origin=locations.find(w=>w.kind==="origen")!,destination=locations.find(w=>w.active&&(w.kind??"destino")==="destino")!;
+    const trip=await createNewTruck({plate:"WGHT-2099",driverId:(await logisticsService.getDrivers())[0].id,departureDate:"2099-01-01",destinationCity:destination.city,maxWeightLb:30});
+    expect(trip.ok).toBe(true);if(!trip.ok)throw new Error("weight truck");
+    expect(trip.truck.capacity).toEqual({});
+    const input={customer:operationClient,originWarehouseId:origin.id,length:10,width:10,height:10,weightLb:20,billingMode:"peso",reject:false};
+    const a=await receiveBox(input),b=await receiveBox(input);if(!a.ok||!b.ok)throw new Error("weight receipts");
+    expect((await saveTruckStops(trip.truck.id,[{warehouseId:destination.id,arrivalDate:"2099-01-02"}],origin.id)).ok).toBe(true);
+    expect((await transitionTruckState(trip.truck.id)).ok).toBe(true);
+    expect((await scanLoad(trip.truck.id,a.box.code,destination.id)).ok).toBe(true);
+    const blocked=await scanLoad(trip.truck.id,b.box.code,destination.id);
+    expect(blocked.ok).toBe(false);if(!blocked.ok)expect(blocked.error).toContain("peso real");
+    expect((await logisticsService.getTruckById(trip.truck.id))?.boxIds).toHaveLength(1);
+    expect((await removeBoxFromTruck(trip.truck.id,a.box.id)).ok).toBe(true);
+    expect((await scanLoad(trip.truck.id,b.box.code,destination.id)).ok).toBe(true);
   });
 
 });

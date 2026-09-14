@@ -1,4 +1,6 @@
 "use server";
+import {truckLoad} from "@/lib/utils/truck-load";
+import {matchesWarehouseDestination} from "@/lib/utils/warehouse-destination";
 import { warehouseSupports } from "@/lib/config/warehouses";
 import { appendPayment, paymentLocation } from "@/lib/services/payment-records";
 import { calculateBilling, billingDescription } from "@/lib/utils/billing";
@@ -57,6 +59,7 @@ export async function createCustomerAsAdmin(input: unknown) {
   if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Revisa los datos del cliente." };
   if (users.some((user) => user.email.toLowerCase() === parsed.data.email.toLowerCase())) return { ok: false as const, error: "Ya existe una cuenta con ese correo." };
   const { user, address } = await registerCustomer(parsed.data);
+  for(const person of parsed.data.recipients??[])recipients.push({id:crypto.randomUUID(),userId:user.id,addressId:address.id,...person});
   await sendAccountLink(user, "invite");
   return { ok: true as const, user, address };
 
@@ -75,6 +78,7 @@ export async function createCustomerAtReception(input: unknown) {
   if (users.some((user) => user.email.toLowerCase() === parsed.data.email.toLowerCase())) return { ok: false as const, error: "Ya existe una cuenta con ese correo." };
   const { user, address } = await registerCustomer(parsed.data);
   await sendAccountLink(user, "invite");
+  for(const person of parsed.data.recipients??[])recipients.push({id:crypto.randomUUID(),userId:user.id,addressId:address.id,...person});
   return { ok: true as const, user, address, invitationStatus: "Invitación en cola" };
 
   });
@@ -223,7 +227,7 @@ export async function deleteCustomerRecipient(userId: string, recipientId: strin
   const user = findCustomer(userId);
   const index = recipients.findIndex((item) => item.id === recipientId && item.userId === userId);
   if (!user || index < 0) return { ok: false as const, error: "No encontramos el destinatario." };
-  if (shipments.some(shipment => shipment.recipientId === recipientId)) return { ok: false as const, error: "El destinatario forma parte del historial de envíos." };
+  if (boxes.some(box=>box.recipientId===recipientId)||shipments.some(shipment => shipment.recipientId === recipientId)) return { ok: false as const, error: "El destinatario forma parte del historial de envíos." };
   recipients.splice(index, 1);
   recordCustomerActivity(user, "destinatario", CUSTOMER_COPY.activity.recipientDeleted);
   return { ok: true as const, user };
@@ -273,6 +277,9 @@ export async function receiveBox(input: unknown) {
   if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Revisa los datos de recepción." };
   const customer = findCustomer(parsed.data.customer);
   if (!customer || !customer.active) return { ok: false as const, error: "Selecciona un cliente activo." };
+  const recipient=parsed.data.recipientId?recipients.find(r=>r.id===parsed.data.recipientId&&r.userId===customer.id):undefined;
+  const recipientAddress=recipient?addresses.find(a=>a.id===recipient.addressId&&a.userId===customer.id):undefined;
+  if(parsed.data.recipientId&&(!recipient||!recipientAddress))return {ok:false as const,error:"Selecciona un destinatario vigente de este cliente."};
   const prealert = parsed.data.prealertId ? boxes.find(item => item.id === parsed.data.prealertId) : undefined;
   if (parsed.data.prealertId && (!prealert || prealert.userId !== customer.id || prealert.status !== "pre-alertada")) return { ok: false as const, error: "La prealerta ya fue recibida o no pertenece a este cliente." };
   const [rates, flow, catalog] = await Promise.all([configService.getRateTable(), configService.getFlowConfig(), configService.getCatalog()]);
@@ -297,6 +304,7 @@ export async function receiveBox(input: unknown) {
   const note = custom ? (mode==="manual" ? `Carga personalizada. Precio acordado USD ${parsed.data.customPriceUsd}. Medidas y peso reales registrados.` : "Carga fuera de categoría estándar. Cobro por libra.") : rejected ? parsed.data.rejectionReason : parsed.data.overrideCategory ? parsed.data.overrideReason : suggestion.reason ? `Categoría ajustada por ${suggestion.reason.replaceAll("-", " ")}.` : "Medidas y peso validados.";
   const billing = rejected ? undefined : calculateBilling(mode, dimensions, parsed.data.weightLb, flow, mode==="manual" ? parsed.data.customPriceUsd : rates.find(rate=>rate.id===categoryId)?.priceUsd);
   const box: Box = {
+    recipientId:recipient?.id,recipientSnapshot:recipient&&recipientAddress?{name:recipient.name,phone:recipient.phone,address:{...recipientAddress}}:undefined,
     billing, originWarehouseId:origin?.id,originWarehouseName:origin?.name,
     id, code, userId: customer.id, categoryId, categoryName: custom ? CUSTOM_CARGO_NAME : rates.find(rate=>rate.id===categoryId)?.name ?? categoryId, customPriceUsd:billing?.amountUsd, status: rejected ? "rechazada" : "en-bodega", dimensions, weightLb: parsed.data.weightLb,
     excessFeeUsd: mode==="fijo" && !custom && !rejected && flow.excessPolicy === "recargo" && prealert && !suggestCategory(dimensions, parsed.data.weightLb, catalog.filter(rate => rate.id === prealert.categoryId)).category ? flow.excessFeeUsd : 0,
@@ -345,6 +353,8 @@ export async function transitionTruckState(truckId: string, note?: string) {
   const truckIndex = trucks.findIndex((item) => item.id === truckId);
   if (truckIndex < 0) return { ok: false as const, error: "No encontramos el camión seleccionado." };
   const previousStatus = trucks[truckIndex]!.status;
+  const currentTruck=trucks[truckIndex]!;
+  if(previousStatus==="cargando"&&currentTruck.maxWeightLb!==undefined&&truckLoad(boxes.filter(b=>currentTruck.boxIds.includes(b.id))).weightLb>currentTruck.maxWeightLb)return {ok:false as const,error:"El peso real cargado supera el límite del camión."};
   const result = transitionTruckWithCascade(trucks[truckIndex]!, boxes, shipments, { actor: "Operaciones A&L", note });
   if (!result.ok) return result;
   trucks[truckIndex] = result.value.truck;
@@ -398,8 +408,6 @@ export async function createTruck(input: unknown) {
   const parsed = truckSchema.safeParse(input);
   if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Revisa los datos del camión." };
   if(!(await configService.getFlowConfig()).destinationCities.includes(parsed.data.destinationCity)) return {ok:false as const,error:"El destino no está habilitado en Configuración."};
-  const activeRates=await configService.getRateTable();
-  if(Object.keys(parsed.data.capacity).some(id=>id!==CUSTOM_CARGO_ID&&!activeRates.some(rate=>rate.id===id))) return {ok:false as const,error:"La capacidad contiene categorías inactivas o inexistentes."};
   const number = trucks.length + 1;
   let driver = drivers.find((item) => item.id === parsed.data.driverId);
   if (parsed.data.driverId === "new") {
@@ -418,7 +426,7 @@ export async function createTruck(input: unknown) {
     stops: [],
     destinationCity: parsed.data.destinationCity,
     route: `${"Origen por confirmar"} → ${parsed.data.destinationCity}`,
-    capacity: parsed.data.capacity,
+    capacity: parsed.data.capacity,maxWeightLb:parsed.data.maxWeightLb,
     notes: parsed.data.notes,
     status: "planificado",
     boxIds: [],
@@ -440,13 +448,11 @@ export async function updateTruck(truckId: string, input: unknown) {
   if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Revisa los datos del camión." };
   if(parsed.data.destinationCity!==trucks[truckIndex]!.destinationCity && !(await configService.getFlowConfig()).destinationCities.includes(parsed.data.destinationCity)) return {ok:false as const,error:"El destino no está habilitado en Configuración."};
   if (trucks[truckIndex]!.stops?.length && (parsed.data.destinationCity!==trucks[truckIndex]!.destinationCity || trucks[truckIndex]!.stops!.some(stop=>stop.arrivalDate<parsed.data.departureDate))) return {ok:false as const,error:"Edita los destinos desde Paradas del viaje y verifica las fechas de llegada."};
-  const catalog=await configService.getCatalog();
-  if(Object.keys(parsed.data.capacity).some(id=>id!==CUSTOM_CARGO_ID&&!catalog.some(rate=>rate.id===id))) return {ok:false as const,error:"La capacidad contiene categorías inexistentes."};
   const driver = drivers.find((item) => item.id === parsed.data.driverId);
   if (!driver?.active) return { ok: false as const, error: "Selecciona un chofer activo." };
   const assignedBoxes = boxes.filter(box => trucks[truckIndex]!.boxIds.includes(box.id));
-  if (assignedBoxes.some(box => assignedBoxes.filter(item => item.categoryId === box.categoryId).length > (parsed.data.capacity[box.categoryId] ?? 0))) return { ok: false as const, error: "La capacidad no puede ser menor que las cajas ya asignadas. Retira las cajas primero." };
-  trucks[truckIndex] = { ...trucks[truckIndex]!, plate: parsed.data.plate, driverId: driver.id, driverName: driver.name, departureDate: parsed.data.departureDate, destinationCity: parsed.data.destinationCity, route: trucks[truckIndex]!.stops?.length ? trucks[truckIndex]!.route : `${trucks[truckIndex]!.originWarehouseName ?? "Origen por confirmar"} → ${parsed.data.destinationCity}`, capacity: parsed.data.capacity, notes: parsed.data.notes };
+  if(parsed.data.maxWeightLb!==undefined&&truckLoad(assignedBoxes).weightLb>parsed.data.maxWeightLb)return {ok:false as const,error:"El límite de peso no puede ser menor que el peso real ya cargado."};
+  trucks[truckIndex] = { ...trucks[truckIndex]!, plate: parsed.data.plate, driverId: driver.id, driverName: driver.name, departureDate: parsed.data.departureDate, destinationCity: parsed.data.destinationCity, route: trucks[truckIndex]!.stops?.length ? trucks[truckIndex]!.route : `${trucks[truckIndex]!.originWarehouseName ?? "Origen por confirmar"} → ${parsed.data.destinationCity}`, capacity: parsed.data.capacity,maxWeightLb:parsed.data.maxWeightLb, notes: parsed.data.notes };
   return { ok: true as const, truck: trucks[truckIndex]! };
 
   });
@@ -466,14 +472,17 @@ export async function assignBoxToTruck(truckId: string, boxId: string, scan?: { 
   }
   if(box.originWarehouseId&&truck.originWarehouseId!==box.originWarehouseId)return {ok:false as const,error:"El paquete está en otro almacén de origen. El viaje debe salir del mismo almacén."};
   const shipment = box.shipmentId ? shipments.find(item => item.id === box.shipmentId) : undefined;
-  if (truck.stops?.length && shipment && !truck.stops.some(stop=>stop.warehouseId===scan?.warehouseId&&stop.city===shipment.destinationCity)) return {ok:false as const,error:"El destino del envío no coincide con el almacén seleccionado."};
+  const deliveryAddress=shipment?.recipientSnapshot?.address??box.recipientSnapshot?.address;
+  const deliveryCity=deliveryAddress?.municipality??shipment?.destinationCity;
+  const destinationWarehouse=warehouses.find(w=>w.id===scan?.warehouseId);
+  if(truck.stops?.length&&deliveryCity&&(!destinationWarehouse||!matchesWarehouseDestination(destinationWarehouse,deliveryCity,deliveryAddress?.state)))return {ok:false as const,error:"El municipio o estado de entrega no coincide con el almacén seleccionado."};
   if (shipment && scan && boxes.some(item=>shipment.boxIds.includes(item.id)&&item.destinationWarehouseId&&item.destinationWarehouseId!==scan.warehouseId)) return {ok:false as const,error:"Todas las cajas del envío deben descargarse en el mismo almacén."};
   if (box.shipmentId && (!shipment || shipment.userId !== box.userId || !shipment.boxIds.includes(box.id))) return { ok: false as const, error: "La relación entre caja y envío es inconsistente." };
   if (shipment && (shipment.status !== "confirmado" || (shipment.truckId && shipment.truckId !== truck.id) || boxes.some(item => shipment.boxIds.includes(item.id) && item.truckId && item.truckId !== truck.id))) return { ok: false as const, error: "Todas las cajas de un envío deben viajar en el mismo camión, antes del despacho." };
   if (!(["planificado", "cargando"] as const).includes(truck.status as "planificado" | "cargando")) return { ok: false as const, error: "Solo puedes asignar cajas antes del despacho." };
   if (box.status !== "en-bodega" || box.truckId) return { ok: false as const, error: "La caja debe estar disponible en bodega." };
-  const used = truck.boxIds.map((id) => boxes.find((item) => item.id === id)).filter((item) => item?.categoryId === box.categoryId).length;
-  if (used >= (truck.capacity[box.categoryId] ?? 0)) return { ok: false as const, error: `La capacidad para ${box.categoryId} ya está completa.` };
+  const loaded=boxes.filter(b=>truck.boxIds.includes(b.id));
+  if(truck.maxWeightLb!==undefined&&truckLoad([...loaded,box]).weightLb>truck.maxWeightLb)return {ok:false as const,error:`La carga superaría el límite de peso real de ${truck.maxWeightLb} lb.`};
   if (truck.status === "cargando") {
     const transition = transitionBox(box, "cargada-en-camion", { actor: "Operaciones A&L", note: `Asignada a ${truck.code}.` });
     if (!transition.ok) return transition;

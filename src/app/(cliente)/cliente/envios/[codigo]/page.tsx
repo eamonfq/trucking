@@ -26,8 +26,8 @@ export default async function ShipmentDetail({ params }: { params: Promise<{ cod
       <div className="grid content-start gap-5">
         <Card className="shadow-none">
           <div className="flex items-center gap-3"><Truck className="size-5 text-orange-500" /><div><p className="text-xs text-navy-400">Guía máster</p><p className="font-bold text-navy-900">{truck ? `${truck.code} · salida ${formatDate(truck.departureDate)}` : "Pendiente de asignación"}</p></div></div>
-          <div className="mt-5 flex items-center gap-3 border-t border-stone-200 pt-5"><UserRound className="size-5 text-orange-500" /><div><p className="text-xs text-navy-400">Recibe</p><p className="font-bold text-navy-900">{recipient ? recipient.name : "Destinatario no disponible"}</p></div></div>
-          <div className="mt-5 border-t border-stone-200 pt-5"><p className="text-xs text-navy-400">Destino</p><p className="mt-1 font-bold">{shipment.destinationCity}</p></div>
+          <div className="mt-5 flex items-center gap-3 border-t border-stone-200 pt-5"><UserRound className="size-5 text-orange-500" /><div><p className="text-xs text-navy-400">Recibe</p><p className="font-bold text-navy-900">{recipient ? recipient.name : "Destinatario no disponible"}</p>{recipient&&<a className="text-sm underline" href={`tel:${recipient.phone}`}>{recipient.phone}</a>}</div></div>
+          <div className="mt-5 border-t border-stone-200 pt-5"><p className="text-xs text-navy-400">Destino</p><p className="mt-1 font-bold">{shipment.destinationCity}</p>{shipment.recipientSnapshot&&<p className="mt-2 text-sm">{shipment.recipientSnapshot.address.street} {shipment.recipientSnapshot.address.exteriorNumber}, {shipment.recipientSnapshot.address.neighborhood}, C.P. {shipment.recipientSnapshot.address.postalCode}, {shipment.recipientSnapshot.address.state}</p>}</div>
           <div className="mt-5 flex items-baseline justify-between border-t border-stone-200 pt-5"><p className="text-xs text-navy-400">Total por categorías</p><p className="font-display text-xl font-bold text-orange-600">{formatUsd(total)}</p></div>
         </Card>
         <Card className="shadow-none">

@@ -10,6 +10,36 @@ import { transitionInvoice } from "@/lib/domain/state-machine";
 import { approvePayment, receiveBox } from "@/lib/auth/admin-actions";
 import { reportInvoicePayment } from "@/lib/auth/client-actions";
 import { savePrivateFile, validateUpload } from "@/lib/files/repository";
+import { z } from "zod";
+import { receptionSchema } from "@/lib/schemas/admin";
+
+export async function receivePackageGroup(input:unknown,data:FormData,paymentInput?:unknown){
+  return runMutation("admin",async()=>{
+    const parsed=z.array(receptionSchema).min(1).max(50).safeParse(input);
+    if(!parsed.success)return {ok:false as const,error:parsed.error.issues[0]?.message??"Revisa los paquetes (máximo 50)."};
+    const items=parsed.data;
+    if(items.some(p=>p.customer!==items[0].customer||p.originWarehouseId!==items[0].originWarehouseId||p.recipientId!==items[0].recipientId))return {ok:false as const,error:"Un grupo debe tener el mismo cliente, origen y destinatario."};
+    const prealerts=items.flatMap(p=>p.prealertId?[p.prealertId]:[]);
+    if(new Set(prealerts).size!==prealerts.length)return {ok:false as const,error:"Una prealerta solo puede vincularse a una pieza."};
+    const payment=paymentInput===undefined?null:receptionPaymentSchema.safeParse(paymentInput);
+    if(payment&&!payment.success)return {ok:false as const,error:"Revisa el método y el monto del pago."};
+    const results=[];
+    for(const item of items){
+      const result=await receiveBoxWithPhoto({...item,invoiceNow:!!payment||item.invoiceNow},data);
+      if(!result.ok)return result;
+      results.push(result);
+    }
+    const total=results.reduce((sum,r)=>sum+(r.invoice?invoiceTotal(r.invoice):0),0);
+    if(payment?.success){
+      if(results.some(r=>!r.invoice||r.box.status==="rechazada"))return {ok:false as const,error:"No se puede cobrar un grupo con piezas rechazadas."};
+      if(["tarjeta","transferencia","deposito"].includes(payment.data.method)&&Math.abs((payment.data.amount??0)-total)>0.001)return {ok:false as const,error:`El monto debe cubrir el total del grupo: USD ${total.toFixed(2)}.`};
+      for(const result of results){const saved=await recordWarehousePayment(result.invoice!.id,{...payment.data,amount:invoiceTotal(result.invoice!)},null);if(!saved.ok)return saved;result.invoice=saved.invoice;}
+    }
+    const groupId=crypto.randomUUID();
+    results.forEach((r,index)=>{const group={id:groupId,index:index+1,total:results.length};r.box.receptionGroup=group;boxes.find(b=>b.id===r.box.id)!.receptionGroup=group;});
+    return {ok:true as const,results,total};
+  });
+}
 
 export async function receiveBoxWithPhoto(input: unknown, data: FormData, paymentInput?: unknown) {
   return runMutation("admin", async () => {

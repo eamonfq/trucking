@@ -78,6 +78,9 @@ export type Recipient = {
 export type TimelineEvent = TransitionEvent;
 
 export type Box = {
+  receptionGroup?: { id:string; index:number; total:number };
+  recipientId?: string;
+  recipientSnapshot?: { name:string; phone:string; address:Address };
   originWarehouseId?:string;
   originWarehouseName?:string;
   billing?: import("./utils/billing").BillingSnapshot;
@@ -121,6 +124,7 @@ export type Shipment = {
 };
 
 export type Truck = {
+  maxWeightLb?:number;
   originWarehouseId?:string;
   originWarehouseName?:string;
   stops?: TruckStop[];

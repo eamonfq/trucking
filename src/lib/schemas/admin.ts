@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { categoryIdSchema } from "@/lib/config/category-schema";
 
-export const receptionSchema = z.object({ originWarehouseId:z.string().optional(), billingMode:z.enum(["peso","fijo","manual"]).optional(), customPriceUsd: z.coerce.number().finite().positive().max(100000).multipleOf(0.01).optional(), invoiceNow: z.boolean().optional(), prealertId: z.string().optional(), customer: z.string().min(1, "Selecciona un cliente."), length: z.coerce.number().positive("Escribe el largo."), width: z.coerce.number().positive("Escribe el ancho."), height: z.coerce.number().positive("Escribe el alto."), weightLb: z.coerce.number().positive("Escribe el peso."), overrideCategory: z.string().optional(), overrideReason: z.string().optional(), rejectionReason: z.string().optional(), reject: z.boolean().default(false), photoName: z.string().optional() }).superRefine((data, context) => {
+export const receptionSchema = z.object({ recipientId:z.string().optional(), originWarehouseId:z.string().optional(), billingMode:z.enum(["peso","fijo","manual"]).optional(), customPriceUsd: z.coerce.number().finite().positive().max(100000).multipleOf(0.01).optional(), invoiceNow: z.boolean().optional(), prealertId: z.string().optional(), customer: z.string().min(1, "Selecciona un cliente."), length: z.coerce.number().positive("Escribe el largo."), width: z.coerce.number().positive("Escribe el ancho."), height: z.coerce.number().positive("Escribe el alto."), weightLb: z.coerce.number().positive("Escribe el peso."), overrideCategory: z.string().optional(), overrideReason: z.string().optional(), rejectionReason: z.string().optional(), reject: z.boolean().default(false), photoName: z.string().optional() }).superRefine((data, context) => {
   if (data.overrideCategory && (data.overrideReason?.trim().length ?? 0) < 5) context.addIssue({ code: "custom", path: ["overrideReason"], message: "Explica el motivo de la sobrescritura." });
   if (data.reject && (data.rejectionReason?.trim().length ?? 0) < 5) context.addIssue({ code: "custom", path: ["rejectionReason"], message: "Indica por qué se rechaza la caja." });
 });
@@ -14,7 +14,8 @@ export const truckSchema = z.object({
   newDriverLicense: z.string().trim().optional(),
   departureDate: z.string().min(1, "Selecciona la fecha de salida.").refine((value) => new Date(`${value}T23:59:59`).getTime() >= Date.now(), "La fecha de salida no puede estar en el pasado."),
   destinationCity: z.string().trim().min(2).max(80),
-  capacity: z.record(categoryIdSchema, z.coerce.number().int().min(0).max(999)).refine((value) => Object.values(value).some((amount) => amount > 0), "Define capacidad para al menos una categoría."),
+  maxWeightLb: z.preprocess(v=>v===""||v===null?undefined:v,z.coerce.number().finite().positive().max(1000000).optional()),
+  capacity: z.record(categoryIdSchema, z.coerce.number().int().min(0).max(999)).default({}),
   notes: z.string().trim().max(500, "Las notas no pueden superar 500 caracteres.").optional(),
 }).superRefine((value, context) => {
   if (value.driverId !== "new") return;

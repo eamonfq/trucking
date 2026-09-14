@@ -126,7 +126,7 @@ export async function getDestinationDesk() {
     const visibleBoxes=boxes.filter(box=>box.destinationWarehouseId&&ids.has(box.destinationWarehouseId));
     return {warehouses:allowed.map(w=>({...w,canReceive:actor.role==="admin"||can(actor.warehouseGrants,w.id,"receive")})),
       trucks:trucks.filter(t=>t.stops?.some(s=>ids.has(s.warehouseId))).map(t=>({id:t.id,code:t.code,plate:t.plate,status:t.status,stops:t.stops!.filter(s=>ids.has(s.warehouseId))})),
-      boxes:visibleBoxes.map(box=>{const user=users.find(u=>u.id===box.userId);return {id:box.id,code:box.code,truckId:box.truckId,warehouseId:box.destinationWarehouseId!,status:box.status,dimensions:box.dimensions,weightLb:box.weightLb,originTracking:box.originTracking,receivedAt:box.unloadScan?.at,customer:actor.role==="admin"||can(actor.warehouseGrants,box.destinationWarehouseId!,"viewContacts")?user?{name:`${user.firstName} ${user.paternalLastName}`,email:user.email,phone:user.phone,lockerCode:user.lockerCode}:null:null};})};
+      boxes:visibleBoxes.map(box=>{const user=users.find(u=>u.id===box.userId);return {recipient:actor.role==="admin"||can(actor.warehouseGrants,box.destinationWarehouseId!,"viewContacts")?box.recipientSnapshot?{name:box.recipientSnapshot.name,phone:box.recipientSnapshot.phone}:null:null,id:box.id,code:box.code,truckId:box.truckId,warehouseId:box.destinationWarehouseId!,status:box.status,dimensions:box.dimensions,weightLb:box.weightLb,originTracking:box.originTracking,receivedAt:box.unloadScan?.at,customer:actor.role==="admin"||can(actor.warehouseGrants,box.destinationWarehouseId!,"viewContacts")?user?{name:`${user.firstName} ${user.paternalLastName}`,email:user.email,phone:user.phone,lockerCode:user.lockerCode}:null:null};})};
   });
 }
 

@@ -1,4 +1,5 @@
 "use server";
+import {conflictingDeliverySnapshots} from "@/lib/utils/recipient-snapshot";
 import { runMutation } from "@/lib/db/mutation";
 
 import { getSession } from "@/lib/auth/actions";
@@ -76,17 +77,21 @@ export async function createClientShipment(input: unknown) {
   if (selected.some((box) => box.status === "excede-categoria")) return { ok: false as const, error: "Resuelve las cajas excedidas antes de crear el envío." };
   if (selected.some((box) => box.status !== "en-bodega" || box.truckId || box.shipmentId)) return { ok: false as const, error: "Todas las cajas deben estar disponibles en bodega." };
   const recipient = recipients.find((item) => item.id === parsed.data.recipientId && item.userId === user.id);
+  if(selected.some(b=>b.recipientId&&b.recipientId!==parsed.data.recipientId))return {ok:false as const,error:"Las cajas seleccionadas tienen otro destinatario asignado en recepción. Solicita a operaciones corregirlo antes de crear el envío."};
   const address = recipient && addresses.find((item) => item.id === recipient.addressId && item.userId === user.id);
   if (!recipient || !address) return { ok: false as const, error: "Selecciona un destinatario con dirección vigente." };
+  if(conflictingDeliverySnapshots(selected))return {ok:false as const,error:"Estas piezas tienen datos de entrega distintos registrados en recepción. Crea envíos separados o solicita una corrección."};
+  const receiptSnapshot=selected.find(b=>b.recipientSnapshot)?.recipientSnapshot;
+  const deliveryAddress=receiptSnapshot?.address??address;
   const flow = await configService.getFlowConfig();
   if (parsed.data.deliveryMethod === "domicilio" && flow.deliveryMode === "sucursal") return { ok: false as const, error: "La entrega a domicilio no está habilitada en este momento." };
   if (parsed.data.deliveryMethod === "sucursal" && flow.deliveryMode === "domicilio") return { ok: false as const, error: "Por ahora solo operamos entrega a domicilio." };
   const at = new Date().toISOString();
-  const draft: Shipment = { id: nextId("ship", shipments.length), code: `SH-26${String(shipments.length + 1).padStart(4, "0")}`, userId: user.id, recipientId: recipient.id, boxIds: selected.map((box) => box.id), status: "pendiente", destinationCity: address.municipality, timeline: [{ from: null, to: "pendiente", actor: fullName(user), at, note: `Solicitud creada con ${selected.length} cajas. Entrega: ${parsed.data.deliveryMethod === "domicilio" ? "a domicilio" : "en sucursal"}.` }] };
+  const draft: Shipment = { id: nextId("ship", shipments.length), code: `SH-26${String(shipments.length + 1).padStart(4, "0")}`, userId: user.id, recipientId: recipient.id, boxIds: selected.map((box) => box.id), status: "pendiente", destinationCity: deliveryAddress.municipality, timeline: [{ from: null, to: "pendiente", actor: fullName(user), at, note: `Solicitud creada con ${selected.length} cajas. Entrega: ${parsed.data.deliveryMethod === "domicilio" ? "a domicilio" : "en sucursal"}.` }] };
   const confirmed = transitionShipment(draft, "confirmado", { actor: "Sistema A&L", at, note: "Cajas elegibles y destinatario validados." });
   if (!confirmed.ok) return confirmed;
   confirmed.value.deliveryMethod = parsed.data.deliveryMethod;
-  confirmed.value.recipientSnapshot = { name: recipient.name, phone: recipient.phone, address: { ...address } };
+  confirmed.value.recipientSnapshot = receiptSnapshot?{...receiptSnapshot,address:{...receiptSnapshot.address}}:{ name: recipient.name, phone: recipient.phone, address: { ...address } };
   shipments.push(confirmed.value);
   selected.forEach((box) => { box.shipmentId = confirmed.value.id; });
   recordActivity(user, "envío", `Envío ${confirmed.value.code} creado hacia ${confirmed.value.destinationCity}.`);
@@ -235,7 +240,7 @@ export async function deleteClientRecipient(recipientId: string) {
   if (!user) return { ok: false as const, error: "Tu sesión ya no es válida." };
   const index = recipients.findIndex((item) => item.id === recipientId && item.userId === user.id);
   if (index < 0) return { ok: false as const, error: "No encontramos ese destinatario en tu cuenta." };
-  if (shipments.some((shipment) => shipment.recipientId === recipientId)) return { ok: false as const, error: "El destinatario forma parte del historial de envíos y no puede eliminarse." };
+  if (boxes.some(box=>box.recipientId===recipientId)||shipments.some((shipment) => shipment.recipientId === recipientId)) return { ok: false as const, error: "El destinatario forma parte del historial de envíos y no puede eliminarse." };
   const [removed] = recipients.splice(index, 1);
   recordActivity(user, "destinatario", `Destinatario ${removed!.name} eliminado.`);
   return { ok: true as const };

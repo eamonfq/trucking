@@ -56,6 +56,8 @@ export async function editOperation(input: unknown) {
           Object.assign(box,{originTracking:data.originTracking || undefined,categoryId:data.categoryId,categoryName:rates.find(rate=>rate.id===data.categoryId)?.name??box.categoryName,dimensions,weightLb:data.weightLb});
         } else if (kind === "shipment") {
           const shipment = shipments.find(x=>x.id===id)!;
+          const shipmentBoxes=boxes.filter(b=>shipment.boxIds.includes(b.id));
+          if(session.role!=="admin"&&shipmentBoxes.some(b=>b.recipientSnapshot))throw new Error("La entrega fue registrada en recepción. Solicita a operaciones corregir el destinatario o la dirección de estas piezas.");
           if (shipment.truckId || !["pendiente","confirmado"].includes(shipment.status) || boxes.some(x=>shipment.boxIds.includes(x.id) && x.truckId)) throw new Error("Retira la asignación al camión antes de cambiar la entrega. Después del despacho solo se permiten aclaraciones.");
           const data=z.object({recipientId:z.string().min(1),deliveryMethod:z.enum(["sucursal","domicilio"])}).strict().parse(values);
           const recipient=recipients.find(x=>x.id===data.recipientId && x.userId===shipment.userId);
@@ -64,6 +66,13 @@ export async function editOperation(input: unknown) {
           const flow=await configService.getFlowConfig();
           if (flow.deliveryMode!=="ambas" && flow.deliveryMode!==data.deliveryMethod) throw new Error("Ese método de entrega está deshabilitado.");
           Object.assign(shipment,{...data,destinationCity:address.municipality,recipientSnapshot:{name:recipient.name,phone:recipient.phone,address:{...address}}});
+          for(const box of shipmentBoxes){
+            const previous=JSON.parse(JSON.stringify(box));
+            box.recipientId=recipient.id;
+            box.recipientSnapshot={name:recipient.name,phone:recipient.phone,address:{...address}};
+            box.timeline.push({from:box.status,to:box.status,actor:actorName,at,note:`Entrega corregida junto con ${shipment.code}: ${reason}. Reimprimir etiqueta.`});
+            edits.unshift({id:crypto.randomUUID(),kind:"box",entityId:box.id,actorId:session.userId,at,reason,before:previous,after:JSON.parse(JSON.stringify(box))});
+          }
         } else if (kind === "payment") {
           const invoice=invoices.find(x=>x.id===id)!;
           if(invoice.status!=="pago-reportado" || !invoice.paymentReport) throw new Error("Solo se corrige un reporte pendiente de revisión.");
