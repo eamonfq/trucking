@@ -40,7 +40,8 @@ import { checkPassword } from "@/lib/auth/crypto";
 import { sendEmail, decryptEmail, deliverPendingEmails } from "@/lib/services/email";
 import { renderEmail } from "@/lib/services/email-template";
 import {receivePackageGroup} from "@/lib/auth/file-actions";
-import {deleteCustomerRecipient} from "@/lib/auth/admin-actions";
+import {deleteCustomerRecipient,upsertCustomerRecipient} from "@/lib/auth/admin-actions";
+import {getReceptionContacts} from "@/lib/auth/reception-contacts";
 import { POST as webhook } from "@/app/api/webhooks/resend/route";
 
 import { saveWarehouse, saveWarehouseOperator, getWarehouseAdministration, getDestinationDesk, saveTruckStops, scanLoad, scanUnload, saveAdminPrealert, selectPrealertAtWarehouse } from "@/lib/auth/warehouse-actions";
@@ -926,6 +927,27 @@ describe.sequential("Real MySQL authentication and operations", () => {
     expect(load.ok).toBe(false);if(!load.ok)expect(load.error).toContain("otro almacén de origen");
   });
 
+  it("persists reception recipients with new or existing addresses and rejects invalid cross-client writes",async()=>{
+    cookieJar.set("ayl_session",{value:adminSession});
+    const created=await createCustomerAtReception({...customer,email:"recipient-address@example.invalid"});
+    if(!created.ok)throw new Error("customer");
+    const id=created.user.id, initial=await getReceptionContacts(id);
+    expect(initial.recipients).toHaveLength(0);
+    const newAddress={...customer,label:"Casa destino",street:"Destino nuevo"};
+    const result=await upsertCustomerRecipient(id,{name:"Juan Perez",phone:"+15551234567",addressId:""},undefined,newAddress);
+    expect(result.ok).toBe(true);if(!result.ok)throw new Error(result.error);
+    const persisted=await getReceptionContacts(id);
+    expect(persisted.recipients.find(r=>r.id===result.recipient.id)?.addressId).toBe(result.address?.id);
+    expect(persisted.addresses.find(a=>a.id===result.address?.id)?.street).toBe("Destino nuevo");
+    const bad=await upsertCustomerRecipient(id,{name:"X",phone:"bad",addressId:""},undefined,newAddress);
+    expect(bad.ok).toBe(false);expect((await getReceptionContacts(id)).addresses).toHaveLength(initial.addresses.length+1);
+    const other=(await getReceptionContacts(userId)).addresses[0];
+    expect((await upsertCustomerRecipient(id,{name:"Juan Perez",phone:"5512345678",addressId:other.id})).ok).toBe(false);
+    const edited=await upsertCustomerRecipient(id,{name:"Juan actualizado",phone:"5512345678",addressId:initial.addresses[0].id},result.recipient.id);
+    expect(edited.ok).toBe(true);expect((await getReceptionContacts(id)).recipients[0].name).toBe("Juan actualizado");
+    expect((await upsertCustomerRecipient(id,{name:"Persona válida",phone:"5512345678",addressId:""},"missing",newAddress)).ok).toBe(false);
+    expect((await getReceptionContacts(id)).addresses).toHaveLength(initial.addresses.length+1);
+  });
   it("creates multiple recipients and receives individually numbered packages atomically",async()=>{
     cookieJar.set("ayl_session",{value:adminSession});
     const created=await createCustomerAtReception({...customer,email:"group-reception@example.invalid",recipients:[{name:"María López",phone:"+525512345678"},{name:"Juan López",phone:"+525587654321"}]});

@@ -74,8 +74,8 @@ export function ReceptionForm({ users, prealerts = [], excessPolicy, excessFeeUs
           <CustomerSearch users={customers} value={values.customer} error={errors.customer?.message} onChange={id=>{setValue("customer",id,{shouldValidate:true});setValue("prealertId","");setValue("recipientId","");}}/>
           <CustomerQuickCreate onCreated={user=>{setCustomers(current=>[...current.filter(item=>item.id!==user.id),user]);setValue("prealertId","");setValue("customer",user.id,{shouldValidate:true});setValue("recipientId","");}}/>
         </div>
-        {values.customer&&<ReceptionRecipient key={values.customer} userId={values.customer} value={values.recipientId??""} onChange={id=>setValue("recipientId",id)}/>}
-        <ReceptionPrealertPicker key={values.customer??""} items={prealerts.filter(box=>box.status==="pre-alertada"&&box.userId===values.customer&&!receivedIds.includes(box.id))} value={values.prealertId??""} disabled={!values.customer} busy={selectingPrealert} onChange={async id=>{
+        {values.customer&&<ReceptionRecipient key={`recipient:${values.customer}`} userId={values.customer} value={values.recipientId??""} onChange={id=>setValue("recipientId",id)}/>}
+        <ReceptionPrealertPicker key={`prealert:${values.customer??""}`} items={prealerts.filter(box=>box.status==="pre-alertada"&&box.userId===values.customer&&!receivedIds.includes(box.id))} value={values.prealertId??""} disabled={!values.customer} busy={selectingPrealert} onChange={async id=>{
           if(!id){setValue("prealertId","");return;}
           const customerId=values.customer;if(!customerId)return;
           setSelectingPrealert(true);
