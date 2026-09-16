@@ -1,4 +1,4 @@
-import React,{act} from 'react';
+import React,{act,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {afterEach,expect,it,vi} from 'vitest';
 import {readFileSync} from 'node:fs';
@@ -6,6 +6,7 @@ import {ReceptionRecipient} from './reception-recipient';
 import {ReceptionForm} from './reception-form';
 import {getReceptionContacts} from '@/lib/auth/reception-contacts';
 import {upsertCustomerRecipient} from '@/lib/auth/admin-actions';
+import {receivePackageGroup} from '@/lib/auth/file-actions';
 vi.mock('@/lib/auth/reception-contacts',()=>({getReceptionContacts:vi.fn()}));
 vi.mock('@/lib/auth/admin-actions',()=>({upsertCustomerRecipient:vi.fn(),deleteCustomerRecipient:vi.fn()}));
 vi.mock('@/lib/auth/file-actions',()=>({receivePackageGroup:vi.fn()}));
@@ -19,6 +20,32 @@ function mount(element:React.ReactNode){const node=document.createElement('div')
 afterEach(()=>{for(const {root,node} of mounts.splice(0)){act(()=>root.unmount());node.remove();}vi.clearAllMocks();});
 const addr={id:'a',userId:'u',label:'Casa',street:'Reforma',exteriorNumber:'10',neighborhood:'Centro',postalCode:'49540',municipality:'Valle de Juárez',state:'Jalisco'};
 const person={id:'r',userId:'u',name:'Juan Perez',phone:'5512345678',addressId:'a'};
+it('submits equal dimensions with different weights and starts a clean next reception without refresh',async()=>{
+ vi.mocked(getReceptionContacts).mockResolvedValue({recipients:[person],addresses:[addr]});
+ vi.mocked(receivePackageGroup).mockResolvedValue({ok:true,results:[{box:{id:'b1',status:'en-bodega'}},{box:{id:'b2',status:'en-bodega'}}],total:761.6} as never);
+ const {node}=mount(<ReceptionForm users={[]} defaultCustomerId="u" rates={[]} origins={[{id:'origin',name:'Origen'}]} excessPolicy="recargo"/>);await act(async()=>{});
+ await fill('length','16');await fill('width','26');await fill('height','15');await fill('weightLb','55');
+ act(()=>node.querySelector<HTMLButtonElement>('[aria-label="Agregar un paquete"]')!.click());
+ expect(Array.from(node.querySelectorAll('input[type="checkbox"]')).find(e=>e.closest("label")?.textContent?.includes('Confirmo el mismo peso'))).toHaveProperty('checked',false);
+ await act(async()=>{const el=node.querySelector<HTMLInputElement>('[aria-label="Paquete 2 · Peso (lb)"]')!;Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(el,'140');el.dispatchEvent(new Event('input',{bubbles:true}));});
+ await act(async()=>node.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ const batch=vi.mocked(receivePackageGroup).mock.calls[0][0] as Array<{length:number;weightLb:number}>;
+ expect(batch.map(p=>p.weightLb)).toEqual([55,140]);expect(batch.map(p=>p.length)).toEqual([16,16]);
+ expect(node.textContent).toContain('2 paquetes registrados');expect(node.querySelector('form')).toBeNull();
+ await act(async()=>Array.from(node.querySelectorAll('button')).find(b=>b.textContent?.includes('Registrar otro paquete'))!.click());
+ expect(node.querySelector<HTMLInputElement>('[name="length"]')!.value).toBe('');expect(node.querySelector<HTMLInputElement>('[name="weightLb"]')!.value).toBe('');expect(node.querySelector<HTMLInputElement>('[aria-label="Cantidad de paquetes"]')!.value).toBe('1');expect(node.textContent).toContain('Juan Perez');
+});
+it('defaults to the initial recipient, hides search, and lets the operator switch without overwriting the choice',async()=>{
+ const second={...person,id:'second',name:'María López'};
+ vi.mocked(getReceptionContacts).mockResolvedValue({recipients:[person,second],addresses:[addr]});
+ function Harness(){const [value,setValue]=useState('');return <ReceptionRecipient userId="u" value={value} onChange={setValue}/>;}
+ const {node}=mount(<Harness/>);await act(async()=>{});
+ expect(node.textContent).toContain('Juan Perez');expect(node.textContent).toContain('Principal');expect(node.textContent).toContain('Reforma 10');expect(node.querySelector('input')).toBeNull();
+ act(()=>Array.from(node.querySelectorAll('button')).find(b=>b.textContent==='Cambiar destinatario')!.click());
+ const dialog=document.querySelector('[role="dialog"]')!;
+ act(()=>Array.from(dialog.querySelectorAll('button')).find(b=>b.textContent?.includes('María López'))!.click());
+ expect(node.textContent).toContain('María López');expect(node.textContent).not.toContain('Juan Perez');expect(document.querySelector('[role="dialog"]')).toBeNull();
+});
 async function fill(name:string,value:string){await act(async()=>{const el=document.querySelector<HTMLInputElement>('[name="'+name+'"]')!;Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(el,value);el.dispatchEvent(new Event('input',{bubbles:true}));});}
 it('uses distinct sibling keys for recipients and prealerts',()=>{const source=readFileSync('src/components/admin/reception-form.tsx','utf8');expect(source).toContain('key={`recipient:${values.customer}`}');expect(source).toContain('key={`prealert:${values.customer??""}`}');});
 it('keeps exactly one recipient block in the actual reception form through repeated client changes',async()=>{

@@ -24,6 +24,7 @@ import { drivers } from "@/lib/db/collections";
 import { notifications } from "@/lib/db/collections";
 import { configService } from "@/lib/services/config";
 import { sendEmail, siteUrl } from "@/lib/services/email";
+import { currentReceptionGroup } from "@/lib/services/reception-context";
 import { simulateLatency } from "@/lib/services/delay";
 import { transitionBox, transitionInvoice, transitionTruckWithCascade } from "@/lib/domain/state-machine";
 import type { BoxCategory, BoxCategoryId } from "@/lib/config/box-categories";
@@ -303,11 +304,14 @@ export async function receiveBox(input: unknown) {
   if (mode==="fijo" && !custom && !parsed.data.reject && flow.excessPolicy === "rechazo" && prealert && !suggestCategory(dimensions, parsed.data.weightLb, catalog.filter(rate => rate.id === prealert.categoryId)).category) return { ok: false as const, error: "La caja excede la categoría prealertada y la política activa exige rechazo. Registra el motivo." };
   const createdAt = now();
   const id = prealert?.id ?? nextId("box", boxes.length);
-  const code = prealert?.code ?? `BX-26${String(boxes.length + 1).padStart(4, "0")}` as const;
+  const receptionGroup=currentReceptionGroup();
+  const code = receptionGroup ? `${receptionGroup.code}${receptionGroup.total>1?`-${String(receptionGroup.index).padStart(2,"0")}`:""}` as const : prealert?.code ?? `BX-26${String(boxes.length + 1).padStart(4, "0")}` as const;
+  if(boxes.some(b=>b.code===code&&b.id!==id))return {ok:false as const,error:"El código de recepción ya existe. Actualiza e intenta nuevamente."};
   const rejected = Boolean(parsed.data.reject);
   const note = custom ? (mode==="manual" ? `Carga personalizada. Precio acordado USD ${parsed.data.customPriceUsd}. Medidas y peso reales registrados.` : "Carga fuera de categoría estándar. Cobro por libra.") : rejected ? parsed.data.rejectionReason : parsed.data.overrideCategory ? parsed.data.overrideReason : suggestion.reason ? `Categoría ajustada por ${suggestion.reason.replaceAll("-", " ")}.` : "Medidas y peso validados.";
   const billing = rejected ? undefined : calculateBilling(mode, dimensions, parsed.data.weightLb, flow, mode==="manual" ? parsed.data.customPriceUsd : rates.find(rate=>rate.id===categoryId)?.priceUsd);
   const box: Box = {
+    receptionGroup,
     recipientId:recipient?.id,recipientSnapshot:recipient&&recipientAddress?{name:recipient.name,phone:recipient.phone,address:{...recipientAddress}}:undefined,
     billing, originWarehouseId:origin?.id,originWarehouseName:origin?.name,
     id, code, userId: customer.id, categoryId, categoryName: custom ? CUSTOM_CARGO_NAME : rates.find(rate=>rate.id===categoryId)?.name ?? categoryId, customPriceUsd:billing?.amountUsd, status: rejected ? "rechazada" : "en-bodega", dimensions, weightLb: parsed.data.weightLb,

@@ -1,4 +1,5 @@
 import "server-only";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { Resend } from "resend";
 import type { RowDataPacket } from "mysql2/promise";
@@ -16,8 +17,17 @@ export function decryptEmail(value: { iv: string; tag: string; data: string }): 
   const decipher = createDecipheriv("aes-256-gcm", key(), Buffer.from(value.iv, "base64")); decipher.setAuthTag(Buffer.from(value.tag, "base64"));
   return JSON.parse(Buffer.concat([decipher.update(Buffer.from(value.data, "base64")), decipher.final()]).toString());
 }
+const emailBatch = new AsyncLocalStorage<boolean>();
+// Only the caller's async operation is consolidated, never concurrent requests.
+export async function withConsolidatedEmail<T>(work:()=>Promise<T>, summary:(result:T)=>EmailInput|undefined){
+  const result=await emailBatch.run(true,work);
+  const message=summary(result);
+  if(message)await sendEmail(message);
+  return result;
+}
 export async function sendEmail(input: EmailInput) {
   const id = crypto.randomUUID();
+  if(emailBatch.getStore())return {status:"consolidated" as const,id};
   await sql().execute("INSERT INTO email_outbox(id,payload) VALUES (?,?)", [id, JSON.stringify(encrypt(input))]);
   return { status: "queued" as const, id };
 }

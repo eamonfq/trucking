@@ -957,15 +957,27 @@ describe.sequential("Real MySQL authentication and operations", () => {
     const origin=(await getWarehouseAdministration()).warehouses.find(w=>w.kind==="origen")!;
     const item={customer:created.user.id,recipientId:contacts[0].id,originWarehouseId:origin.id,length:10,width:10,height:10,weightLb:10,billingMode:"manual",customPriceUsd:25,reject:false};
     const before=(await logisticsService.getBoxes()).length;
+    const [mailBefore]=await root.query<mysql.RowDataPacket[]>("SELECT id FROM email_outbox");
     const bad=await receivePackageGroup([item,{...item,customPriceUsd:35}],new FormData(),{method:"tarjeta",amount:1,warehouseId:"qa-location"});
     expect(bad.ok).toBe(false);expect((await logisticsService.getBoxes()).length).toBe(before);
+    const [mailAfterFailure]=await root.query<mysql.RowDataPacket[]>("SELECT id FROM email_outbox");
+    expect(mailAfterFailure.length).toBe(mailBefore.length);
     const received=await receivePackageGroup([item,{...item,length:20,weightLb:30,customPriceUsd:35}],new FormData(),{method:"tarjeta",amount:60,warehouseId:"qa-location"});
     expect(received.ok).toBe(true);if(!received.ok)throw new Error("batch receipt");
     expect(received.results).toHaveLength(2);expect(received.total).toBe(60);
+    const [mailAfter]=await root.query<mysql.RowDataPacket[]>("SELECT id,payload FROM email_outbox");
+    const added=mailAfter.filter(m=>!mailBefore.some(b=>b.id===m.id));
+    expect(added).toHaveLength(1);
+    const summary=decryptEmail(typeof added[0].payload==="string"?JSON.parse(added[0].payload):added[0].payload);
+    expect(summary.to).toBe("group-reception@example.invalid");expect(summary.body).toContain("2 unidad(es)");expect(summary.body).toContain("USD 60.00");
+    const receiptCode=received.results[0].box.receptionGroup!.code!;
+    expect(receiptCode).toBeTruthy();expect(summary.subject).toContain(receiptCode);
     const saved=await logisticsService.getBoxes();
     for(const [i,r] of received.results.entries()){
       const box=saved.find(b=>b.id===r.box.id)!;
-      expect(box.receptionGroup).toMatchObject({index:i+1,total:2});
+      expect(box.receptionGroup).toMatchObject({code:receiptCode,index:i+1,total:2});
+      expect(box.code).toBe(`${receiptCode}-${String(i+1).padStart(2,"0")}`);
+      expect(r.invoice?.lines[0].description).toContain(box.code);
       expect(box.recipientSnapshot).toMatchObject({name:"María López",phone:"+525512345678"});
       expect(r.invoice?.status).toBe("pagada");
     }
@@ -1010,6 +1022,23 @@ describe.sequential("Real MySQL authentication and operations", () => {
     expect((await logisticsService.getTruckById(trip.truck.id))?.status).toBe("cerrado");
   });
 
+  it("consolidates cash and destination groups independently under concurrent reception",async()=>{
+    cookieJar.set("ayl_session",{value:adminSession});
+    const origin=(await getWarehouseAdministration()).warehouses.find(w=>w.kind==="origen")!;
+    const item={customer:operationClient,originWarehouseId:origin.id,length:10,width:10,height:10,weightLb:10,billingMode:"manual",customPriceUsd:25,reject:false};
+    const [before]=await root.query<mysql.RowDataPacket[]>("SELECT id FROM email_outbox");
+    const results=await Promise.all(["efectivo","destino"].map(method=>receivePackageGroup([item,item,item],new FormData(),{method,warehouseId:"qa-location"})));
+    expect(results.every(r=>r.ok)).toBe(true);
+    const codes=results.flatMap(r=>r.ok?[r.results[0].box.receptionGroup!.code]:[]);
+    expect(new Set(codes).size).toBe(2);
+    const [after]=await root.query<mysql.RowDataPacket[]>("SELECT id,payload FROM email_outbox");
+    const added=after.filter(m=>!before.some(b=>b.id===m.id));expect(added).toHaveLength(2);
+    const messages=added.map(m=>decryptEmail(typeof m.payload==="string"?JSON.parse(m.payload):m.payload));
+    for(const code of codes)expect(messages.filter(m=>m.subject.includes(code!))).toHaveLength(1);
+    expect(messages.every(m=>m.body.includes("3 unidad(es)")&&m.body.includes("USD 75.00"))).toBe(true);
+    expect(messages.some(m=>m.body.includes("pendiente-pago-destino"))).toBe(true);
+    expect(messages.some(m=>m.body.includes("pagada"))).toBe(true);
+  });
   it("loads without category quotas and enforces an optional real-weight limit",async()=>{
     cookieJar.set("ayl_session",{value:adminSession});
     const locations=(await getWarehouseAdministration()).warehouses;

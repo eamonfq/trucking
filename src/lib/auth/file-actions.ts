@@ -2,7 +2,8 @@
 import { appendPayment, paymentLocation } from "@/lib/services/payment-records";
 import { runMutation } from "@/lib/db/mutation";
 import { requireAdminUser } from "@/lib/auth/actions";
-import { sendEmail, siteUrl } from "@/lib/services/email";
+import { withReceptionPiece } from "@/lib/services/reception-context";
+import { withConsolidatedEmail, sendEmail, siteUrl } from "@/lib/services/email";
 import { boxes, invoices, users, notifications } from "@/lib/db/collections";
 import { receptionPaymentSchema } from "@/lib/schemas/reception-payment";
 import { invoiceTotal, matchesInvoiceTotal } from "@/lib/utils/invoices";
@@ -14,7 +15,7 @@ import { z } from "zod";
 import { receptionSchema } from "@/lib/schemas/admin";
 
 export async function receivePackageGroup(input:unknown,data:FormData,paymentInput?:unknown){
-  return runMutation("admin",async()=>{
+  return runMutation("admin",async()=>withConsolidatedEmail(async()=>{
     const parsed=z.array(receptionSchema).min(1).max(50).safeParse(input);
     if(!parsed.success)return {ok:false as const,error:parsed.error.issues[0]?.message??"Revisa los paquetes (máximo 50)."};
     const items=parsed.data;
@@ -24,8 +25,10 @@ export async function receivePackageGroup(input:unknown,data:FormData,paymentInp
     const payment=paymentInput===undefined?null:receptionPaymentSchema.safeParse(paymentInput);
     if(payment&&!payment.success)return {ok:false as const,error:"Revisa el método y el monto del pago."};
     const results=[];
-    for(const item of items){
-      const result=await receiveBoxWithPhoto({...item,invoiceNow:!!payment||item.invoiceNow},data);
+    const groupId=crypto.randomUUID();
+    const groupCode=boxes.find(b=>b.id===items[0].prealertId)?.code??`BX-26${String(boxes.length+1).padStart(4,"0")}` as const;
+    for(const [index,item] of items.entries()){
+      const result=await withReceptionPiece({id:groupId,code:groupCode,index:index+1,total:items.length},()=>receiveBoxWithPhoto({...item,invoiceNow:!!payment||item.invoiceNow},data));
       if(!result.ok)return result;
       results.push(result);
     }
@@ -35,10 +38,16 @@ export async function receivePackageGroup(input:unknown,data:FormData,paymentInp
       if(["tarjeta","transferencia","deposito"].includes(payment.data.method)&&Math.abs((payment.data.amount??0)-total)>0.001)return {ok:false as const,error:`El monto debe cubrir el total del grupo: USD ${total.toFixed(2)}.`};
       for(const result of results){const saved=await recordWarehousePayment(result.invoice!.id,{...payment.data,amount:invoiceTotal(result.invoice!)},null);if(!saved.ok)return saved;result.invoice=saved.invoice;}
     }
-    const groupId=crypto.randomUUID();
-    results.forEach((r,index)=>{const group={id:groupId,index:index+1,total:results.length};r.box.receptionGroup=group;boxes.find(b=>b.id===r.box.id)!.receptionGroup=group;});
     return {ok:true as const,results,total};
-  });
+  },result=>{
+    if(!result.ok)return;
+    const first=result.results[0].box,customer=users.find(u=>u.id===first.userId);
+    if(!customer)return;
+    const code=first.receptionGroup?.code??first.code;
+    const rejected=result.results.filter(r=>r.box.status==="rechazada").length;
+    const invoiceList=result.results.flatMap(r=>r.invoice?[`${r.invoice.number} (${r.invoice.status})`]:[]);
+    return {to:customer.email,subject:`Recepción ${code} · ${result.results.length} unidad(es)`,heading:rejected?"Recepción registrada con observaciones":"Tu paquete ya está en bodega",body:`Recepción ${code}: ${result.results.length} unidad(es). ${result.results.map(r=>`${r.box.code}: ${r.box.weightLb} lb, ${r.box.dimensions.length} × ${r.box.dimensions.width} × ${r.box.dimensions.height} in`).join("; ")}. ${rejected?`${rejected} unidad(es) rechazada(s); consulta los motivos en tu panel.`:""} ${invoiceList.length?`Total facturado: USD ${result.total.toFixed(2)}. Facturas: ${invoiceList.join(", ")}.`:"El cobro se determinará según la configuración de facturación."}`,actionLabel:"Ver mis paquetes",actionUrl:`${siteUrl()}/cliente/cajas`};
+  }));
 }
 
 export async function receiveBoxWithPhoto(input: unknown, data: FormData, paymentInput?: unknown) {

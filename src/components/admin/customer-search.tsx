@@ -1,11 +1,13 @@
 "use client";
 import { useId, useMemo, useState } from "react";
 import type { User } from "@/lib/types";
+import { ArrowLeftRight, UserRound, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
 const normalize = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
 export function CustomerSearch({ users, value, onChange, error }: { users: User[]; value?: string; onChange: (id: string) => void; error?: string }) {
+  const [editing, setEditing] = useState(false);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -16,18 +18,18 @@ export function CustomerSearch({ users, value, onChange, error }: { users: User[
     return users.filter(user => user.role === "cliente" && user.active && terms.every(term => normalize(`${user.firstName} ${user.paternalLastName} ${user.maternalLastName ?? ""} ${user.email} ${user.phone} ${user.lockerCode}`).includes(term)));
   }, [users, query]);
   const results = matches.slice(0, 12);
-  function select(user: User) { onChange(user.id); setQuery(""); setOpen(false); setActive(0); }
+  function select(user: User) { onChange(user.id); setQuery(""); setOpen(false); setActive(0); setEditing(false); }
   return <div className="relative min-w-0" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setOpen(false); }}>
-    <Input label="Buscar cliente o casillero" value={query} role="combobox" autoComplete="off" aria-autocomplete="list" aria-expanded={open} aria-controls={listId} aria-activedescendant={open && results[active] ? `${listId}-${active}` : undefined}
+    {(!selected || editing) && <div className="flex items-start gap-2"><div className="min-w-0 flex-1"><Input autoFocus={editing} label="Buscar cliente o casillero" value={query} role="combobox" autoComplete="off" aria-autocomplete="list" aria-expanded={open} aria-controls={listId} aria-activedescendant={open && results[active] ? `${listId}-${active}` : undefined}
       placeholder="Nombre, correo, teléfono o AL-MX…" error={error} onFocus={() => setOpen(true)}
       onChange={event => { setQuery(event.target.value); setOpen(true); setActive(0); }}
       onKeyDown={event => {
-        if (event.key === "Escape") { setOpen(false); event.preventDefault(); }
+        if (event.key === "Escape") { setOpen(false); setEditing(false); event.preventDefault(); }
         if (event.key === "ArrowDown") { event.preventDefault(); setOpen(true); setActive(index => Math.min(index + 1, results.length - 1)); }
         if (event.key === "ArrowUp") { event.preventDefault(); setActive(index => Math.max(0, index - 1)); }
         if (event.key === "Enter" && open) { event.preventDefault(); if (results[active]) select(results[active]); }
-      }} />
-    {selected && <div className="mt-2 rounded-lg border border-success/30 bg-success-50 p-3 text-sm" role="status"><strong>{selected.lockerCode} · {selected.firstName} {selected.paternalLastName}</strong><p className="break-all text-ink-700">{selected.email}</p><button type="button" className="mt-1 min-h-9 text-brand-700 underline" onClick={() => { onChange(""); setOpen(true); }}>Cambiar cliente</button></div>}
+      }} /></div>{selected&&<button type="button" aria-label="Cancelar cambio de cliente" className="mt-6 grid size-10 place-items-center rounded-lg text-navy-500 hover:bg-stone-100" onClick={()=>{setEditing(false);setOpen(false);}}><X className="size-4"/></button>}</div>}
+    {selected && !editing && <div className="flex items-center gap-3 rounded-xl bg-stone-50/80 px-4 py-3" role="status"><span className="grid size-10 shrink-0 place-items-center rounded-full bg-white text-navy-700 ring-1 ring-stone-200"><UserRound className="size-4"/></span><div className="min-w-0 flex-1"><span className="whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.12em] text-navy-500">{selected.lockerCode}</span><p className="truncate text-sm font-semibold text-navy-950">{selected.firstName} {selected.paternalLastName}</p><p className="truncate text-xs text-navy-500">{selected.email}</p></div><button type="button" aria-label="Cambiar cliente" className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-navy-600 transition hover:bg-white hover:text-navy-950 focus-visible:outline-2 focus-visible:outline-brand-600" onClick={() => { setEditing(true); setOpen(true); }}><ArrowLeftRight className="size-3.5"/><span>Cambiar</span></button></div>}
     {open && <div className="absolute z-30 mt-1 w-full rounded-xl border border-line-300 bg-white shadow-pop">
       <p className="px-4 py-2 text-xs text-ink-500">{matches.length} coincidencias{matches.length > 12 ? " · mostrando 12; precisa tu búsqueda" : ""}</p>
       <ul id={listId} role="listbox" aria-label="Clientes encontrados" className="max-h-64 overflow-auto p-1">

@@ -22,7 +22,7 @@ const EMPTY: QuickInput = {
   street: "", exteriorNumber: "", interiorNumber: "", neighborhood: "", postalCode: "", municipality: "", state: "", references: "",
 };
 
-export function CustomerQuickCreate({ onCreated }: { onCreated: (user: User, address: Address) => void }) {
+export function CustomerQuickCreate({ onCreated, compact=false }: { compact?:boolean; onCreated: (user: User, address: Address) => void }) {
   const [people,setPeople]=useState<Array<{name:string;phone:string}>>([]);
   const [open, setOpen] = useState(false);
   const [created, setCreated] = useState<{ user: User; invitationStatus: string } | null>(null);
@@ -41,7 +41,7 @@ export function CustomerQuickCreate({ onCreated }: { onCreated: (user: User, add
   });
 
   return <>
-    <Button type="button" variant="ghost" onClick={() => setOpen(true)}><UserPlus className="size-4" />Nuevo cliente</Button>
+    {compact?<button type="button" onClick={()=>setOpen(true)} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-2 text-xs font-semibold text-navy-600 transition hover:bg-stone-100"><UserPlus className="size-3.5"/>Nuevo cliente</button>:<Button type="button" variant="ghost" onClick={() => setOpen(true)}><UserPlus className="size-4" />Nuevo cliente</Button>}
 
     <Dialog open={open} onClose={close} size="large" title={created ? "Cliente creado" : "Alta rápida de cliente"} description={created ? undefined : "Completa contacto y dirección. El cliente quedará seleccionado al crear la cuenta."}>
       {created

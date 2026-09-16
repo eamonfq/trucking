@@ -2,6 +2,22 @@
 .pos select { min-height: 42px; padding-top: 8px; padding-bottom: 8px; }
 .pos button { min-height: 40px; }
 .pos input[type="radio"], .pos input[type="checkbox"] { accent-color: #e8621c; }
+.quantity { display:flex; align-items:center; width:126px; flex-shrink:0; border:1px solid #e7e5e4; border-radius:10px; background:#fafaf9; padding:3px; }
+.quantity button { display:grid; place-items:center; width:34px; min-height:34px; color:#34435a; border-radius:7px; }
+.quantity button:hover:not(:disabled) { background:white; box-shadow:0 1px 3px #17233812; }
+.quantity button:disabled { opacity:.3; }
+.pos .quantity input { width:50px; min-height:34px; padding:0; border:0; background:transparent; text-align:center; font-size:14px; font-weight:600; font-variant-numeric:tabular-nums; appearance:textfield; }
+.quantity input::-webkit-inner-spin-button, .quantity input::-webkit-outer-spin-button { appearance:none; margin:0; }
+.pieces { width:100%; min-width:420px; border-collapse:collapse; text-align:left; font-size:12px; }
+.pieces th { padding:8px 6px; font-weight:500; color:#34435a; }
+.pieces thead th { color:#627083; font-size:11px; background:#fafaf9; }
+.pieces thead span { font-weight:400; }
+.pieces tbody tr { border-bottom:1px solid #f1f0ee; }
+.pieces td { padding:7px 5px; }
+.pieces td:last-child { white-space:nowrap; }
+.pos .pieces input { width:100%; min-width:44px; max-width:94px; min-height:36px; border:1px solid #e7e5e4; border-radius:7px; padding:6px 8px; background:#fff; outline:none; font-variant-numeric:tabular-nums; }
+.pieces input:focus { border-color:#c94e13; box-shadow:0 0 0 2px #c94e1310; }
+.pieces input::-webkit-inner-spin-button { appearance:none; }
 @media (min-width: 1024px) {
   .pos > aside { position: sticky; top: 16px; }
 }

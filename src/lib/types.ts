@@ -78,7 +78,7 @@ export type Recipient = {
 export type TimelineEvent = TransitionEvent;
 
 export type Box = {
-  receptionGroup?: { id:string; index:number; total:number };
+  receptionGroup?: { id:string; code?:string; index:number; total:number };
   recipientId?: string;
   recipientSnapshot?: { name:string; phone:string; address:Address };
   originWarehouseId?:string;
