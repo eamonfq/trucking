@@ -26,8 +26,12 @@ it('submits equal dimensions with different weights and starts a clean next rece
  const {node}=mount(<ReceptionForm users={[]} defaultCustomerId="u" rates={[]} origins={[{id:'origin',name:'Origen'}]} excessPolicy="recargo"/>);await act(async()=>{});
  await fill('length','16');await fill('width','26');await fill('height','15');await fill('weightLb','55');
  act(()=>node.querySelector<HTMLButtonElement>('[aria-label="Agregar un paquete"]')!.click());
+ expect(node.querySelector('[aria-label="Total de recepción"]')!.textContent).toContain('Subtotal provisional');
  expect(Array.from(node.querySelectorAll('input[type="checkbox"]')).find(e=>e.closest("label")?.textContent?.includes('Confirmo el mismo peso'))).toHaveProperty('checked',false);
  await act(async()=>{const el=node.querySelector<HTMLInputElement>('[aria-label="Paquete 2 · Peso (lb)"]')!;Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(el,'140');el.dispatchEvent(new Event('input',{bubbles:true}));});
+ expect(node.querySelector('[aria-label="Total de recepción"]')!.textContent).toContain('2 de 2 unidades calculadas');
+ expect(node.querySelector('[aria-label="Total de recepción"]')!.textContent).toContain('828.80');
+ expect(receivePackageGroup).not.toHaveBeenCalled();
  await act(async()=>node.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
  const batch=vi.mocked(receivePackageGroup).mock.calls[0][0] as Array<{length:number;weightLb:number}>;
  expect(batch.map(p=>p.weightLb)).toEqual([55,140]);expect(batch.map(p=>p.length)).toEqual([16,16]);

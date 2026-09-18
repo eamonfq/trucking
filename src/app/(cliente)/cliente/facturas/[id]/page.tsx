@@ -22,7 +22,7 @@ export default async function InvoiceDetail({ params }: { params: Promise<{ id: 
   const total = invoiceTotal(invoice);
   return <>
     <Link href="/cliente/facturas" className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-navy-500"><ArrowLeft className="size-4" />Mis facturas</Link>
-    <SectionTitle eyebrow="Detalle de factura" title={invoice.number} description={`Emitida el ${formatDate(invoice.issuedAt)} · vence el ${formatDate(invoice.dueAt)}`} action={<div className="flex flex-wrap items-center gap-3"><StatusBadge status={invoice.status} /><a href={`/api/facturas/${invoice.id}/pdf`} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-navy-950 px-5 text-sm font-bold text-white"><Download className="size-4" />Descargar PDF</a></div>} />
+    <SectionTitle eyebrow="Detalle de factura" title={invoice.number} description={`Emitida el ${formatDate(invoice.issuedAt)} · vence el ${formatDate(invoice.dueAt)}`} action={<div className="flex flex-wrap items-center gap-3"><StatusBadge status={invoice.status} /><a href={`/api/facturas/${invoice.id}/pdf`} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-navy-950 px-5 text-sm font-bold text-white"><Download className="size-4" />Descargar PDF</a><a href={`/api/facturas/${invoice.id}/pdf?formato=termico`} target="_blank" className="inline-flex min-h-11 items-center rounded-full border border-stone-300 px-5 text-sm font-semibold">Voucher 80 mm</a></div>} />
     <div className="mt-7 grid gap-5 lg:grid-cols-[1.1fr_.7fr]">
       <div className="grid gap-5">
         <Card className="shadow-none">
