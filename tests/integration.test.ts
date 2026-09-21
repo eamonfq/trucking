@@ -1039,6 +1039,27 @@ describe.sequential("Real MySQL authentication and operations", () => {
     expect(messages.some(m=>m.body.includes("pendiente-pago-destino"))).toBe(true);
     expect(messages.some(m=>m.body.includes("pagada"))).toBe(true);
   });
+  it("persists independent weight, volume and manual receipts without inventing dimensions",async()=>{
+    cookieJar.set("ayl_session",{value:adminSession});
+    const origin=(await getWarehouseAdministration()).warehouses.find(w=>w.kind==="origen")!;
+    const base={customer:operationClient,originWarehouseId:origin.id,weightLb:50.2,reject:false};
+    const settings=await configService.getFlowConfig();
+    const result=await receivePackageGroup([
+      {...base,billingMode:"peso-real"},
+      {...base,billingMode:"volumen",length:16,width:26,height:15,weightLb:500},
+      {...base,billingMode:"manual",customPriceUsd:125},
+    ],new FormData(),{method:"destino",warehouseId:"qa-location"});
+    expect(result.ok).toBe(true);if(!result.ok)throw new Error(result.error);
+    const dimensional=Math.ceil(16*26*15/settings.dimensionalBase*settings.dimensionalFactor);
+    expect(result.results.map(r=>r.box.billing?.billableWeightLb).slice(0,2)).toEqual([51,dimensional]);
+    expect(result.total).toBeCloseTo((51+dimensional)*settings.pricePerLbUsd+125,2);
+    const saved=await logisticsService.getBoxById(result.results[0].box.id);
+    expect(saved?.dimensions).toEqual({length:0,width:0,height:0});
+    expect(saved?.billing?.mode).toBe("peso-real");
+    expect((await logisticsService.getBoxById(result.results[1].box.id))?.weightLb).toBe(500);
+    const invalid=await receivePackageGroup([{...base,billingMode:"volumen",length:16,width:26,height:15,weightLb:0}],new FormData());
+    expect(invalid.ok).toBe(false);
+  });
   it("loads without category quotas and enforces an optional real-weight limit",async()=>{
     cookieJar.set("ayl_session",{value:adminSession});
     const locations=(await getWarehouseAdministration()).warehouses;

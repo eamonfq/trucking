@@ -20,24 +20,39 @@ function mount(element:React.ReactNode){const node=document.createElement('div')
 afterEach(()=>{for(const {root,node} of mounts.splice(0)){act(()=>root.unmount());node.remove();}vi.clearAllMocks();});
 const addr={id:'a',userId:'u',label:'Casa',street:'Reforma',exteriorNumber:'10',neighborhood:'Centro',postalCode:'49540',municipality:'Valle de Juárez',state:'Jalisco'};
 const person={id:'r',userId:'u',name:'Juan Perez',phone:'5512345678',addressId:'a'};
-it('submits equal dimensions with different weights and starts a clean next reception without refresh',async()=>{
+it('submits real weights without dimensions and starts a clean next reception without refresh',async()=>{
  vi.mocked(getReceptionContacts).mockResolvedValue({recipients:[person],addresses:[addr]});
  vi.mocked(receivePackageGroup).mockResolvedValue({ok:true,results:[{box:{id:'b1',status:'en-bodega'}},{box:{id:'b2',status:'en-bodega'}}],total:761.6} as never);
  const {node}=mount(<ReceptionForm users={[]} defaultCustomerId="u" rates={[]} origins={[{id:'origin',name:'Origen'}]} excessPolicy="recargo"/>);await act(async()=>{});
- await fill('length','16');await fill('width','26');await fill('height','15');await fill('weightLb','55');
+ expect(node.querySelector('[name="length"]')).toBeNull();
+ await fill('weightLb','55');
  act(()=>node.querySelector<HTMLButtonElement>('[aria-label="Agregar un paquete"]')!.click());
  expect(node.querySelector('[aria-label="Total de recepción"]')!.textContent).toContain('Subtotal provisional');
  expect(Array.from(node.querySelectorAll('input[type="checkbox"]')).find(e=>e.closest("label")?.textContent?.includes('Confirmo el mismo peso'))).toHaveProperty('checked',false);
  await act(async()=>{const el=node.querySelector<HTMLInputElement>('[aria-label="Paquete 2 · Peso (lb)"]')!;Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(el,'140');el.dispatchEvent(new Event('input',{bubbles:true}));});
  expect(node.querySelector('[aria-label="Total de recepción"]')!.textContent).toContain('2 de 2 unidades calculadas');
- expect(node.querySelector('[aria-label="Total de recepción"]')!.textContent).toContain('828.80');
+ expect(node.querySelector('[aria-label="Total de recepción"]')!.textContent).toContain('624.00');
  expect(receivePackageGroup).not.toHaveBeenCalled();
  await act(async()=>node.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
  const batch=vi.mocked(receivePackageGroup).mock.calls[0][0] as Array<{length:number;weightLb:number}>;
- expect(batch.map(p=>p.weightLb)).toEqual([55,140]);expect(batch.map(p=>p.length)).toEqual([16,16]);
+ expect(batch.map(p=>p.weightLb)).toEqual([55,140]);expect(batch.map(p=>p.length)).toEqual([0,0]);
  expect(node.textContent).toContain('2 paquetes registrados');expect(node.querySelector('form')).toBeNull();
  await act(async()=>Array.from(node.querySelectorAll('button')).find(b=>b.textContent?.includes('Registrar otro paquete'))!.click());
- expect(node.querySelector<HTMLInputElement>('[name="length"]')!.value).toBe('');expect(node.querySelector<HTMLInputElement>('[name="weightLb"]')!.value).toBe('');expect(node.querySelector<HTMLInputElement>('[aria-label="Cantidad de paquetes"]')!.value).toBe('1');expect(node.textContent).toContain('Juan Perez');
+ expect(node.querySelector('[name="length"]')).toBeNull();expect(node.querySelector<HTMLInputElement>('[name="weightLb"]')!.value).toBe('');expect(node.querySelector<HTMLInputElement>('[aria-label="Cantidad de paquetes"]')!.value).toBe('1');expect(node.textContent).toContain('Juan Perez');
+});
+it('quotes volume before weighing and keeps the same total when actual weight increases',async()=>{
+ vi.mocked(getReceptionContacts).mockResolvedValue({recipients:[person],addresses:[addr]});
+ const {node}=mount(<ReceptionForm users={[]} defaultCustomerId="u" rates={[]} origins={[{id:'origin',name:'Origen'}]} excessPolicy="recargo"/>);await act(async()=>{});
+ await act(async()=>{const select=node.querySelector<HTMLSelectElement>('[name="billingMode"]')!;select.value='volumen';select.dispatchEvent(new Event('change',{bubbles:true}));});
+ await fill('length','16');await fill('width','26');await fill('height','15');
+ expect(node.querySelector('[aria-label="Total de recepción"]')!.textContent).toContain('380.80');
+ await act(async()=>node.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ expect(receivePackageGroup).not.toHaveBeenCalled();
+ await fill('weightLb','500');
+ expect(node.querySelector('[aria-label="Total de recepción"]')!.textContent).toContain('380.80');
+ await act(async()=>{const select=node.querySelector<HTMLSelectElement>('[name="billingMode"]')!;select.value='peso-real';select.dispatchEvent(new Event('change',{bubbles:true}));});
+ expect(node.querySelector('[name="length"]')).toBeNull();
+ expect(node.querySelector('[aria-label="Total de recepción"]')!.textContent).toContain('1,600.00');
 });
 it('defaults to the initial recipient, hides search, and lets the operator switch without overwriting the choice',async()=>{
  const second={...person,id:'second',name:'María López'};

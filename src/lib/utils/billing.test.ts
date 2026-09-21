@@ -1,6 +1,18 @@
 import { describe, it, expect } from 'vitest';
 import { calculateBilling, DEFAULT_WEIGHT_PRICING as settings } from './billing';
 describe('billing',()=>{
+  it('charges only real weight without dimensions and ignores large dimensions',()=>{
+    for (const dimensions of [{length:0,width:0,height:0},{length:100,width:100,height:100}]) {
+      expect(calculateBilling('peso-real',dimensions,50.2,settings)).toMatchObject({billableWeightLb:51,amountUsd:163.2});
+    }
+  });
+  it('charges volume alone regardless of physical weight, including before weighing',()=>{
+    for (const weight of [0,50,500]) expect(calculateBilling('volumen',{length:16,width:26,height:15},weight,settings)).toMatchObject({billableWeightLb:119,amountUsd:380.8,actualWeightLb:weight});
+    expect(()=>calculateBilling('volumen',{length:0,width:26,height:15},50,settings)).toThrow();
+  });
+  it('accepts manually quoted loads without dimensions',()=>{
+    expect(calculateBilling('manual',{length:0,width:0,height:0},500,settings,321.5).amountUsd).toBe(321.5);
+  });
   it('charges the greater weight, rounding up only the final weight',()=>{
     expect(calculateBilling('peso',{length:10,width:10,height:10},50.2,settings)).toMatchObject({dimensionalWeightLb:19,billableWeightLb:51,amountUsd:163.2});
     expect(calculateBilling('peso',{length:20,width:20,height:20},50,settings)).toMatchObject({dimensionalWeightLb:152,billableWeightLb:152,amountUsd:486.4});

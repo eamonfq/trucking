@@ -1,3 +1,5 @@
+import type { Dimensions } from '@/lib/config/box-categories';
+export const formatDimensions = (dimensions: Dimensions) => Object.values(dimensions).every(n=>n>0) ? `${dimensions.length} × ${dimensions.width} × ${dimensions.height} in` : 'No registradas';
 export const formatUsd = (amount: number) => `$${new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,

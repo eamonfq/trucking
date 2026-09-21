@@ -1,7 +1,13 @@
 import { z } from "zod";
 import { categoryIdSchema } from "@/lib/config/category-schema";
 
-export const receptionSchema = z.object({ recipientId:z.string().optional(), originWarehouseId:z.string().optional(), billingMode:z.enum(["peso","fijo","manual"]).optional(), customPriceUsd: z.coerce.number().finite().positive().max(100000).multipleOf(0.01).optional(), invoiceNow: z.boolean().optional(), prealertId: z.string().optional(), customer: z.string().min(1, "Selecciona un cliente."), length: z.coerce.number().positive("Escribe el largo."), width: z.coerce.number().positive("Escribe el ancho."), height: z.coerce.number().positive("Escribe el alto."), weightLb: z.coerce.number().positive("Escribe el peso."), overrideCategory: z.string().optional(), overrideReason: z.string().optional(), rejectionReason: z.string().optional(), reject: z.boolean().default(false), photoName: z.string().optional() }).superRefine((data, context) => {
+const measurement = z.coerce.number().finite().min(0).default(0);
+export const receptionSchema = z.object({ recipientId:z.string().optional(), originWarehouseId:z.string().optional(), billingMode:z.enum(["peso","peso-real","volumen","fijo","manual"]).optional(), customPriceUsd: z.coerce.number().finite().positive().max(100000).multipleOf(0.01).optional(), invoiceNow: z.boolean().optional(), prealertId: z.string().optional(), customer: z.string().min(1, "Selecciona un cliente."), length: measurement, width: measurement, height: measurement, weightLb: z.coerce.number().finite().positive("Escribe el peso real para el control del camión."), overrideCategory: z.string().optional(), overrideReason: z.string().optional(), rejectionReason: z.string().optional(), reject: z.boolean().default(false), photoName: z.string().optional() }).superRefine((data, context) => {
+  if (!["peso-real", "manual"].includes(data.billingMode ?? "fijo")) {
+    for (const [field, label] of [["length", "largo"], ["width", "ancho"], ["height", "alto"]] as const) {
+      if (data[field] <= 0) context.addIssue({code:"custom", path:[field], message:`Escribe el ${label}.`});
+    }
+  }
   if (data.overrideCategory && (data.overrideReason?.trim().length ?? 0) < 5) context.addIssue({ code: "custom", path: ["overrideReason"], message: "Explica el motivo de la sobrescritura." });
   if (data.reject && (data.rejectionReason?.trim().length ?? 0) < 5) context.addIssue({ code: "custom", path: ["rejectionReason"], message: "Indica por qué se rechaza la caja." });
 });

@@ -295,12 +295,12 @@ export async function receiveBox(input: unknown) {
   const dimensions = { length: parsed.data.length, width: parsed.data.width, height: parsed.data.height };
   const suggestion = suggestCategory(dimensions, parsed.data.weightLb, rates);
   const mode=parsed.data.billingMode ?? (!suggestion.category ? "manual" : "fijo");
-  const custom=(mode==="manual" || !suggestion.category) && !parsed.data.reject;
+  const custom=(mode==="manual" || !suggestion.category || !Object.values(dimensions).every(n=>n>0)) && !parsed.data.reject;
   if(mode==="fijo" && !suggestion.category && !parsed.data.reject)return {ok:false as const,error:"Sin categoría estándar: selecciona cobro por libra o cotización manual."};
   if(mode==="manual" && !parsed.data.reject && !parsed.data.customPriceUsd)return {ok:false as const,error:"Carga personalizada: indica el precio acordado para registrarla."};
   const categoryId = (custom ? CUSTOM_CARGO_ID : parsed.data.overrideCategory || suggestion.category?.id || rates.at(-1)?.id) as BoxCategoryId;
   if (!custom && !rates.some((rate) => rate.id === categoryId)) return { ok: false as const, error: "Selecciona una categoría válida." };
-  if (!custom && !parsed.data.reject && !suggestCategory(dimensions, parsed.data.weightLb, rates.filter(rate => rate.id === categoryId)).category) return { ok: false as const, error: "La categoría elegida no admite las medidas o el peso. Usa una categoría válida; una nota no permite saltarse los límites." };
+  if (mode==="fijo" && !custom && !parsed.data.reject && !suggestCategory(dimensions, parsed.data.weightLb, rates.filter(rate => rate.id === categoryId)).category) return { ok: false as const, error: "La categoría elegida no admite las medidas o el peso. Usa una categoría válida; una nota no permite saltarse los límites." };
   if (mode==="fijo" && !custom && !parsed.data.reject && flow.excessPolicy === "rechazo" && prealert && !suggestCategory(dimensions, parsed.data.weightLb, catalog.filter(rate => rate.id === prealert.categoryId)).category) return { ok: false as const, error: "La caja excede la categoría prealertada y la política activa exige rechazo. Registra el motivo." };
   const createdAt = now();
   const id = prealert?.id ?? nextId("box", boxes.length);
@@ -308,13 +308,13 @@ export async function receiveBox(input: unknown) {
   const code = receptionGroup ? `${receptionGroup.code}${receptionGroup.total>1?`-${String(receptionGroup.index).padStart(2,"0")}`:""}` as const : prealert?.code ?? `BX-26${String(boxes.length + 1).padStart(4, "0")}` as const;
   if(boxes.some(b=>b.code===code&&b.id!==id))return {ok:false as const,error:"El código de recepción ya existe. Actualiza e intenta nuevamente."};
   const rejected = Boolean(parsed.data.reject);
-  const note = custom ? (mode==="manual" ? `Carga personalizada. Precio acordado USD ${parsed.data.customPriceUsd}. Medidas y peso reales registrados.` : "Carga fuera de categoría estándar. Cobro por libra.") : rejected ? parsed.data.rejectionReason : parsed.data.overrideCategory ? parsed.data.overrideReason : suggestion.reason ? `Categoría ajustada por ${suggestion.reason.replaceAll("-", " ")}.` : "Medidas y peso validados.";
+  const note = custom ? (mode==="manual" ? `Carga personalizada. Precio acordado USD ${parsed.data.customPriceUsd}. Medidas y peso reales registrados.` : mode==="volumen"?"Carga fuera de categoría estándar. Cobro por volumen.":"Cobro por peso real. Medidas opcionales.") : rejected ? parsed.data.rejectionReason : parsed.data.overrideCategory ? parsed.data.overrideReason : suggestion.reason ? `Categoría ajustada por ${suggestion.reason.replaceAll("-", " ")}.` : "Medidas y peso validados.";
   const billing = rejected ? undefined : calculateBilling(mode, dimensions, parsed.data.weightLb, flow, mode==="manual" ? parsed.data.customPriceUsd : rates.find(rate=>rate.id===categoryId)?.priceUsd);
   const box: Box = {
     receptionGroup,
     recipientId:recipient?.id,recipientSnapshot:recipient&&recipientAddress?{name:recipient.name,phone:recipient.phone,address:{...recipientAddress}}:undefined,
     billing, originWarehouseId:origin?.id,originWarehouseName:origin?.name,
-    id, code, userId: customer.id, categoryId, categoryName: custom ? CUSTOM_CARGO_NAME : rates.find(rate=>rate.id===categoryId)?.name ?? categoryId, customPriceUsd:billing?.amountUsd, status: rejected ? "rechazada" : "en-bodega", dimensions, weightLb: parsed.data.weightLb,
+    id, code, userId: customer.id, categoryId, categoryName: custom ? (mode==="peso-real"?"Paquete por peso":mode==="volumen"?"Paquete por volumen":CUSTOM_CARGO_NAME) : rates.find(rate=>rate.id===categoryId)?.name ?? categoryId, customPriceUsd:billing?.amountUsd, status: rejected ? "rechazada" : "en-bodega", dimensions, weightLb: parsed.data.weightLb,
     excessFeeUsd: mode==="fijo" && !custom && !rejected && flow.excessPolicy === "recargo" && prealert && !suggestCategory(dimensions, parsed.data.weightLb, catalog.filter(rate => rate.id === prealert.categoryId)).category ? flow.excessFeeUsd : 0,
     receivedAt: createdAt, originTracking: prealert?.originTracking,
     photos: [],

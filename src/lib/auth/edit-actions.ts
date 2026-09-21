@@ -43,12 +43,13 @@ export async function editOperation(input: unknown) {
         if (kind === "box") {
           const box = boxes.find(x=>x.id===id)!;
           if (box.truckId || box.shipmentId || invoices.some(x=>x.boxIds?.includes(id)) || !["pre-alertada","en-bodega"].includes(box.status) || (session.role === "cliente" && box.status !== "pre-alertada")) throw new Error("Las medidas/categoría solo se corrigen antes de vincular o facturar la caja. Puedes agregar una aclaración sin alterar el historial.");
-          const data = z.object({originTracking:z.string().trim().max(120),categoryId:categoryIdSchema,length:z.coerce.number().positive().max(1000),width:z.coerce.number().positive().max(1000),height:z.coerce.number().positive().max(1000),weightLb:z.coerce.number().min(0).max(100000)}).strict().parse(values);
+          const data = z.object({originTracking:z.string().trim().max(120),categoryId:categoryIdSchema,length:z.coerce.number().min(0).max(1000),width:z.coerce.number().min(0).max(1000),height:z.coerce.number().min(0).max(1000),weightLb:z.coerce.number().min(0).max(100000)}).strict().parse(values);
           if (data.originTracking && boxes.some(x=>x.id!==id && x.originTracking?.toLowerCase()===data.originTracking.toLowerCase())) throw new Error("Ese tracking ya está registrado.");
           const rates = await configService.getRateTable();
           if(!(data.categoryId===CUSTOM_CARGO_ID && box.categoryId===CUSTOM_CARGO_ID && box.status!=="pre-alertada") && !rates.some(rate=>rate.id===data.categoryId)) throw new Error("Selecciona una categoría activa.");
           const dimensions = {length:data.length,width:data.width,height:data.height};
-          if (box.status !== "pre-alertada" && data.categoryId!==CUSTOM_CARGO_ID && (data.weightLb<=0 || !suggestCategory(dimensions,data.weightLb,rates.filter(x=>x.id===data.categoryId)).category)) throw new Error("La categoría no admite las medidas/peso indicados.");
+          if(!["peso-real","manual"].includes(box.billing?.mode??"") && !Object.values(dimensions).every(n=>n>0)) throw new Error("Completa las tres medidas.");
+          if (box.status !== "pre-alertada" && !["peso-real","volumen","manual"].includes(box.billing?.mode??"") && data.categoryId!==CUSTOM_CARGO_ID && (data.weightLb<=0 || !suggestCategory(dimensions,data.weightLb,rates.filter(x=>x.id===data.categoryId)).category)) throw new Error("La categoría no admite las medidas/peso indicados.");
           if(box.billing){
             const billing=calculateBilling(box.billing.mode,dimensions,data.weightLb,box.billing,box.billing.mode==="manual"?box.billing.amountUsd:rates.find(rate=>rate.id===data.categoryId)?.priceUsd);
             box.billing=billing;box.customPriceUsd=billing.amountUsd;
