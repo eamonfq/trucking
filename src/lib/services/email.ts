@@ -6,6 +6,7 @@ import type { RowDataPacket } from "mysql2/promise";
 import { sql } from "@/lib/auth/repository";
 import { pool } from "@/lib/db/pool";
 import { renderEmail, type EmailInput } from "./email-template";
+import {receptionPhotoAttachment} from './email-photo';
 export function siteUrl() {
   const url = new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3100");
   if (process.env.NODE_ENV === "production" && url.protocol !== "https:" && !["localhost", "127.0.0.1"].includes(url.hostname)) throw new Error("El sitio público requiere HTTPS");
@@ -48,7 +49,8 @@ export async function deliverPendingEmails() {
           continue;
         }
         const rendered = renderEmail(input, siteUrl());
-        const result = await resend.emails.send({ from: process.env.RESEND_FROM_EMAIL, to: input.to, subject: input.subject, ...rendered }, { idempotencyKey: `ayl/${row.id}` });
+        const attachments=input.receptionPhoto?[await receptionPhotoAttachment(input.receptionPhoto)]:undefined;
+        const result = await resend.emails.send({ from: process.env.RESEND_FROM_EMAIL, to: input.to, subject: input.subject, ...rendered, ...(attachments?{attachments}:{}) }, { idempotencyKey: `ayl/${row.id}` });
         if (result.error) throw new Error(result.error.name);
         await connection.execute("UPDATE email_outbox SET status='sent',provider_id=?,attempts=attempts+1,last_error=NULL,payload=JSON_OBJECT() WHERE id=?", [result.data!.id, row.id]);
       } catch {

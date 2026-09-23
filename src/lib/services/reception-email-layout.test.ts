@@ -2,6 +2,14 @@ import {it,expect} from 'vitest';
 import {writeFileSync} from 'node:fs';
 import {renderEmail,type EmailInput} from './email-template';
 const fixture=(count:number):EmailInput=>({to:'qa@example.invalid',subject:'Recepción BX-QA',heading:'Tu paquete ya está en bodega',body:'Legacy body',actionLabel:'Ver mis paquetes',actionUrl:'http://localhost:3100/cliente/cajas',reception:{reference:'BX-QA',totalUsd:1142.4,pieces:Array.from({length:count},(_,i)=>({code:`BX-QA-${String(i+1).padStart(2,'0')}`,weightLb:50,dimensions:'16 × 26 × 15',rejected:false})),invoices:[{number:'AL-QA-001',status:'pagada'}]}});
+it('embeds exactly one CID photo when present and no broken photo when absent',()=>{
+ const input=fixture(50);input.receptionPhoto={fileId:'private-id',ownerId:'private-owner'};
+ const html=renderEmail(input,'http://localhost:3100').html;
+ const node=document.createElement('div');node.innerHTML=html;
+ expect(node.querySelectorAll('img[src="cid:reception-photo"]')).toHaveLength(1);
+ expect(html).not.toContain('private-id');expect(html).not.toContain('private-owner');expect(html).not.toContain('r2.dev');
+ expect(renderEmail(fixture(1),'http://localhost:3100').html).not.toContain('cid:');
+});
 it('separates summary, payment and per-piece rows without an oversized email',()=>{
  const message=renderEmail(fixture(50),'http://localhost:3100');
  const node=document.createElement('div');node.innerHTML=message.html;

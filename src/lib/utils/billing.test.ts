@@ -7,8 +7,12 @@ describe('billing',()=>{
     }
   });
   it('charges volume alone regardless of physical weight, including before weighing',()=>{
-    for (const weight of [0,50,500]) expect(calculateBilling('volumen',{length:16,width:26,height:15},weight,settings)).toMatchObject({billableWeightLb:119,amountUsd:380.8,actualWeightLb:weight});
+    for (const weight of [0,50,500]) for (const pricePerLbUsd of [3.2,10]) expect(calculateBilling('volumen',{length:16,width:26,height:15},weight,{...settings,pricePerLbUsd})).toMatchObject({volumePricing:'direct-usd',billableWeightLb:0,amountUsd:118.56,actualWeightLb:weight});
     expect(()=>calculateBilling('volumen',{length:0,width:26,height:15},50,settings)).toThrow();
+  });
+  it('rounds volume to cents and retains historical volume pricing when requested',()=>{
+    expect(calculateBilling('volumen',{length:1,width:1,height:1},10,settings).amountUsd).toBe(0.02);
+    expect(calculateBilling('volumen',{length:16,width:26,height:15},50,settings,0,'dimensional-lb')).toMatchObject({billableWeightLb:119,amountUsd:380.8});
   });
   it('accepts manually quoted loads without dimensions',()=>{
     expect(calculateBilling('manual',{length:0,width:0,height:0},500,settings,321.5).amountUsd).toBe(321.5);

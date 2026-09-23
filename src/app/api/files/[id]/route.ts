@@ -16,5 +16,6 @@ export async function GET(_request: Request, {params}: {params:Promise<{id:strin
   let bytes:Buffer;
   try{bytes=file.storage_provider==='r2'?await getPhoto(file.object_key):Buffer.from(file.content);}catch{return new Response('No se pudo recuperar la foto. Intenta nuevamente.',{status:503,headers:{'Cache-Control':'private, no-store'}});}
   if (createHash("sha256").update(bytes).digest("hex") !== file.sha256) return new Response("No se pudo verificar la integridad del archivo.",{status:500});
+  if(new URL(_request.url).searchParams.get('inline')==='1'&&['image/jpeg','image/png'].includes(file.mime_type))return new Response(new Uint8Array(bytes),{headers:{'Content-Type':file.mime_type,'Content-Length':String(bytes.length),'Content-Disposition':'inline','Cache-Control':'private, no-store, max-age=0','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox"}});
   return new Response(new Uint8Array(bytes),{headers:{"Content-Type":file.mime_type,"Content-Length":String(bytes.length),"Content-Disposition":`attachment; filename="archivo"; filename*=UTF-8''${encodeURIComponent(file.original_name)}`,"Cache-Control":"private, no-store, max-age=0","X-Content-Type-Options":"nosniff","Content-Security-Policy":"default-src 'none'; sandbox"}});
 }

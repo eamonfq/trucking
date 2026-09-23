@@ -46,6 +46,7 @@ import { logisticsService } from "@/lib/services/logistics";
 import { checkPassword } from "@/lib/auth/crypto";
 import { sendEmail, decryptEmail, deliverPendingEmails } from "@/lib/services/email";
 import { renderEmail } from "@/lib/services/email-template";
+import {receptionPhotoAttachment} from '@/lib/services/email-photo';
 import {receivePackageGroup} from "@/lib/auth/file-actions";
 import {deleteCustomerRecipient,upsertCustomerRecipient} from "@/lib/auth/admin-actions";
 import {getReceptionContacts} from "@/lib/auth/reception-contacts";
@@ -402,6 +403,8 @@ describe.sequential("Real MySQL authentication and operations", () => {
     const id=result.box.photoFileId!;
     const request=()=>downloadPrivateFile(new Request(`http://localhost/api/files/${id}`),{params:Promise.resolve({id})});
     const response=await request();expect(response.status).toBe(200);expect(Buffer.from(await response.arrayBuffer())).toEqual(await normalizePhoto(bytes));
+    const preview=await downloadPrivateFile(new Request(`http://localhost/api/files/${id}?inline=1`),{params:Promise.resolve({id})});expect(preview.headers.get('Content-Disposition')).toBe('inline');expect(preview.headers.get('Content-Type')).toBe('image/jpeg');
+    expect((await receptionPhotoAttachment({fileId:id,ownerId:operationClient})).content).toBe((await normalizePhoto(bytes)).toString('base64'));
     expect(response.headers.get("Content-Disposition")).toContain("attachment");expect(response.headers.get("Cache-Control")).toContain("no-store");
     cookieJar.set("ayl_session",{value:clientSession});expect((await request()).status).toBe(200);
     const outsider=(await withStore(async()=>users.find(user=>user.email==="outsider@example.invalid")!));
@@ -1086,15 +1089,44 @@ describe.sequential("Real MySQL authentication and operations", () => {
       {...base,billingMode:"manual",customPriceUsd:125},
     ],new FormData(),{method:"destino",warehouseId:"qa-location"});
     expect(result.ok).toBe(true);if(!result.ok)throw new Error(result.error);
-    const dimensional=Math.ceil(16*26*15/settings.dimensionalBase*settings.dimensionalFactor);
-    expect(result.results.map(r=>r.box.billing?.billableWeightLb).slice(0,2)).toEqual([51,dimensional]);
-    expect(result.total).toBeCloseTo((51+dimensional)*settings.pricePerLbUsd+125,2);
+    const volumeAmount=Math.round(16*26*15/settings.dimensionalBase*settings.dimensionalFactor*100)/100;
+    expect(result.results.map(r=>r.box.billing?.billableWeightLb).slice(0,2)).toEqual([51,0]);
+    expect(result.results[1].box.billing).toMatchObject({volumePricing:"direct-usd",amountUsd:volumeAmount});
+    expect(result.total).toBeCloseTo(51*settings.pricePerLbUsd+volumeAmount+125,2);
     const saved=await logisticsService.getBoxById(result.results[0].box.id);
     expect(saved?.dimensions).toEqual({length:0,width:0,height:0});
     expect(saved?.billing?.mode).toBe("peso-real");
     expect((await logisticsService.getBoxById(result.results[1].box.id))?.weightLb).toBe(500);
     const invalid=await receivePackageGroup([{...base,billingMode:"volumen",length:16,width:26,height:15,weightLb:0}],new FormData());
     expect(invalid.ok).toBe(false);
+  });
+  it("sends only the first private R2 photo in one consolidated reception email",async()=>{
+    cookieJar.set('ayl_session',{value:adminSession});
+    const previousMode=process.env.EMAIL_DELIVERY;
+    process.env.PHOTO_STORAGE='r2';process.env.R2_PRIVATE_CONFIRMED='true';
+    try{
+      const origin=(await getWarehouseAdministration()).warehouses.find(w=>w.kind==='origen')!;
+      const input={customer:operationClient,originWarehouseId:origin.id,billingMode:'peso-real',weightLb:20};
+      const data=new FormData();data.set('file',new File([new Uint8Array(await sharp({create:{width:100,height:50,channels:3,background:'blue'}}).jpeg().toBuffer())],'first.jpg',{type:'image/jpeg'}));
+      const [before]=await root.query<mysql.RowDataPacket[]>('SELECT id FROM email_outbox');
+      const received=await receivePackageGroup([input,input],data,{method:'destino',warehouseId:'qa-location'});
+      expect(received.ok).toBe(true);if(!received.ok)throw new Error(received.error);
+      const [after]=await root.query<mysql.RowDataPacket[]>('SELECT id,payload FROM email_outbox');
+      const added=after.filter(row=>!before.some(b=>b.id===row.id));expect(added).toHaveLength(1);
+      const mail=decryptEmail(typeof added[0].payload==='string'?JSON.parse(added[0].payload):added[0].payload);
+      expect(mail.receptionPhoto).toEqual({fileId:received.results[0].box.photoFileId,ownerId:operationClient});
+      expect(mail.receptionPhoto?.fileId).not.toBe(received.results[1].box.photoFileId);
+      await expect(receptionPhotoAttachment({...mail.receptionPhoto!,ownerId:'not-the-owner'})).rejects.toThrow();
+      const image=await receptionPhotoAttachment(mail.receptionPhoto!);expect(image.contentId).toBe('reception-photo');expect(image.content.length).toBeGreaterThan(0);
+      // Isolate this delivery from the queue produced by the other workflow scenarios.
+      await root.execute("UPDATE email_outbox SET available_at=DATE_ADD(UTC_TIMESTAMP(),INTERVAL 1 DAY) WHERE id<>? AND status IN ('queued','retry')",[added[0].id]);
+      await root.execute('UPDATE email_outbox SET available_at=UTC_TIMESTAMP(),created_at=UTC_TIMESTAMP() WHERE id=?',[added[0].id]);
+      process.env.EMAIL_DELIVERY='resend';emailSend.mockClear();emailSend.mockResolvedValue({data:{id:'photo-email-qa'},error:null});
+      await deliverPendingEmails();
+      const sent=emailSend.mock.calls.map(call=>call[0]).find(message=>message.subject===mail.subject);
+      expect(sent.attachments).toHaveLength(1);expect(sent.attachments[0]).toEqual(image);expect(sent.html).toContain('src="cid:reception-photo"');
+      const [status]=await root.query<mysql.RowDataPacket[]>('SELECT status FROM email_outbox WHERE id=?',[added[0].id]);expect(status[0].status).toBe('sent');
+    }finally{process.env.PHOTO_STORAGE='mysql';process.env.R2_PRIVATE_CONFIRMED='false';process.env.EMAIL_DELIVERY=previousMode;}
   });
   it("loads without category quotas and enforces an optional real-weight limit",async()=>{
     cookieJar.set("ayl_session",{value:adminSession});

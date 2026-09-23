@@ -51,7 +51,7 @@ export async function editOperation(input: unknown) {
           if(!["peso-real","manual"].includes(box.billing?.mode??"") && !Object.values(dimensions).every(n=>n>0)) throw new Error("Completa las tres medidas.");
           if (box.status !== "pre-alertada" && !["peso-real","volumen","manual"].includes(box.billing?.mode??"") && data.categoryId!==CUSTOM_CARGO_ID && (data.weightLb<=0 || !suggestCategory(dimensions,data.weightLb,rates.filter(x=>x.id===data.categoryId)).category)) throw new Error("La categoría no admite las medidas/peso indicados.");
           if(box.billing){
-            const billing=calculateBilling(box.billing.mode,dimensions,data.weightLb,box.billing,box.billing.mode==="manual"?box.billing.amountUsd:rates.find(rate=>rate.id===data.categoryId)?.priceUsd);
+            const billing=calculateBilling(box.billing.mode,dimensions,data.weightLb,box.billing,box.billing.mode==="manual"?box.billing.amountUsd:rates.find(rate=>rate.id===data.categoryId)?.priceUsd,box.billing.volumePricing??"dimensional-lb");
             box.billing=billing;box.customPriceUsd=billing.amountUsd;
           }
           Object.assign(box,{originTracking:data.originTracking || undefined,categoryId:data.categoryId,categoryName:rates.find(rate=>rate.id===data.categoryId)?.name??box.categoryName,dimensions,weightLb:data.weightLb});

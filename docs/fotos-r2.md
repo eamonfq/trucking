@@ -9,6 +9,14 @@
 5. Con R2 habilitado se guarda la foto en `ayl/reception/<uuid>.jpg`; MySQL conserva la propiedad, referencia y hash de integridad. Los comprobantes y las fotos anteriores permanecen en MySQL.
 6. La descarga sigue pasando por `/api/files/[id]`, con sesión y autorización de propietario/administrador. No se entrega una URL pública.
 
+## Foto en correo y paneles
+
+La recepción, individual o agrupada, genera un solo correo consolidado con la primera foto disponible. La cola guarda la referencia de archivo y propietario cifrada, no una URL pública. Al enviarlo, el worker verifica propietario, tipo e integridad y adjunta la foto con Content-ID `reception-photo` para mostrarla dentro del mensaje. Si no se puede recuperar, el envío usa los reintentos existentes; no descarta silenciosamente la foto. Sin fotografía, el correo conserva su diseño sin un espacio vacío.
+
+Los detalles del paquete del administrador y del cliente muestran la foto con opción de ampliar y descargar. La vista previa usa `?inline=1` sobre la misma ruta autenticada, solo para JPEG/PNG; no modifica permisos ni vuelve públicos los archivos. Funciona tanto para MySQL como para R2. No necesita una migración adicional a la 005.
+
+La copia enviada por correo permanece en el buzón del destinatario; un futuro borrado de la foto en el sistema no puede eliminar esa copia.
+
 Si falla la transacción, se intenta eliminar exclusivamente el objeto nuevo de esa operación. No se borra después de un resultado ambiguo del commit. Una caída del proceso o una falla de red puede dejar objetos huérfanos que requieren revisión; no se eliminan indiscriminadamente.
 
 ## Configuración

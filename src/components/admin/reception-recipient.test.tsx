@@ -45,11 +45,11 @@ it('quotes volume before weighing and keeps the same total when actual weight in
  const {node}=mount(<ReceptionForm users={[]} defaultCustomerId="u" rates={[]} origins={[{id:'origin',name:'Origen'}]} excessPolicy="recargo"/>);await act(async()=>{});
  await act(async()=>{const select=node.querySelector<HTMLSelectElement>('[name="billingMode"]')!;select.value='volumen';select.dispatchEvent(new Event('change',{bubbles:true}));});
  await fill('length','16');await fill('width','26');await fill('height','15');
- expect(node.querySelector('[aria-label="Total de recepción"]')!.textContent).toContain('380.80');
+ expect(node.querySelector('[aria-label="Total de recepción"]')!.textContent).toContain('118.56');
  await act(async()=>node.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
  expect(receivePackageGroup).not.toHaveBeenCalled();
  await fill('weightLb','500');
- expect(node.querySelector('[aria-label="Total de recepción"]')!.textContent).toContain('380.80');
+ expect(node.querySelector('[aria-label="Total de recepción"]')!.textContent).toContain('118.56');
  await act(async()=>{const select=node.querySelector<HTMLSelectElement>('[name="billingMode"]')!;select.value='peso-real';select.dispatchEvent(new Event('change',{bubbles:true}));});
  expect(node.querySelector('[name="length"]')).toBeNull();
  expect(node.querySelector('[aria-label="Total de recepción"]')!.textContent).toContain('1,600.00');

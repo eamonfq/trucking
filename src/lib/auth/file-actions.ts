@@ -12,6 +12,8 @@ import { approvePayment, receiveBox } from "@/lib/auth/admin-actions";
 import { reportInvoicePayment } from "@/lib/auth/client-actions";
 import { savePrivateFile, validateUpload } from "@/lib/files/repository";
 import { z } from "zod";
+import type {Box,Invoice} from "@/lib/types";
+import type {EmailInput} from "@/lib/services/email-template";
 import { receptionSchema } from "@/lib/schemas/admin";
 
 export async function receivePackageGroup(input:unknown,data:FormData,paymentInput?:unknown){
@@ -39,20 +41,23 @@ export async function receivePackageGroup(input:unknown,data:FormData,paymentInp
       for(const result of results){const saved=await recordWarehousePayment(result.invoice!.id,{...payment.data,amount:invoiceTotal(result.invoice!)},null);if(!saved.ok)return saved;result.invoice=saved.invoice;}
     }
     return {ok:true as const,results,total};
-  },result=>{
-    if(!result.ok)return;
+  },result=>result.ok?receptionEmail(result):undefined));
+}
+
+function receptionEmail(result:{results:Array<{box:Box;invoice?:Invoice}>;total:number}):EmailInput|undefined{
     const first=result.results[0].box,customer=users.find(u=>u.id===first.userId);
     if(!customer)return;
     const code=first.receptionGroup?.code??first.code;
+    const firstPhoto=result.results.find(r=>r.box.photoFileId)?.box;
+    const receptionPhoto=firstPhoto?.photoFileId?{fileId:firstPhoto.photoFileId,ownerId:firstPhoto.userId}:undefined;
     const rejected=result.results.filter(r=>r.box.status==="rechazada").length;
     const invoiceList=result.results.flatMap(r=>r.invoice?[`${r.invoice.number} (${r.invoice.status})`]:[]);
     const reception={reference:code,totalUsd:invoiceList.length?result.total:undefined,pieces:result.results.map(r=>({code:r.box.code,weightLb:r.box.weightLb,dimensions:Object.values(r.box.dimensions).every(n=>n>0)?`${r.box.dimensions.length} × ${r.box.dimensions.width} × ${r.box.dimensions.height}`:"No registradas",rejected:r.box.status==="rechazada"})),invoices:result.results.flatMap(r=>r.invoice?[{number:r.invoice.number,status:r.invoice.status}]:[])};
-    return {reception,to:customer.email,subject:`Recepción ${code} · ${result.results.length} unidad(es)`,heading:rejected?"Recepción registrada con observaciones":"Tu paquete ya está en bodega",body:`Recepción ${code}: ${result.results.length} unidad(es). ${result.results.map(r=>`${r.box.code}: ${r.box.weightLb} lb, ${r.box.dimensions.length} × ${r.box.dimensions.width} × ${r.box.dimensions.height} in`).join("; ")}. ${rejected?`${rejected} unidad(es) rechazada(s); consulta los motivos en tu panel.`:""} ${invoiceList.length?`Total facturado: USD ${result.total.toFixed(2)}. Facturas: ${invoiceList.join(", ")}.`:"El cobro se determinará según la configuración de facturación."}`,actionLabel:"Ver mis paquetes",actionUrl:`${siteUrl()}/cliente/cajas`};
-  }));
+    return {receptionPhoto,reception,to:customer.email,subject:`Recepción ${code} · ${result.results.length} unidad(es)`,heading:rejected?"Recepción registrada con observaciones":"Tu paquete ya está en bodega",body:`Recepción ${code}: ${result.results.length} unidad(es). ${result.results.map(r=>`${r.box.code}: ${r.box.weightLb} lb, ${r.box.dimensions.length} × ${r.box.dimensions.width} × ${r.box.dimensions.height} in`).join("; ")}. ${rejected?`${rejected} unidad(es) rechazada(s); consulta los motivos en tu panel.`:""} ${invoiceList.length?`Total facturado: USD ${result.total.toFixed(2)}. Facturas: ${invoiceList.join(", ")}.`:"El cobro se determinará según la configuración de facturación."}`,actionLabel:"Ver mis paquetes",actionUrl:`${siteUrl()}/cliente/cajas`};
 }
 
 export async function receiveBoxWithPhoto(input: unknown, data: FormData, paymentInput?: unknown) {
-  return runMutation("admin", async () => {
+  return runMutation("admin", async () => withConsolidatedEmail(async () => {
     const upload = await validateUpload(data,"box");
     if (!upload.ok) return upload;
     const payment = paymentInput === undefined ? null : receptionPaymentSchema.safeParse(paymentInput);
@@ -78,7 +83,7 @@ export async function receiveBoxWithPhoto(input: unknown, data: FormData, paymen
       result.invoice = saved.invoice;
     }
     return result;
-  });
+  },result=>result.ok?receptionEmail({results:[result],total:result.invoice?invoiceTotal(result.invoice):0}):undefined));
 }
 export async function reportPaymentWithReceipt(invoiceId: string, input: unknown, data: FormData) {
   return runMutation("cliente", async () => {
