@@ -4,9 +4,10 @@ import type { PoolConnection, RowDataPacket } from "mysql2/promise";
 import { pool } from "./pool";
 
 type Entity = { id: string };
-type Context = { connection: PoolConnection; data: Record<string, Entity[]>; before: Map<string, string>; writable: boolean };
+type Context = { connection: PoolConnection; data: Record<string, Entity[]>; before: Map<string, string>; writable: boolean; rollback: Array<()=>Promise<void>> };
 const context = new AsyncLocalStorage<Context>();
 export function transactionConnection() { return context.getStore()?.connection; }
+export function onTransactionRollback(work:()=>Promise<void>){const store=context.getStore();if(!store?.writable)throw new Error('No writable transaction');store.rollback.push(work);}
 export function collection<T extends Entity>(name: string): T[] {
   // Each request sees its own transaction, never a process-global mutable array.
   function current() {
@@ -29,6 +30,8 @@ export async function withStore<T>(work: () => Promise<T>, writable = false): Pr
     return work();
   }
   const connection = await pool().getConnection();
+  const rollback: Array<()=>Promise<void>>=[];
+  let committing=false;
   try {
     await connection.beginTransaction();
     // Serializes legacy multi-entity operations across processes. Auth has its own indexed tables.
@@ -41,7 +44,7 @@ export async function withStore<T>(work: () => Promise<T>, writable = false): Pr
       (data[row.collection_name] ??= []).push(value);
       before.set(`${row.collection_name}/${row.entity_id}`, `${row.position_index}:${JSON.stringify(value)}`);
     }
-    const result = await context.run({ connection, data, before, writable }, async () => {
+    const result = await context.run({ connection, data, before, writable, rollback }, async () => {
       const value = await work();
       if (writable) {
         const remaining = new Set(before.keys());
@@ -57,8 +60,14 @@ export async function withStore<T>(work: () => Promise<T>, writable = false): Pr
       }
       return value;
     });
+    committing=true;
     await connection.commit();
     return result;
-  } catch (error) { await connection.rollback(); throw error; }
+  } catch (error) {
+    await connection.rollback();
+    // Never delete external files after an ambiguous commit/network failure.
+    if(!committing)for(const undo of rollback){try{await undo();}catch{console.error('R2 rollback cleanup pending; inspect orphaned reception objects.');}}
+    throw error;
+  }
   finally { connection.release(); }
 }

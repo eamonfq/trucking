@@ -11,7 +11,7 @@ try {
   const list = name => data[name] ?? [];
   const find = (name,id) => list(name).find(item=>item.id===id);
   const [accounts] = await connection.query('SELECT user_id,role,active FROM accounts');
-  const [files] = await connection.query('SELECT id,owner_id,entity_type,entity_id,byte_size,LENGTH(content) AS stored_bytes FROM private_files');
+  const [files] = await connection.query('SELECT id,owner_id,entity_type,entity_id,byte_size,storage_provider,object_key,LENGTH(content) AS stored_bytes FROM private_files');
   const [migrations] = await connection.query('SELECT version FROM schema_migrations ORDER BY version');
   const [server] = await connection.query('SELECT VERSION() AS version, DATABASE() AS name, @@max_allowed_packet AS max_packet');
   const issues=[];
@@ -40,7 +40,7 @@ try {
     for(const id of invoice.boxIds??[]){check(find('boxes',id)?.userId===invoice.userId,'invoice-box-owner-mismatch',invoice.id);check(!billed.has(id),'box-billed-twice',id);billed.add(id);}
     for(const file of invoice.receiptFiles??[])check(files.some(item=>item.id===file.id&&item.entity_id===invoice.id&&item.owner_id===invoice.userId),'receipt-reference-mismatch',invoice.id);
   }
-  for(const file of files){const entity=find(file.entity_type==='box'?'boxes':'invoices',file.entity_id);check(entity?.userId===file.owner_id,'file-entity-mismatch',file.id);check(file.byte_size===file.stored_bytes,'file-size-mismatch',file.id);}
+  for(const file of files){const entity=find(file.entity_type==='box'?'boxes':'invoices',file.entity_id);check(entity?.userId===file.owner_id,'file-entity-mismatch',file.id);if(file.storage_provider==='r2')check(file.stored_bytes===null&&/^ayl\/reception\/[a-f0-9-]{36}\.jpg$/.test(file.object_key),'r2-metadata-mismatch',file.id);else check(file.byte_size===file.stored_bytes,'file-size-mismatch',file.id);}
   await connection.rollback();
   const warnings=[];
   if(!list('boxes').length)warnings.push('No hay cajas operativas: validar recorridos con la suite de integración aislada.');

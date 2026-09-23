@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "system:check": "node scripts/check-system.mjs",
+    "r2:check": "node scripts/r2-check.mjs",
     "db:migrate": "node scripts/db-migrate.mjs",
     "db:admin": "node scripts/bootstrap-admin.mjs",
     "db:locations": "node scripts/provision-operational-locations.mjs",
@@ -18,6 +19,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1138.0",
     "@fontsource-variable/bricolage-grotesque": "^5.3.0",
     "@fontsource-variable/inter": "^5.2.8",
     "@hookform/resolvers": "^5.2.2",
@@ -31,6 +33,7 @@
     "react-dom": "^19.2.0",
     "react-hook-form": "^7.62.0",
     "resend": "^6.1.2",
+    "sharp": "^0.35.4",
     "zod": "^4.1.11"
   },
   "devDependencies": {

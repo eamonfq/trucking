@@ -23,5 +23,7 @@ try {
       await connection.commit();
     } catch(error) { await connection.rollback(); throw error; }
   }
-  console.log(`Migraciones 001–004 aplicadas en ${database}. No se importaron usuarios ni operaciones de demo.`);
+  const [r2Photos] = await connection.query("SELECT version FROM schema_migrations WHERE version=5");
+  if (!r2Photos.length) await connection.query(await readFile(new URL('../migrations/005-r2-photos.sql', import.meta.url),'utf8'));
+  console.log(`Migraciones 001–005 aplicadas en ${database}. No se importaron usuarios ni operaciones de demo.`);
 } finally { await connection.end(); }

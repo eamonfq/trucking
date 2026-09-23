@@ -1,5 +1,12 @@
 import { beforeAll, afterAll, describe, expect, it, vi } from "vitest";
 import mysql from "mysql2/promise";
+import sharp from 'sharp';
+import {normalizePhoto} from '@/lib/files/normalize-photo';
+const r2Files=vi.hoisted(()=>new Map<string,Buffer>());
+const r2Put=vi.hoisted(()=>vi.fn(async(key:string,bytes:Buffer)=>{r2Files.set(key,Buffer.from(bytes));}));
+const r2Get=vi.hoisted(()=>vi.fn(async(key:string)=>{const bytes=r2Files.get(key);if(!bytes)throw new Error('Missing');return bytes;}));
+const r2Delete=vi.hoisted(()=>vi.fn(async(key:string)=>{r2Files.delete(key);}));
+vi.mock('@/lib/files/r2',()=>({putPhoto:r2Put,getPhoto:r2Get,deletePhoto:r2Delete}));
 import { readFile } from "node:fs/promises";
 import { randomUUID, createHmac } from "node:crypto";
 import { recordRevision } from "@/lib/db/revision";
@@ -66,12 +73,15 @@ let adminSession = "";
 let operationInvoice = "";
 beforeAll(async () => {
   process.loadEnvFile(".env.local");
+  process.env.PHOTO_STORAGE='mysql';
+  process.env.R2_PRIVATE_CONFIRMED='false';
   const url = new URL(process.env.DATABASE_URL!);
   root = await mysql.createConnection({host:url.hostname,port:Number(url.port||3306),user:decodeURIComponent(url.username),password:decodeURIComponent(url.password),multipleStatements:true});
   await root.query(`CREATE DATABASE \`${database}\``);
   await root.changeUser({database});
   await root.query(await readFile(new URL("../migrations/001-real-system.sql",import.meta.url),"utf8"));
   await root.query(await readFile(new URL("../migrations/002-private-files.sql",import.meta.url),"utf8"));
+  await root.query(await readFile(new URL("../migrations/005-r2-photos.sql",import.meta.url),"utf8"));
   await root.query(await readFile(new URL("../migrations/003-warehouse-operators.sql",import.meta.url),"utf8"));
   await root.query(await readFile(new URL("../migrations/004-warehouse-kinds.sql",import.meta.url),"utf8"));
   url.pathname=`/${database}`; process.env.DATABASE_URL=url.toString();
@@ -384,14 +394,14 @@ describe.sequential("Real MySQL authentication and operations", () => {
   });
   it("persists private photo bytes and verifies ownership on every download", async () => {
     cookieJar.set("ayl_session",{value:adminSession});
-    const bytes=Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5mQAAAAASUVORK5CYII=","base64");
+    const bytes=await sharp({create:{width:32,height:32,channels:3,background:'red'}}).png().toBuffer();
     const data=new FormData();data.set("file",new File([bytes],"foto.png",{type:"image/png"}));
     const result=await receiveBoxWithPhoto({customer:operationClient,length:10,width:16,height:12,weightLb:20,reject:false},data);
     expect(result.ok).toBe(true);if(!result.ok)throw new Error("photo reception");
     expect(result.box.photoFileId).toBeTruthy();
     const id=result.box.photoFileId!;
     const request=()=>downloadPrivateFile(new Request(`http://localhost/api/files/${id}`),{params:Promise.resolve({id})});
-    const response=await request();expect(response.status).toBe(200);expect(Buffer.from(await response.arrayBuffer())).toEqual(bytes);
+    const response=await request();expect(response.status).toBe(200);expect(Buffer.from(await response.arrayBuffer())).toEqual(await normalizePhoto(bytes));
     expect(response.headers.get("Content-Disposition")).toContain("attachment");expect(response.headers.get("Cache-Control")).toContain("no-store");
     cookieJar.set("ayl_session",{value:clientSession});expect((await request()).status).toBe(200);
     const outsider=(await withStore(async()=>users.find(user=>user.email==="outsider@example.invalid")!));
@@ -399,6 +409,32 @@ describe.sequential("Real MySQL authentication and operations", () => {
     cookieJar.delete("ayl_session");expect((await request()).status).toBe(401);
     cookieJar.set("ayl_session",{value:adminSession});
     expect((await logisticsService.getBoxById(result.box.id))?.photoFileId).toBe(id);
+  });
+  it("stores reception photos in R2 with private authorization and rolls back external uploads",async()=>{
+    cookieJar.set('ayl_session',{value:adminSession});
+    process.env.PHOTO_STORAGE='r2';process.env.R2_PRIVATE_CONFIRMED='true';
+    const photo=new FormData();photo.set('file',new File([new Uint8Array(await sharp({create:{width:100,height:50,channels:3,background:'orange'}}).png().toBuffer())],'tablet.png',{type:'image/png'}));
+    const input={customer:operationClient,length:10,width:16,height:12,weightLb:20,reject:false};
+    try{
+      const result=await receiveBoxWithPhoto(input,photo);expect(result.ok).toBe(true);if(!result.ok)throw new Error(result.error);
+      const id=result.box.photoFileId!;
+      const [rows]=await root.query<mysql.RowDataPacket[]>('SELECT * FROM private_files WHERE id=?',[id]);
+      expect(rows[0].storage_provider).toBe('r2');expect(rows[0].content).toBeNull();expect(rows[0].object_key).toMatch(/^ayl\/reception\//);
+      const request=()=>downloadPrivateFile(new Request('http://localhost'),{params:Promise.resolve({id})});
+      expect((await request()).status).toBe(200);
+      cookieJar.delete('ayl_session');r2Get.mockClear();expect((await request()).status).toBe(401);expect(r2Get).not.toHaveBeenCalled();
+      const outsider=await withStore(async()=>users.find(u=>u.email==='outsider@example.invalid')!);
+      cookieJar.set('ayl_session',{value:await createSessionToken(outsider.id,'cliente')});expect((await request()).status).toBe(404);expect(r2Get).not.toHaveBeenCalled();
+      cookieJar.set('ayl_session',{value:adminSession});
+      r2Get.mockRejectedValueOnce(new Error('network'));expect((await request()).status).toBe(503);
+      const before=r2Files.size;
+      await expect(runMutation('admin',async()=>{const saved=await receiveBoxWithPhoto(input,photo);if(!saved.ok)throw new Error(saved.error);throw new Error('rollback-r2');})).rejects.toThrow('rollback-r2');
+      expect(r2Files.size).toBe(before);expect(r2Delete).toHaveBeenCalled();
+      r2Put.mockRejectedValueOnce(new Error('upload failed'));
+      const boxCount=(await logisticsService.getBoxes()).length;
+      await expect(receiveBoxWithPhoto(input,photo)).rejects.toThrow('upload failed');
+      expect((await logisticsService.getBoxes()).length).toBe(boxCount);
+    }finally{process.env.PHOTO_STORAGE='mysql';process.env.R2_PRIVATE_CONFIRMED='false';}
   });
   it("rejects fake images and oversized files without creating boxes or files", async () => {
     cookieJar.set("ayl_session",{value:adminSession});
@@ -427,7 +463,7 @@ describe.sequential("Real MySQL authentication and operations", () => {
     cookieJar.set("ayl_session",{value:adminSession});
     const counts=async()=>{const [rows]=await root.query<mysql.RowDataPacket[]>("SELECT (SELECT COUNT(*) FROM private_files) AS files,(SELECT COUNT(*) FROM entities WHERE collection_name='boxes') AS boxes,(SELECT COUNT(*) FROM email_outbox) AS emails");return rows[0];};
     const before=await counts();
-    const data=new FormData();data.set("file",new File([new Uint8Array([255,216,255,224,255,217])],"photo.jpg",{type:"image/jpeg"}));
+    const data=new FormData();data.set("file",new File([new Uint8Array(await sharp({create:{width:32,height:32,channels:3,background:'red'}}).jpeg().toBuffer())],"photo.jpg",{type:"image/jpeg"}));
     await expect(runMutation("admin",async()=>{const result=await receiveBoxWithPhoto({customer:operationClient,length:10,width:16,height:12,weightLb:20,reject:false},data);if(!result.ok)throw new Error(result.error);throw new Error("late-test-failure");})).rejects.toThrow("late-test-failure");
     expect(await counts()).toEqual(before);
   });
