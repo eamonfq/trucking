@@ -11,12 +11,17 @@ export type CloverFormConfig={publicKey:string;merchantId:string;sdkUrl:string;e
 const scripts=new Map<string,Promise<void>>();
 function loadSDK(url:string){let pending=scripts.get(url);if(!pending){pending=new Promise<void>((resolve,reject)=>{const script=document.createElement('script');script.src=url;script.async=true;script.onload=()=>resolve();script.onerror=()=>{script.remove();scripts.delete(url);reject(new Error('No se pudo cargar Clover. Revisa tu conexión y vuelve a intentar.'));};document.head.appendChild(script);});scripts.set(url,pending);}return pending;}
 const fields=[['CARD_NUMBER','Número de tarjeta'],['CARD_DATE','Vencimiento'],['CARD_CVV','CVV'],['CARD_POSTAL_CODE','Código postal']];
+// Styles inside the cross-origin iframe must be supplied through Clover's SDK.
+const hostedFieldStyles={
+ body:{margin:'0',padding:'0',fontFamily:'Arial, sans-serif'},
+ input:{fontSize:'16px',height:'32px',lineHeight:'24px',padding:'4px 0',margin:'0',boxSizing:'border-box',color:'#10213b'},
+};
 export function CloverCardFields({ref,config:provided,onReady}:{ref?:Ref<CloverCardHandle>;config?:CloverFormConfig;onReady?:(ready:boolean)=>void}){
  const [loaded,setLoaded]=useState<CloverFormConfig>(),[error,setError]=useState(''),[ready,setReady]=useState(false),[retry,setRetry]=useState(0);
  const sdk=useRef<SDK|null>(null);const prefix=`clover-${useId().replace(/[^a-zA-Z0-9]/g,'')}`;const config=provided??loaded;
  useEffect(()=>{if(provided)return;let active=true;cloverFormConfig().then(result=>{if(!active)return;if(result.ok)setLoaded(result.config);else setError(result.error);}).catch(()=>{if(active)setError('No se pudo consultar la configuración de Clover.');});return()=>{active=false;};},[provided,retry]);
  useEffect(()=>{if(!config)return;let active=true;
-  loadSDK(config.sdkUrl).then(()=>{if(!active)return;if(!window.Clover)throw new Error('Clover no está disponible.');const client=new window.Clover(config.publicKey,{merchantId:config.merchantId});const elements=client.elements();for(const [name] of fields)elements.create(name,{input:{fontSize:'16px',lineHeight:'46px',padding:'0',margin:'0',color:'#10213b'}}).mount(`#${prefix}-${name}`);sdk.current=client;setReady(true);onReady?.(true);}).catch(e=>{if(active)setError(e instanceof Error?e.message:'No se pudo abrir Clover.');});
+  loadSDK(config.sdkUrl).then(()=>{if(!active)return;if(!window.Clover)throw new Error('Clover no está disponible.');const client=new window.Clover(config.publicKey,{merchantId:config.merchantId});const elements=client.elements();for(const [name] of fields)elements.create(name,hostedFieldStyles).mount(`#${prefix}-${name}`);sdk.current=client;setReady(true);onReady?.(true);}).catch(e=>{if(active)setError(e instanceof Error?e.message:'No se pudo abrir Clover.');});
   return()=>{active=false;sdk.current=null;setReady(false);onReady?.(false);for(const[name]of fields)document.getElementById(`${prefix}-${name}`)?.replaceChildren();};
  },[config,prefix,onReady,retry]);
  useImperativeHandle(ref,()=>({tokenize:async()=>{if(!sdk.current)throw new Error('Espera a que el formulario seguro esté listo.');setError('');const result=await sdk.current.createToken();if(!result.token||result.errors){const message='Revisa número de tarjeta, vencimiento, CVV y código postal.';setError(message);throw new Error(message);}return result.token;}}));

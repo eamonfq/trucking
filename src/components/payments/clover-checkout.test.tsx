@@ -18,12 +18,14 @@ it('shows unavailable configuration without rendering unsafe card inputs',async(
 });
 it('renders four hosted fields, confirms server total and submits only one tokenized request for the entire group',async()=>{
  const tokenize=vi.fn(async()=>({token:'clv_browser_token'}));
- window.Clover=class {elements(){return {create:()=>({mount:(selector:string)=>{const frame=document.createElement('iframe');frame.title='Clover hosted field';document.querySelector(selector)!.append(frame);}})};}createToken=tokenize;};
+ const create=vi.fn((name:string,style:unknown)=>{expect(name).toMatch(/^CARD_/);expect(style).toBeTruthy();return {mount:(selector:string)=>{const frame=document.createElement('iframe');frame.title='Clover hosted field';document.querySelector(selector)!.append(frame);}};});
+ window.Clover=class {elements(){return {create};}createToken=tokenize;};
  vi.mocked(prepareCloverPayment).mockResolvedValueOnce(quote).mockResolvedValue({ok:true,invoiceIds:quote.invoiceIds,invoiceNumbers:quote.invoiceNumbers,amountUsd:118.56,canReconcile:true,attempt:{id:'attempt1',status:'paid',amountUsd:118.56,chargeId:'CHARGE1'}});
  vi.mocked(submitCloverPayment).mockResolvedValue({ok:true,attempt:{id:'attempt1',status:'paid',amountUsd:118.56,chargeId:'CHARGE1'}});
  const node=mount(<CloverCheckout invoiceIds={['one']} warehouseId="warehouse1" requireLocation/>);await click(node,'Abrir');
  await act(async()=>{document.querySelector(`script[src="${quote.config.sdkUrl}"]`)!.dispatchEvent(new Event('load'));});
  expect(node.querySelectorAll('iframe')).toHaveLength(4);expect(node.textContent).toContain('118.56');expect(node.querySelector('input')).toBeNull();
+ for(const [,style] of create.mock.calls)expect(style).toMatchObject({body:{margin:'0'},input:{height:'32px',lineHeight:'24px',padding:'4px 0',boxSizing:'border-box'}});
  const pay=Array.from(node.querySelectorAll('button')).find(b=>b.textContent?.includes('Pagar $'))!;expect(pay).toBeTruthy();await act(async()=>{pay.click();pay.click();});
  expect(tokenize).toHaveBeenCalledTimes(1);expect(submitCloverPayment).toHaveBeenCalledExactlyOnceWith(['one','two'],'clv_browser_token',118.56,'warehouse1');expect(node.textContent).toContain('Pago confirmado');expect(node.querySelectorAll('iframe')).toHaveLength(0);
 });
