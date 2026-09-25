@@ -4,6 +4,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { PaymentCapture } from "./payment-capture";
 import { ReceptionPrealertPicker } from "./reception-prealert-picker";
 import type { Box } from "@/lib/types";
+vi.mock('@/lib/auth/clover-actions',()=>({cloverAvailability:vi.fn(async()=>({enabled:false}))}));
 vi.stubGlobal("React",React);
 vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT",true);
 const mounts:Array<{root:ReturnType<typeof createRoot>;node:HTMLElement}>=[];

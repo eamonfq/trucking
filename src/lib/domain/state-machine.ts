@@ -91,6 +91,7 @@ export function transitionShipment(shipment: Shipment, to: ShipmentStatus, conte
 }
 
 export function transitionInvoice(invoice: Invoice, to: InvoiceStatus, context: TransitionContext): TransitionResult<Invoice> {
+  if(invoice.cloverPaymentId)return {ok:false,error:'Esta factura tiene un cargo Clover vinculado. Consulta o concilia el pago antes de cambiar su estado.'};
   if (!INVOICE_TRANSITIONS[invoice.status].includes(to)) {
     return { ok: false, error: `La factura ${invoice.number} no puede pasar de ${invoice.status} a ${to}.` };
   }

@@ -47,6 +47,7 @@ import { checkPassword } from "@/lib/auth/crypto";
 import { sendEmail, decryptEmail, deliverPendingEmails } from "@/lib/services/email";
 import { renderEmail } from "@/lib/services/email-template";
 import {receptionPhotoAttachment} from '@/lib/services/email-photo';
+import {chargeClover,quoteClover,reconcileClover} from '@/lib/payments/clover';
 import {receivePackageGroup} from "@/lib/auth/file-actions";
 import {deleteCustomerRecipient,upsertCustomerRecipient} from "@/lib/auth/admin-actions";
 import {getReceptionContacts} from "@/lib/auth/reception-contacts";
@@ -1147,4 +1148,67 @@ describe.sequential("Real MySQL authentication and operations", () => {
     expect((await scanLoad(trip.truck.id,b.box.code,destination.id)).ok).toBe(true);
   });
 
+});
+
+describe.sequential('Clover with real MySQL and mocked bank requests',()=>{
+ async function setup(){
+  cookieJar.set('ayl_session',{value:adminSession});
+  const origin=(await getWarehouseAdministration()).warehouses.find(w=>w.kind==='origen')!;
+  const item={customer:operationClient,originWarehouseId:origin.id,billingMode:'peso-real',weightLb:10,invoiceNow:true};
+  const result=await receivePackageGroup([item,item],new FormData());
+  if(!result.ok)throw new Error(result.error);
+  return {ids:result.results.map(r=>r.invoice!.id),amount:result.total,location:origin.id};
+ }
+ async function sandbox(work:(fetch:ReturnType<typeof vi.fn>)=>Promise<void>){
+  const previous={...process.env};const originalFetch=globalThis.fetch;
+  Object.assign(process.env,{CLOVER_ENABLED:'true',CLOVER_ENVIRONMENT:'sandbox',CLOVER_PUBLIC_KEY:'public-test',CLOVER_PRIVATE_KEY:'private-test',CLOVER_MERCHANT_ID:'merchant-test',EMAIL_DELIVERY:'preview'});
+  const fetch=vi.fn();globalThis.fetch=fetch;
+  try{await work(fetch);}finally{globalThis.fetch=originalFetch;for(const key of ['CLOVER_ENABLED','CLOVER_ENVIRONMENT','CLOVER_PUBLIC_KEY','CLOVER_PRIVATE_KEY','CLOVER_MERCHANT_ID','EMAIL_DELIVERY']){if(previous[key]===undefined)delete process.env[key];else process.env[key]=previous[key];}cookieJar.set('ayl_session',{value:adminSession});}
+ }
+ function paid(amount:number,source='clv_testsource',id='CHARGE123'){return {id,amount,currency:'usd',status:'succeeded',paid:true,captured:true,source:{id:source}};}
+ it('charges a multi-piece reception once under concurrency and persists every invoice, reference and one email',async()=>sandbox(async fetch=>{
+  const batch=await setup();fetch.mockImplementation(async()=>new Response(JSON.stringify(paid(Math.round(batch.amount*100))),{status:200}));
+  const quote=await quoteClover([batch.ids[0]]);expect(quote.invoiceIds).toEqual(batch.ids);expect(quote.amountUsd).toBe(batch.amount);expect(JSON.stringify(quote)).not.toContain('private-test');
+  const [mailBefore]=await root.query<mysql.RowDataPacket[]>('SELECT id FROM email_outbox');
+  const results=await Promise.all([1,2].map(()=>chargeClover(batch.ids,'clv_testsource',batch.amount,'127.0.0.1',batch.location)));
+  expect(fetch).toHaveBeenCalledTimes(1);expect(results.some(r=>r.status==='paid')).toBe(true);
+  const request=JSON.parse(fetch.mock.calls[0][1].body);expect(request.amount).toBe(Math.round(batch.amount*100));expect(request.ecomind).toBe('moto');
+  for(const id of batch.ids){const invoice=(await logisticsService.getInvoices()).find(i=>i.id===id)!;expect(invoice.status).toBe('pagada');expect(invoice.collectionMethod).toBe('clover');expect(invoice.payments?.at(-1)).toMatchObject({method:'clover',externalReference:'CHARGE123',status:'confirmado',warehouseId:batch.location});}
+  const [mailAfter]=await root.query<mysql.RowDataPacket[]>('SELECT id FROM email_outbox');expect(mailAfter.length-mailBefore.length).toBe(1);
+  expect((await chargeClover(batch.ids,'clv_anothersource',batch.amount,'127.0.0.1',batch.location)).status).toBe('paid');expect(fetch).toHaveBeenCalledTimes(1);
+  const [stored]=await root.query<mysql.RowDataPacket[]>("SELECT payload FROM entities WHERE collection_name='cloverAttempts'");expect(JSON.stringify(stored)).not.toContain('clv_testsource');expect(JSON.stringify(stored)).not.toContain('private-test');
+ }));
+ it('rejects forged amounts, manual Clover reports, missing location and cross-client access without charging',async()=>sandbox(async fetch=>{
+  const batch=await setup();await expect(chargeClover(batch.ids,'clv_wrongtotal',0.01,'127.0.0.1',batch.location)).rejects.toThrow('total');
+  await expect(chargeClover(batch.ids,'clv_nolocation',batch.amount,'127.0.0.1','bad-location')).rejects.toThrow('almacén');
+  const other=await createCustomerAtReception({...customer,email:'clover-other@example.invalid'});if(!other.ok)throw new Error('client');await root.execute('UPDATE accounts SET verified_at=UTC_TIMESTAMP(3) WHERE user_id=?',[other.user.id]);cookieJar.set('ayl_session',{value:await createSessionToken(other.user.id,'cliente')});
+  await expect(quoteClover(batch.ids)).rejects.toThrow('permisos');await expect(chargeClover(batch.ids,'clv_unauthorized',batch.amount,'127.0.0.1')).rejects.toThrow('permisos');
+  expect((await reportInvoicePayment(batch.ids[0],{amount:batch.amount,method:'clover'})).ok).toBe(false);expect(fetch).not.toHaveBeenCalled();
+ }));
+ it('preserves unpaid invoices on explicit decline and allows a new card attempt',async()=>sandbox(async fetch=>{
+  const batch=await setup();fetch.mockResolvedValueOnce(new Response(JSON.stringify({error:{type:'card_error'}}),{status:400}));
+  expect((await chargeClover(batch.ids,'clv_declinedcard',batch.amount,'127.0.0.1',batch.location)).status).toBe('declined');
+  expect((await logisticsService.getInvoices()).find(i=>i.id===batch.ids[0])).toMatchObject({status:'emitida'});
+  fetch.mockResolvedValueOnce(new Response(JSON.stringify(paid(Math.round(batch.amount*100),'clv_secondcard','CHARGE456')),{status:200}));
+  expect((await chargeClover(batch.ids,'clv_secondcard',batch.amount,'127.0.0.1',batch.location)).status).toBe('paid');expect(fetch).toHaveBeenCalledTimes(2);
+ }));
+ it('locks ambiguous charges, blocks edits and alternate payments, then reconciles by GET without charging again',async()=>sandbox(async fetch=>{
+  const batch=await setup();fetch.mockRejectedValueOnce(new Error('network timeout'));
+  expect((await chargeClover(batch.ids,'clv_uncertainsource',batch.amount,'127.0.0.1',batch.location)).status).toBe('review');
+  expect((await chargeClover(batch.ids,'clv_retriedsource',batch.amount,'127.0.0.1',batch.location)).status).toBe('review');expect(fetch).toHaveBeenCalledTimes(1);
+  const invoice=(await logisticsService.getInvoices()).find(i=>i.id===batch.ids[0])!;
+  expect((await editOperation({kind:'invoice',id:invoice.id,expected:recordRevision(invoice),reason:'Intento de modificar cobro pendiente',values:{}})).ok).toBe(false);
+  await root.execute('UPDATE accounts SET verified_at=UTC_TIMESTAMP(3) WHERE user_id=?',[operationClient]);cookieJar.set('ayl_session',{value:await createSessionToken(operationClient,'cliente')});
+  expect((await reportInvoicePayment(invoice.id,{amount:invoiceTotal(invoice),method:'efectivo'})).ok).toBe(false);
+  await expect(reconcileClover(batch.ids,'CHARGE789')).rejects.toThrow('administración');cookieJar.set('ayl_session',{value:adminSession});
+  fetch.mockResolvedValueOnce(new Response(JSON.stringify(paid(Math.round(batch.amount*100),'clv_wrongsource','CHARGE789')),{status:200}));await expect(reconcileClover(batch.ids,'CHARGE789')).rejects.toThrow('coincide');
+  fetch.mockResolvedValue(new Response(JSON.stringify(paid(Math.round(batch.amount*100),'clv_uncertainsource','CHARGE789')),{status:200}));
+  expect((await reconcileClover(batch.ids,'CHARGE789')).status).toBe('paid');expect(fetch.mock.calls.at(-1)?.[1].method).toBe('GET');
+ }));
+ it('lets the owner pay online without warehouse privileges and records the portal as location',async()=>sandbox(async fetch=>{
+  const batch=await setup();await root.execute('UPDATE accounts SET verified_at=UTC_TIMESTAMP(3) WHERE user_id=?',[operationClient]);cookieJar.set('ayl_session',{value:await createSessionToken(operationClient,'cliente')});
+  fetch.mockResolvedValue(new Response(JSON.stringify(paid(Math.round(batch.amount*100),'clv_clientcard','CHARGECUSTOMER')),{status:200}));
+  expect((await chargeClover(batch.ids,'clv_clientcard',batch.amount,'127.0.0.1')).status).toBe('paid');
+  expect(JSON.parse(fetch.mock.calls[0][1].body).ecomind).toBe('ecom');expect((await logisticsService.getInvoices()).find(i=>i.id===batch.ids[0])?.payments?.at(-1)?.warehouseName).toContain('Portal del cliente');
+ }));
 });

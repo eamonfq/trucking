@@ -1,3 +1,4 @@
+import {CloverCheckout} from "@/components/payments/clover-checkout";
 import { PaymentHistory } from "@/components/admin/payment-history";
 import Link from "next/link";
 import { PrivateFileLink } from "@/components/ui/private-file-link";
@@ -41,16 +42,16 @@ export default async function InvoiceDetail({ params }: { params: Promise<{ id: 
       <Card className="h-fit shadow-none">
         <h2 className="font-display text-xl font-bold">Pago</h2>
         {invoice.collectionReferences?.map((entry,index)=><p key={index} className="my-3 break-words text-sm"><strong>Comprobante ({entry.method}):</strong> {entry.reference}</p>)}{Boolean(invoice.receiptFiles?.length) && <div className="my-4 grid gap-3"><p className="text-xs font-semibold text-ink-500">Comprobantes conservados</p>{invoice.receiptFiles!.map(file=><PrivateFileLink key={file.id} id={file.id} name={file.name} />)}</div>}
-        {invoice.status === "pendiente-pago-destino" ? <p className="mt-4 rounded-xl bg-warning-50 p-4 text-sm">Pendiente de pago en destino: {formatUsd(total)}. El comprobante del acuerdo no acredita un cobro. Operaciones confirmará el pago al recibirlo.</p> : ["emitida", "vencida"].includes(invoice.status)
+        {invoice.status === "pendiente-pago-destino" ? <div className="mt-4 grid gap-4"><p className="rounded-xl bg-warning-50 p-4 text-sm">Pendiente de pago en destino: {formatUsd(total)}. Puedes liquidar en línea con Clover antes de recoger tu mercancía.</p><CloverCheckout invoiceIds={[invoice.id]}/></div> : ["emitida", "vencida"].includes(invoice.status)
           ? <>
               {invoice.paymentReviewNote && <p className="mt-4 rounded-2xl bg-danger-50 p-4 text-sm leading-6 text-danger-700"><strong className="block">Tu reporte anterior fue rechazado</strong>{invoice.paymentReviewNote}</p>}
               <p className="mt-4 text-sm leading-6 text-navy-500">Registra los datos del pago para su validación. Adjuntar un comprobante es opcional.</p>
-              <div className="mt-5"><PaymentForm invoiceId={invoice.id} amount={total} /></div>
+              <div className="mt-5"><PaymentForm invoiceId={invoice.id} amount={total} cloverPending={Boolean(invoice.cloverPaymentId)} /></div>
             </>
           : invoice.status === "pago-reportado"
             ? <div className="mt-5 rounded-2xl bg-orange-50 p-4 text-sm text-navy-700"><p className="font-bold text-orange-700">Comprobante en revisión</p><p className="mt-2">Monto: {formatUsd(invoice.paymentReport?.amountUsd ?? total)}</p><p className="mt-1">Referencia: {invoice.paymentReport?.reference}</p><p className="mt-1">Archivo: {invoice.paymentReport?.receiptName ?? "Sin archivo"}</p></div>
             : invoice.status === "pagada"
-              ? <p className="mt-4 rounded-2xl bg-success-50 p-4 text-sm font-bold text-success-700">Pago validado por Operaciones A&amp;L.</p>
+              ? <p className="mt-4 rounded-2xl bg-success-50 p-4 text-sm font-bold text-success-700">{invoice.collectionMethod==="clover"?"Pago confirmado por Clover.":"Pago validado por Operaciones A&L."}</p>
               : <p className="mt-4 text-sm text-navy-500">La factura debe emitirse antes de recibir un reporte de pago.</p>}
       </Card>
     </div>

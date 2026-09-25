@@ -162,9 +162,10 @@ export type InvoiceLine = {
 export type PaymentRecord = { folio:string; status:"pendiente"|"confirmado"|"rechazado"|"acuerdo"; amountUsd:number; method:string; externalReference?:string; recordedAt:string; actorId:string; actorName:string; warehouseId?:string; warehouseName?:string; customerId:string; invoiceId:string; boxIds:string[]; shipmentId?:string; confirmedAt?:string; confirmedBy?:string; confirmedByName?:string; boxCodes?:string[]; shipmentCodes?:string[] };
 
 export type Invoice = {
+  cloverPaymentId?: string;
   payments?: PaymentRecord[];
-  collectionReferences?: Array<{reference:string;method:"efectivo"|"destino"|"tarjeta"|"transferencia"|"deposito";at:string}>;
-  collectionMethod?: "efectivo" | "destino" | "tarjeta" | "transferencia" | "deposito";
+  collectionReferences?: Array<{reference:string;method:"efectivo"|"destino"|"tarjeta"|"transferencia"|"deposito"|"clover";at:string}>;
+  collectionMethod?: "efectivo" | "destino" | "tarjeta" | "transferencia" | "deposito" | "clover";
   excessFeeUsd?: number;
   id: string;
   number: string;

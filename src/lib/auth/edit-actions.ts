@@ -4,6 +4,7 @@ import { calculateBilling } from "@/lib/utils/billing";
 import { CUSTOM_CARGO_ID } from "@/lib/config/custom-cargo";
 import { recordRevision } from "@/lib/db/revision";
 import { z } from "zod";
+import {externalPaymentMethodSchema} from '@/lib/schemas/logistics';
 import { getSession } from "./actions";
 import { audit } from "./repository";
 import { runMutation } from "@/lib/db/mutation";
@@ -35,6 +36,7 @@ export async function editOperation(input: unknown) {
     if (!entity || (session.role !== "admin" && (!("userId" in entity) || entity.userId !== session.userId || !["box","shipment","payment"].includes(kind)))) return {ok:false as const,error:"No puedes editar este registro."};
     if (recordRevision(entity) !== expected) return {ok:false as const,error:"El registro cambió. Actualiza la página antes de editar."};
     const before = JSON.parse(JSON.stringify(entity));
+    if ('cloverPaymentId' in entity && entity.cloverPaymentId) return {ok:false as const,error:'El cobro Clover protege esta factura contra cambios. Concilia el cargo antes de modificarla.'};
     const at = new Date().toISOString();
     const actor = users.find(x=>x.id===session.userId)!;
     const actorName = `${actor.firstName} ${actor.paternalLastName}`;
@@ -77,7 +79,7 @@ export async function editOperation(input: unknown) {
         } else if (kind === "payment") {
           const invoice=invoices.find(x=>x.id===id)!;
           if(invoice.status!=="pago-reportado" || !invoice.paymentReport) throw new Error("Solo se corrige un reporte pendiente de revisión.");
-          const data=z.object({method:z.string().trim().min(2).max(80),reference:z.string().trim().min(3).max(160)}).strict().parse(values);
+          const data=z.object({method:externalPaymentMethodSchema,reference:z.string().trim().min(3).max(160)}).strict().parse(values);
           const payment=invoice.payments?.findLast(p=>p.status==="pendiente");if(payment){payment.method=data.method;payment.externalReference=data.reference||undefined;}
           invoice.paymentReport={...invoice.paymentReport,...data,reportedAt:new Date(Math.max(Date.now(),Date.parse(invoice.paymentReport.reportedAt)+1)).toISOString()};
           invoice.paymentReviewNote=undefined;
