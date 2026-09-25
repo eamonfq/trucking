@@ -6,11 +6,13 @@ import {ReceptionRecipient} from './reception-recipient';
 import {ReceptionForm} from './reception-form';
 import {getReceptionContacts} from '@/lib/auth/reception-contacts';
 import {upsertCustomerRecipient} from '@/lib/auth/admin-actions';
-import {receivePackageGroup} from '@/lib/auth/file-actions';
-import {cloverAvailability} from '@/lib/auth/clover-actions';
+import {receivePackageGroup,completeReceptionPayment} from '@/lib/auth/file-actions';
+import {cloverAvailability,submitCloverPayment} from '@/lib/auth/clover-actions';
+const {tokenize}=vi.hoisted(()=>({tokenize:vi.fn(async()=> 'clv_test')}));
+vi.mock('@/components/payments/clover-card-fields',()=>({CloverCardFields:({ref,onReady}:{ref:React.Ref<unknown>;onReady:(ready:boolean)=>void})=>{React.useImperativeHandle(ref,()=>({tokenize}));React.useEffect(()=>{onReady(true);return()=>onReady(false);},[onReady]);return <div>Campos seguros Clover</div>;}}));
 vi.mock('@/lib/auth/reception-contacts',()=>({getReceptionContacts:vi.fn()}));
 vi.mock('@/lib/auth/admin-actions',()=>({upsertCustomerRecipient:vi.fn(),deleteCustomerRecipient:vi.fn()}));
-vi.mock('@/lib/auth/file-actions',()=>({receivePackageGroup:vi.fn()}));
+vi.mock('@/lib/auth/file-actions',()=>({receivePackageGroup:vi.fn(),completeReceptionPayment:vi.fn()}));
 vi.mock('@/lib/auth/clover-actions',()=>({cloverAvailability:vi.fn(async()=>({enabled:false})),prepareCloverPayment:vi.fn(),submitCloverPayment:vi.fn(),reconcileCloverPayment:vi.fn()}));
 vi.mock('@/lib/auth/warehouse-actions',()=>({selectPrealertAtWarehouse:vi.fn()}));
 vi.mock('@/components/ui/toast',()=>({useToast:()=>({showToast:vi.fn()})}));
@@ -19,17 +21,33 @@ vi.mock('./customer-search',()=>({CustomerSearch:({onChange}:{onChange:(id:strin
 vi.stubGlobal('React',React);vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT',true);
 const mounts:Array<{root:ReturnType<typeof createRoot>;node:HTMLElement}>=[];
 function mount(element:React.ReactNode){const node=document.createElement('div');document.body.append(node);const root=createRoot(node);mounts.push({root,node});act(()=>root.render(element));return {root,node};}
-afterEach(()=>{for(const {root,node} of mounts.splice(0)){act(()=>root.unmount());node.remove();}vi.clearAllMocks();vi.mocked(cloverAvailability).mockResolvedValue({enabled:false});});
+afterEach(()=>{for(const {root,node} of mounts.splice(0)){act(()=>root.unmount());node.remove();}vi.clearAllMocks();vi.mocked(cloverAvailability).mockResolvedValue({enabled:false,issues:[]});});
 const addr={id:'a',userId:'u',label:'Casa',street:'Reforma',exteriorNumber:'10',neighborhood:'Centro',postalCode:'49540',municipality:'Valle de Juárez',state:'Jalisco'};
 const person={id:'r',userId:'u',name:'Juan Perez',phone:'5512345678',addressId:'a'};
-it('saves Clover receptions as unpaid invoices and opens checkout only after persistence',async()=>{
- vi.mocked(cloverAvailability).mockResolvedValue({enabled:true,environment:'sandbox'});
+it('shows secure fields before saving and changes a declined card to cash without creating more packages',async()=>{
+ vi.mocked(cloverAvailability).mockResolvedValue({enabled:true,environment:'sandbox',issues:[]});
  vi.mocked(getReceptionContacts).mockResolvedValue({recipients:[person],addresses:[addr]});
  vi.mocked(receivePackageGroup).mockResolvedValue({ok:true,results:[{box:{id:'b1',status:'en-bodega'},invoice:{id:'i1'}}],total:32} as never);
  const {node}=mount(<ReceptionForm users={[]} defaultCustomerId="u" rates={[]} origins={[{id:'origin',name:'Origen'}]} locations={[{id:'origin',name:'Origen'}]} excessPolicy="recargo"/>);await act(async()=>{});
  await fill('weightLb','10');await act(async()=>node.querySelector<HTMLInputElement>('input[value="clover"]')!.click());
- expect(node.textContent).toContain('Guardar y continuar a Clover');await act(async()=>node.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
- expect(receivePackageGroup).toHaveBeenCalledTimes(1);const [items,,payment]=vi.mocked(receivePackageGroup).mock.calls[0];expect(payment).toBeUndefined();expect((items as {invoiceNow:boolean}[])[0].invoiceNow).toBe(true);expect(node.textContent).toContain('Abrir pago seguro');
+ expect(node.textContent).toContain('Campos seguros Clover');expect(receivePackageGroup).not.toHaveBeenCalled();
+ vi.mocked(submitCloverPayment).mockResolvedValue({ok:true,attempt:{status:'declined'}} as never);
+ await act(async()=>node.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ expect(tokenize).toHaveBeenCalledTimes(1);expect(receivePackageGroup).toHaveBeenCalledTimes(1);const [items,,payment,request]=vi.mocked(receivePackageGroup).mock.calls[0];expect(payment).toBeUndefined();expect((items as {invoiceNow:boolean}[])[0].invoiceNow).toBe(true);
+ expect(node.querySelector('form')).not.toBeNull();expect(node.textContent).toContain('Tarjeta rechazada');
+ vi.mocked(completeReceptionPayment).mockResolvedValue({ok:true,results:[{box:{id:'b1',status:'en-bodega'},invoice:{id:'i1'}}],total:32} as never);
+ await act(async()=>node.querySelector<HTMLInputElement>('input[value="efectivo"]')!.click());
+ await act(async()=>node.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ expect(completeReceptionPayment).toHaveBeenCalledWith(request,expect.objectContaining({method:'efectivo'}));expect(receivePackageGroup).toHaveBeenCalledTimes(1);expect(node.textContent).toContain('paquete registrado');
+});
+it('does not save a reception when secure card tokenization fails',async()=>{
+ vi.mocked(cloverAvailability).mockResolvedValue({enabled:true,environment:'sandbox',issues:[]});
+ vi.mocked(getReceptionContacts).mockResolvedValue({recipients:[person],addresses:[addr]});
+ tokenize.mockRejectedValueOnce(new Error('Revisa la tarjeta'));
+ const {node}=mount(<ReceptionForm users={[]} defaultCustomerId="u" rates={[]} origins={[{id:'origin',name:'Origen'}]} locations={[{id:'origin',name:'Origen'}]} excessPolicy="recargo"/>);await act(async()=>{});
+ await fill('weightLb','10');await act(async()=>node.querySelector<HTMLInputElement>('input[value="clover"]')!.click());
+ await act(async()=>node.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ expect(receivePackageGroup).not.toHaveBeenCalled();expect(submitCloverPayment).not.toHaveBeenCalled();expect(node.textContent).toContain('Revisa la tarjeta');
 });
 it('submits real weights without dimensions and starts a clean next reception without refresh',async()=>{
  vi.mocked(getReceptionContacts).mockResolvedValue({recipients:[person],addresses:[addr]});

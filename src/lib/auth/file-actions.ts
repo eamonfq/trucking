@@ -15,12 +15,25 @@ import { z } from "zod";
 import type {Box,Invoice} from "@/lib/types";
 import type {EmailInput} from "@/lib/services/email-template";
 import { receptionSchema } from "@/lib/schemas/admin";
+import {collection} from '@/lib/db/store';
+import {recordRevision} from '@/lib/db/revision';
 
-export async function receivePackageGroup(input:unknown,data:FormData,paymentInput?:unknown){
+const receptionRequests=collection<{id:string;actorId:string;fingerprint:string;boxIds:string[];invoiceIds:string[]}>('receptionRequests');
+function savedReception(request:typeof receptionRequests[number]){
+  const results=request.boxIds.map((id,index)=>{const box=boxes.find(b=>b.id===id);if(!box)throw new Error('No se encontró una pieza de la recepción guardada.');return {ok:true as const,box,invoice:invoices.find(i=>i.id===request.invoiceIds[index])};});
+  return {ok:true as const,results,total:results.reduce((sum,r)=>sum+(r.invoice?invoiceTotal(r.invoice):0),0),replayed:true};
+}
+
+export async function receivePackageGroup(input:unknown,data:FormData,paymentInput?:unknown,requestId?:string){
   return runMutation("admin",async()=>withConsolidatedEmail(async()=>{
     const parsed=z.array(receptionSchema).min(1).max(50).safeParse(input);
     if(!parsed.success)return {ok:false as const,error:parsed.error.issues[0]?.message??"Revisa los paquetes (máximo 50)."};
     const items=parsed.data;
+    const actor=await requireAdminUser();
+    if(requestId&&!z.string().uuid().safeParse(requestId).success)return {ok:false as const,error:'Identificador de recepción inválido.'};
+    const fingerprint=recordRevision({items,payment:paymentInput??null});
+    const previous=requestId?receptionRequests.find(r=>r.id===requestId):undefined;
+    if(previous){if(previous.actorId!==actor.id||previous.fingerprint!==fingerprint)return {ok:false as const,error:'Esta recepción ya se guardó con otros datos. Revisa la bodega antes de continuar.'};return savedReception(previous);}
     if(items.some(p=>p.customer!==items[0].customer||p.originWarehouseId!==items[0].originWarehouseId||p.recipientId!==items[0].recipientId))return {ok:false as const,error:"Un grupo debe tener el mismo cliente, origen y destinatario."};
     const prealerts=items.flatMap(p=>p.prealertId?[p.prealertId]:[]);
     if(new Set(prealerts).size!==prealerts.length)return {ok:false as const,error:"Una prealerta solo puede vincularse a una pieza."};
@@ -40,8 +53,25 @@ export async function receivePackageGroup(input:unknown,data:FormData,paymentInp
       if(["tarjeta","transferencia","deposito"].includes(payment.data.method)&&Math.abs((payment.data.amount??0)-total)>0.001)return {ok:false as const,error:`El monto debe cubrir el total del grupo: USD ${total.toFixed(2)}.`};
       for(const result of results){const saved=await recordWarehousePayment(result.invoice!.id,{...payment.data,amount:invoiceTotal(result.invoice!)},null);if(!saved.ok)return saved;result.invoice=saved.invoice;}
     }
+    if(requestId)receptionRequests.push({id:requestId,actorId:actor.id,fingerprint,boxIds:results.map(r=>r.box.id),invoiceIds:results.map(r=>r.invoice?.id??'')});
     return {ok:true as const,results,total};
-  },result=>result.ok?receptionEmail(result):undefined));
+  },result=>result.ok&&!('replayed' in result)?receptionEmail(result):undefined));
+}
+
+// Complete an already saved reception after a declined card. Never creates more boxes.
+export async function completeReceptionPayment(requestId:string,input:unknown){
+ return runMutation('admin',async()=>withConsolidatedEmail(async()=>{
+  const actor=await requireAdminUser(),request=receptionRequests.find(r=>r.id===requestId&&r.actorId===actor.id);
+  if(!request)return {ok:false as const,error:'No encontramos esta recepción. Revisa las facturas.'};
+  const parsed=receptionPaymentSchema.safeParse(input);if(!parsed.success)return {ok:false as const,error:'Revisa el método, monto y ubicación.'};
+  const result=savedReception(request),payment=parsed.data;
+  if(result.results.some(r=>!r.invoice||r.box.status==='rechazada'))return {ok:false as const,error:'La recepción no admite cobros.'};
+  if(['tarjeta','transferencia','deposito'].includes(payment.method)&&Math.abs((payment.amount??0)-result.total)>0.001)return {ok:false as const,error:'El monto debe cubrir el total exacto de la recepción.'};
+  if(result.results.every(r=>r.invoice?.collectionMethod===payment.method&&(r.invoice.status==='pagada'||(payment.method==='destino'&&r.invoice.status==='pendiente-pago-destino'))))return result;
+  if(result.results.some(r=>r.invoice?.cloverPaymentId))return {ok:false as const,error:'Clover tiene un cargo en curso o confirmado. Verifica su estado antes de usar otro método.'};
+  for(const row of result.results){const saved=await recordWarehousePayment(row.invoice!.id,{...payment,amount:invoiceTotal(row.invoice!)},null);if(!saved.ok)return saved;row.invoice=saved.invoice;}
+  return {...result,replayed:false};
+ },result=>result.ok&&!result.replayed?receptionEmail(result):undefined));
 }
 
 function receptionEmail(result:{results:Array<{box:Box;invoice?:Invoice}>;total:number}):EmailInput|undefined{
@@ -105,7 +135,7 @@ export async function reportPaymentWithReceipt(invoiceId: string, input: unknown
 
 async function recordWarehousePayment(invoiceId: string, payment: { method: "efectivo" | "destino" | "tarjeta" | "transferencia" | "deposito"; amount?: number; reference?:string; warehouseId?:string }, file: Parameters<typeof savePrivateFile>[3] | null) {
   const invoice = invoices.find(item => item.id === invoiceId);
-  if (!invoice || !["emitida", "pendiente-pago-destino"].includes(invoice.status)) return {ok:false as const,error:"La factura ya cambió. Actualiza antes de registrar el cobro."};
+  if (!invoice || !["emitida", "pendiente-pago-destino", "vencida"].includes(invoice.status)) return {ok:false as const,error:"La factura ya cambió. Actualiza antes de registrar el cobro."};
   if (["tarjeta","transferencia","deposito"].includes(payment.method) && !matchesInvoiceTotal(invoice, payment.amount ?? 0)) return {ok:false as const,error:"El monto recibido debe coincidir con el total exacto de la factura."};
   if(!paymentLocation(payment.warehouseId))return {ok:false as const,error:"Selecciona una ubicación activa para el cobro."};
   const actor = await requireAdminUser();
@@ -132,7 +162,7 @@ async function recordWarehousePayment(invoiceId: string, payment: { method: "efe
 export async function collectDestinationPayment(invoiceId: string, input: unknown, data: FormData) {
   return runMutation("admin", async () => {
     const invoice = invoices.find(item => item.id === invoiceId);
-    if (!invoice || invoice.status !== "pendiente-pago-destino") return {ok:false as const,error:"La factura no tiene un cobro pendiente en destino. Actualiza antes de continuar."};
+    if (!invoice || !["emitida","pendiente-pago-destino","vencida"].includes(invoice.status)) return {ok:false as const,error:"La factura no tiene un cobro pendiente. Actualiza antes de continuar."};
     const payment = receptionPaymentSchema.safeParse(input);
     if (!payment.success || payment.data.method === "destino") return {ok:false as const,error:"Selecciona el método con el que se recibió el pago."};
     const upload = await validateUpload(data,"invoice");

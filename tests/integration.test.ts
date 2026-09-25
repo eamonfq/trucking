@@ -48,7 +48,7 @@ import { sendEmail, decryptEmail, deliverPendingEmails } from "@/lib/services/em
 import { renderEmail } from "@/lib/services/email-template";
 import {receptionPhotoAttachment} from '@/lib/services/email-photo';
 import {chargeClover,quoteClover,reconcileClover} from '@/lib/payments/clover';
-import {receivePackageGroup} from "@/lib/auth/file-actions";
+import {receivePackageGroup,completeReceptionPayment} from "@/lib/auth/file-actions";
 import {deleteCustomerRecipient,upsertCustomerRecipient} from "@/lib/auth/admin-actions";
 import {getReceptionContacts} from "@/lib/auth/reception-contacts";
 import { POST as webhook } from "@/app/api/webhooks/resend/route";
@@ -1151,6 +1151,23 @@ describe.sequential("Real MySQL authentication and operations", () => {
 });
 
 describe.sequential('Clover with real MySQL and mocked bank requests',()=>{
+ it('recovers the same reception and allows cash after decline, but blocks uncertain charges',async()=>sandbox(async fetch=>{
+  cookieJar.set('ayl_session',{value:adminSession});
+  const origin=(await getWarehouseAdministration()).warehouses.find(w=>w.kind==='origen')!;
+  const items=[{customer:operationClient,originWarehouseId:origin.id,billingMode:'peso-real',weightLb:10,invoiceNow:true}];
+  for(const uncertain of [false,true]){
+   const request=crypto.randomUUID();
+   const first=await receivePackageGroup(items,new FormData(),undefined,request);
+   if(!first.ok)throw new Error(first.error);
+   const replay=await receivePackageGroup(items,new FormData(),undefined,request);
+   expect(replay.ok&&replay.results.map(r=>r.box.id)).toEqual(first.results.map(r=>r.box.id));
+   if(uncertain)fetch.mockRejectedValueOnce(new Error('timeout'));else fetch.mockResolvedValueOnce(new Response(JSON.stringify({error:{type:'card_error'}}),{status:400}));
+   await chargeClover(first.results.map(r=>r.invoice!.id),'clv_'+request,first.total,'127.0.0.1',origin.id);
+   const fallback=await completeReceptionPayment(request,{method:'efectivo',warehouseId:origin.id});
+   expect(fallback.ok).toBe(!uncertain);
+   if(fallback.ok){expect(fallback.results[0].invoice?.status).toBe('pagada');expect(fallback.results[0].box.id).toBe(first.results[0].box.id);expect((await completeReceptionPayment(request,{method:'efectivo',warehouseId:origin.id})).ok).toBe(true);}
+  }
+ }));
  async function setup(){
   cookieJar.set('ayl_session',{value:adminSession});
   const origin=(await getWarehouseAdministration()).warehouses.find(w=>w.kind==='origen')!;

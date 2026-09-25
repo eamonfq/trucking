@@ -5,10 +5,11 @@ import {revalidatePath} from 'next/cache';
 import {after} from 'next/server';
 import {getCurrentUser,requestLimit} from './actions';
 import {chargeClover,quoteClover,reconcileClover} from '@/lib/payments/clover';
-import {cloverConfig} from '@/lib/payments/clover-provider';
+import {cloverConfig,cloverConfigurationIssues} from '@/lib/payments/clover-provider';
 import {deliverPendingEmails} from '@/lib/services/email';
 
-export async function cloverAvailability(){try{const config=cloverConfig();return {enabled:true,environment:config.environment};}catch{return {enabled:false};}}
+export async function cloverAvailability(){const issues=cloverConfigurationIssues();if(issues.length)return {enabled:false,issues};const config=cloverConfig();return {enabled:true,environment:config.environment,issues:[]};}
+export async function cloverFormConfig(){try{const user=await getCurrentUser();if(!user||!['admin','cliente'].includes(user.role))throw new Error('Inicia sesión para usar Clover.');const {publicKey,merchantId,sdkUrl,environment}=cloverConfig();return {ok:true as const,config:{publicKey,merchantId,sdkUrl,environment}};}catch(error){return {ok:false as const,error:message(error)};}}
 function message(error:unknown){return error instanceof Error&&!/sql|mysql|connect|fetch|json|token.*clv_/i.test(error.message)?error.message:'No se pudo confirmar la operación. Revisa el estado antes de volver a pagar.';}
 export async function prepareCloverPayment(ids:string[]){try{return {ok:true as const,...await quoteClover(ids)};}catch(error){return {ok:false as const,error:message(error)};}}
 export async function submitCloverPayment(ids:string[],source:string,expectedAmount:number,warehouseId?:string){

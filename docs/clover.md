@@ -28,17 +28,25 @@ Si hay Cloudflare u otros proxies delante, configurar primero sus rangos confiab
 
 ## Flujo operativo
 
-1. En recepción, elegir **Clover · cobrar** y ubicación. Guardar crea paquetes y facturas emitidas, todavía sin pago; no marca dinero recibido ni usa el acuerdo de pago en destino.
-2. La pantalla de recepción confirmada presenta **Abrir pago seguro**. Muestra el total recalculado por servidor y las facturas incluidas. Un grupo de varias piezas realiza **un solo cargo**.
-3. Confirmar **Pagar** tokeniza la tarjeta dentro de los iframes de Clover. El servidor valida sesión, propiedad, ubicación e importes, guarda una reserva durable y luego realiza el cargo fuera de la transacción de MySQL.
+1. En recepción, elegir **Clover · cobrar** y ubicación muestra los campos seguros dentro de Forma de pago, antes de guardar.
+2. **Cobrar y finalizar** tokeniza la tarjeta primero. Si los campos no son válidos, no crea paquetes. Después guarda una recepción pendiente y realiza un único cargo por todas las piezas; el servidor verifica el importe.
+3. La recepción debe persistir antes de solicitar el cargo bancario para permitir auditoría y recuperación. Cada guardado lleva un identificador idempotente: reintentar una respuesta perdida recupera los mismos paquetes. El cargo se realiza fuera de la transacción de MySQL.
 4. Solo una respuesta con `paid=true`, `captured=true`, `status=succeeded`, importe exacto y moneda USD liquida las facturas. Cada factura conserva folio interno, monto, fecha, operador, ubicación y referencia del mismo cargo. Se envía un solo correo de confirmación por cargo.
-5. Si se rechaza explícitamente la tarjeta, las facturas siguen pendientes y puede utilizarse otra tarjeta. Si hay timeout, respuesta inconsistente o fallo de persistencia, el cobro queda bloqueado para conciliación. No se repite automáticamente un POST.
+5. Si se rechaza explícitamente la tarjeta, las facturas siguen pendientes, sin método Clover confirmado. En la misma recepción puede utilizarse otra tarjeta o cambiar a efectivo, destino u otro método sin duplicar paquetes. Si hay timeout, respuesta inconsistente o fallo de persistencia, el cobro queda bloqueado para conciliación. No se repite automáticamente un POST. Si se cierra la pantalla, se retoma desde Facturas.
 
 También disponible en Administración → Facturas (emitidas, vencidas y cobros en destino), y en el detalle de factura del cliente, incluido pago anticipado de una deuda en destino. Al abrir una factura de recepción se agrupan sus facturas pendientes y se muestra ese total antes de autorizar. Operadores de almacén no tienen permisos de cobro ni conciliación. Tarjeta externa continúa siendo un registro manual, separado de Clover.
 
 Las facturas con intento Clover quedan protegidas contra pago externo, cambios de estado e importes. Una recarga, doble clic o solicitud concurrente recupera el intento existente, sin generar otro cargo. La reserva usa el bloqueo transaccional existente y se almacena en `entities/cloverAttempts`; no requiere migración SQL nueva.
 
 ## Conciliación y fallos de red
+
+### Si Clover no se habilita en recepción
+
+La tarjeta Clover permanece visible y deshabilitada mientras se verifica. Si la configuración no está completa, muestra los nombres de las variables faltantes (nunca sus valores) y **Volver a verificar**. También diferencia errores de conexión y una consulta que tarda más de 10 segundos. Que la configuración esté completa no significa que el proveedor haya validado las credenciales.
+
+Además de las tres credenciales, el proceso necesita `CLOVER_ENABLED=true`, `CLOVER_ENVIRONMENT=production`, dominio HTTPS y `TRUST_PROXY=true` con un proxy correctamente configurado. Los nombres esperados son `CLOVER_MERCHANT_ID`, `CLOVER_PUBLIC_KEY` y `CLOVER_PRIVATE_KEY`.
+
+Después de cambiar variables, reiniciar la aplicación con `pm2 restart <nombre-de-la-app> --update-env`. Revisar si `.env.local` o la configuración de PM2 contienen valores anteriores que prevalecen sobre `.env`. El diagnóstico de la pantalla corresponde al proceso que atiende la aplicación, no simplemente al archivo editado. No compartir el contenido completo del entorno ni capturas de los secretos.
 
 En Administración → Facturas → Ver detalle, abrir el pago Clover y consultar estado. Si queda en verificación:
 

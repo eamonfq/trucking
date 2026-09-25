@@ -1,9 +1,14 @@
 // @vitest-environment node
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 vi.mock('server-only',()=>({}));
-import {cloverConfig,cloverRequest,isCapturedCharge} from './clover-provider';
+import {cloverConfig,cloverRequest,isCapturedCharge,cloverConfigurationIssues} from './clover-provider';
 beforeEach(()=>{vi.stubEnv('CLOVER_ENABLED','true');vi.stubEnv('CLOVER_ENVIRONMENT','sandbox');vi.stubEnv('CLOVER_PUBLIC_KEY','public-test');vi.stubEnv('CLOVER_PRIVATE_KEY','private-test');vi.stubEnv('CLOVER_MERCHANT_ID','merchant-test');});
 afterEach(()=>{vi.unstubAllEnvs();vi.unstubAllGlobals();});
+it('reports specific missing settings without exposing credential values',()=>{
+ vi.stubEnv('CLOVER_ENABLED','false');vi.stubEnv('CLOVER_MERCHANT_ID','');
+ const issues=cloverConfigurationIssues().join(' ');expect(issues).toContain('CLOVER_ENABLED=true');expect(issues).toContain('CLOVER_MERCHANT_ID');expect(issues).not.toContain('private-test');expect(issues).not.toContain('public-test');
+ vi.stubEnv('CLOVER_ENABLED','true');vi.stubEnv('CLOVER_MERCHANT_ID','merchant-test');expect(cloverConfigurationIssues()).toEqual([]);
+});
 it('fails closed without configuration and requires HTTPS and trusted proxy in production',()=>{
  vi.stubEnv('CLOVER_ENABLED','false');expect(()=>cloverConfig()).toThrow();vi.stubEnv('CLOVER_ENABLED','true');vi.stubEnv('CLOVER_ENVIRONMENT','production');vi.stubEnv('NEXT_PUBLIC_SITE_URL','http://localhost:3100');expect(()=>cloverConfig()).toThrow();vi.stubEnv('NEXT_PUBLIC_SITE_URL','https://example.invalid');vi.stubEnv('TRUST_PROXY','false');expect(()=>cloverConfig()).toThrow();vi.stubEnv('TRUST_PROXY','true');expect(cloverConfig().apiUrl).toBe('https://scl.clover.com');
 });

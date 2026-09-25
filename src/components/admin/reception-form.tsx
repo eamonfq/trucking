@@ -2,7 +2,9 @@
 
 import {CloverCheckout} from "@/components/payments/clover-checkout";
 import { calculateBilling, DEFAULT_WEIGHT_PRICING, type WeightPricing } from "@/lib/utils/billing";
-import { useState } from "react";
+import {CloverCardFields,type CloverCardHandle} from "@/components/payments/clover-card-fields";
+import {submitCloverPayment,prepareCloverPayment} from "@/lib/auth/clover-actions";
+import { useRef,useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import styles from "./reception-pos.module.css";
@@ -10,7 +12,7 @@ import { PackageCheck, Plus, Printer, CheckCircle2, ArrowRight } from "lucide-re
 import { z } from "zod";
 import { PackageQuantity, PackageMeasurements } from "./package-batch-controls";
 import { ReceptionRecipient } from "./reception-recipient";
-import { receivePackageGroup } from "@/lib/auth/file-actions";
+import { receivePackageGroup,completeReceptionPayment } from "@/lib/auth/file-actions";
 import { selectPrealertAtWarehouse } from "@/lib/auth/warehouse-actions";
 import Link from "next/link";
 import { PaymentCapture, type PaymentChoice } from "@/components/admin/payment-capture";
@@ -32,15 +34,18 @@ import { useToast } from "@/components/ui/toast";
 
 import {resolveReceptionPieces} from "@/lib/utils/reception-pieces";
 
+type Receipt = Extract<Awaited<ReturnType<typeof receivePackageGroup>>,{ok:true}>;
 type ReceptionInput = z.input<typeof receptionSchema>;
 
 export function ReceptionForm({ users, prealerts = [], excessPolicy, excessFeeUsd = 0, rates, defaultCustomerId, defaultPrealertId, weightPricing = DEFAULT_WEIGHT_PRICING, locations=[], origins=[] }: { origins?:{id:string;name:string}[]; locations?:{id:string;name:string}[]; weightPricing?: WeightPricing; users: User[]; prealerts?: Box[]; excessPolicy: string; excessFeeUsd?: number; rates: BoxCategory[]; defaultCustomerId?: string; defaultPrealertId?: string }) {
+  const card=useRef<CloverCardHandle>(null),requestId=useRef<string|undefined>(undefined),submitLock=useRef(false);
+  const [cardReady,setCardReady]=useState(false),[pendingReceipt,setPendingReceipt]=useState<Receipt|null>(null),[paymentReview,setPaymentReview]=useState(false),[receiptUncertain,setReceiptUncertain]=useState(false),[paymentNotice,setPaymentNotice]=useState("");
   const [quantity,setQuantity]=useState(1),[shared,setShared]=useState({dimensions:true,weight:false,price:false}),[pieces,setPieces]=useState<Array<{length:number;width:number;height:number;weightLb:number;customPriceUsd:number}>>([]);
   const [piecePage,setPiecePage]=useState(0);
   const [receivedIds, setReceivedIds] = useState<string[]>([]);
   const [payment, setPayment] = useState<PaymentChoice>({method:"destino",amount:"",reference:""});
   const [selectingPrealert,setSelectingPrealert]=useState(false);
-  const [lastReceived, setLastReceived] = useState<{id:string;code:string;count:number;total:number;rejected:boolean;cloverInvoiceIds?:string[];warehouseId?:string;cloverPaid?:boolean} | null>(null);
+  const [lastReceived, setLastReceived] = useState<{id:string;code:string;count:number;total:number;rejected:boolean} | null>(null);
   const [photoBusy,setPhotoBusy]=useState(false);
   const [photo, setPhoto] = useState<File | null>(null);
   const [customers, setCustomers] = useState(users);
@@ -62,22 +67,59 @@ export function ReceptionForm({ users, prealerts = [], excessPolicy, excessFeeUs
   const total=Math.round(((billing?.amountUsd??0)+surcharge+piecePrices.reduce((a,b)=>a+b,0))*100)/100;
   const pricedCount=(billing?1:0)+piecePrices.filter(price=>price>0).length;
 
-  if(lastReceived)return <section className="mx-auto grid max-w-3xl gap-6 rounded-2xl border border-stone-200 bg-white p-6 sm:p-8"><div className="flex items-start gap-4"><span className="grid size-12 shrink-0 place-items-center rounded-full bg-stone-100 text-navy-700"><CheckCircle2 className="size-6"/></span><div><p className="text-xs font-semibold uppercase tracking-wider text-navy-400">Recepción {lastReceived.code}</p><h2 className="mt-1 font-display text-2xl font-bold">{lastReceived.count} {lastReceived.count===1?"paquete registrado":"paquetes registrados"}</h2><p className="mt-2 text-sm text-navy-500">{lastReceived.rejected?"El rechazo quedó en el historial.":"Recepción confirmada. Total: "+formatUsd(lastReceived.total)+". Imprime las etiquetas antes de mover la carga."}</p></div></div>{lastReceived.cloverInvoiceIds&&<><p className={`rounded-xl p-3 text-sm ${lastReceived.cloverPaid?"bg-emerald-50 text-emerald-900":"bg-amber-50 text-amber-900"}`}>{lastReceived.cloverPaid?"Pago confirmado con Clover.":"Los paquetes están guardados, pero el pago sigue pendiente. Completa Clover aquí o retómalo desde Facturas."}</p><CloverCheckout invoiceIds={lastReceived.cloverInvoiceIds} warehouseId={lastReceived.warehouseId} requireLocation onPaid={()=>setLastReceived(current=>current?{...current,cloverPaid:true}:null)}/></>}<div className="flex flex-wrap gap-3"><Button type="button" onClick={()=>{setLastReceived(null);}}><Plus className="size-4"/>Registrar otro paquete</Button>{!lastReceived.rejected&&<Link target="_blank" href={`/etiquetas/${lastReceived.id}?grupo=1`} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md border-[1.5px] border-navy-900 px-5.5 text-sm font-semibold text-navy-900 transition hover:bg-navy-900 hover:text-white"><Printer className="size-4"/>Imprimir {lastReceived.count===1?"etiqueta":"etiquetas"}</Link>}{!lastReceived.rejected&&<Link target="_blank" href={`/api/recepciones/${lastReceived.id}/recibo`} className="inline-flex min-h-12 items-center gap-2 rounded-md border border-stone-300 px-5 text-sm font-semibold"><Printer className="size-4"/>Recibo térmico · 80 mm</Link>}</div><p className="text-xs text-navy-500">«Registrar otro paquete» conserva el cliente y el destino, pero limpia medidas, peso, foto y pago.</p><div className="flex flex-wrap items-center gap-4 border-t border-stone-100 pt-4"><Button type="button" variant="ghost" onClick={()=>{const warehouse=getValues("originWarehouseId");reset({customer:"",recipientId:"",originWarehouseId:warehouse,billingMode:"peso-real",length:"",width:"",height:"",weightLb:"",prealertId:"",reject:false,overrideCategory:"",overrideReason:"",rejectionReason:""});setLastReceived(null);}}>Recepción para otro cliente</Button><Link href="/admin/bodega" className="inline-flex items-center gap-1.5 text-sm font-semibold text-navy-600">Ver bodega<ArrowRight className="size-3.5"/></Link><Link href="/admin/facturas" className="inline-flex items-center gap-1.5 text-sm font-semibold text-navy-600">Ver facturas<ArrowRight className="size-3.5"/></Link></div></section>;
-  return <form onSubmit={handleSubmit(async (data) => {
-    if(photoBusy)return;
-    if(quantity>1){const invalid=resolvedPieces.findIndex(p=>!receptionSchema.safeParse({...data,...p,customPriceUsd:mode==="manual"?p.customPriceUsd:undefined}).success);if(invalid>=0){setPiecePage(Math.floor(invalid/5));showToast({title:"Revisa el paquete "+(invalid+2),description:"Completa el peso real y las medidas o cotización según el método de cobro.",variant:"error"});return;}}
-    const upload = new FormData(); if (photo) upload.set("file",photo);
-    let result;
-    try { const base={...data,invoiceNow:payment.method==="clover"||data.invoiceNow,customPriceUsd:isExceeded&&!data.reject?data.customPriceUsd:undefined};const batch=Array.from({length:quantity},(_,i)=>i===0?base:{...base,...resolvedPieces[i-1],customPriceUsd:mode==="manual"?resolvedPieces[i-1]?.customPriceUsd:undefined,overrideCategory:"",overrideReason:"",prealertId:""});result = await receivePackageGroup(batch, upload, data.reject || payment.method==="clover" ? undefined : {method:payment.method, warehouseId:payment.warehouseId, reference:payment.reference, ...(["tarjeta","transferencia","deposito"].includes(payment.method) ? {amount:payment.amount} : {})}); }
-    catch { return showToast({title:"No se confirmó la recepción",description:"Revisa la conexión y actualiza la bodega antes de reintentar para evitar duplicados.",variant:"error"}); }
-    if (!result.ok) return showToast({ title: "No se pudo registrar la recepción", description: result.error, variant: "error" });
-    const first=result.results[0];
-    showToast({ title: first.box.status === "rechazada" ? "Rechazo registrado" : "Caja enviada a bodega", description: `${result.results.length} paquete(s) registrado(s). Total: ${formatUsd(result.total)}.` });
-    setReceivedIds(current => [...current, ...result.results.map(r=>r.box.id)]);setQuantity(1);setPieces([]);setPiecePage(0);setShared({dimensions:true,weight:false,price:false});
-    reset({recipientId:data.recipientId,originWarehouseId:data.originWarehouseId, length:"",width:"",height:"",weightLb:"",customPriceUsd:undefined,billingMode:mode, customer: data.customer, prealertId: "", reject: false, overrideCategory: "", overrideReason: "", rejectionReason: "" });
-    setPhoto(null); setPayment({method:"destino",amount:"",reference:"",warehouseId:payment.warehouseId}); setLastReceived({id:first.box.id,code:first.box.receptionGroup?.code??first.box.code,count:result.results.length,total:result.total,rejected:first.box.status==="rechazada",cloverInvoiceIds:payment.method==="clover"?result.results.flatMap(r=>r.invoice?[r.invoice.id]:[]):undefined,warehouseId:payment.warehouseId??(locations.length===1?locations[0].id:undefined)});
-  })} className={`${styles.pos} grid items-start gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(300px,1fr)]`}>
-    <div className="grid min-w-0 gap-4">
+  function completeReceipt(result:Receipt){
+    const first=result.results[0],data=getValues();
+    setReceivedIds(current=>[...current,...result.results.map(r=>r.box.id)]);setQuantity(1);setPieces([]);setPiecePage(0);setShared({dimensions:true,weight:false,price:false});
+    reset({recipientId:data.recipientId,originWarehouseId:data.originWarehouseId,length:"",width:"",height:"",weightLb:"",customPriceUsd:undefined,billingMode:mode,customer:data.customer,prealertId:"",reject:false,overrideCategory:"",overrideReason:"",rejectionReason:""});
+    setPhoto(null);setPayment({method:"destino",amount:"",reference:"",warehouseId:payment.warehouseId});
+    setLastReceived({id:first.box.id,code:first.box.receptionGroup?.code??first.box.code,count:result.results.length,total:result.total,rejected:first.box.status==="rechazada"});
+    setPendingReceipt(null);setPaymentReview(false);setReceiptUncertain(false);setPaymentNotice("");requestId.current=undefined;
+  }
+
+  if(lastReceived)return <section className="mx-auto grid max-w-3xl gap-6 rounded-2xl border border-stone-200 bg-white p-6 sm:p-8"><div className="flex items-start gap-4"><span className="grid size-12 shrink-0 place-items-center rounded-full bg-stone-100 text-navy-700"><CheckCircle2 className="size-6"/></span><div><p className="text-xs font-semibold uppercase tracking-wider text-navy-400">Recepción {lastReceived.code}</p><h2 className="mt-1 font-display text-2xl font-bold">{lastReceived.count} {lastReceived.count===1?"paquete registrado":"paquetes registrados"}</h2><p className="mt-2 text-sm text-navy-500">{lastReceived.rejected?"El rechazo quedó en el historial.":"Recepción confirmada. Total: "+formatUsd(lastReceived.total)+". Imprime las etiquetas antes de mover la carga."}</p></div></div><div className="flex flex-wrap gap-3"><Button type="button" onClick={()=>{setLastReceived(null);}}><Plus className="size-4"/>Registrar otro paquete</Button>{!lastReceived.rejected&&<Link target="_blank" href={`/etiquetas/${lastReceived.id}?grupo=1`} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md border-[1.5px] border-navy-900 px-5.5 text-sm font-semibold text-navy-900 transition hover:bg-navy-900 hover:text-white"><Printer className="size-4"/>Imprimir {lastReceived.count===1?"etiqueta":"etiquetas"}</Link>}{!lastReceived.rejected&&<Link target="_blank" href={`/api/recepciones/${lastReceived.id}/recibo`} className="inline-flex min-h-12 items-center gap-2 rounded-md border border-stone-300 px-5 text-sm font-semibold"><Printer className="size-4"/>Recibo térmico · 80 mm</Link>}</div><p className="text-xs text-navy-500">«Registrar otro paquete» conserva el cliente y el destino, pero limpia medidas, peso, foto y pago.</p><div className="flex flex-wrap items-center gap-4 border-t border-stone-100 pt-4"><Button type="button" variant="ghost" onClick={()=>{const warehouse=getValues("originWarehouseId");reset({customer:"",recipientId:"",originWarehouseId:warehouse,billingMode:"peso-real",length:"",width:"",height:"",weightLb:"",prealertId:"",reject:false,overrideCategory:"",overrideReason:"",rejectionReason:""});setLastReceived(null);}}>Recepción para otro cliente</Button><Link href="/admin/bodega" className="inline-flex items-center gap-1.5 text-sm font-semibold text-navy-600">Ver bodega<ArrowRight className="size-3.5"/></Link><Link href="/admin/facturas" className="inline-flex items-center gap-1.5 text-sm font-semibold text-navy-600">Ver facturas<ArrowRight className="size-3.5"/></Link></div></section>;
+  return <form onSubmit={event=>handleSubmit(async (data) => {
+    if(photoBusy||paymentReview||submitLock.current)return;
+    submitLock.current=true;
+    try{
+      if(quantity>1&&!pendingReceipt){const invalid=resolvedPieces.findIndex(p=>!receptionSchema.safeParse({...data,...p,customPriceUsd:mode==="manual"?p.customPriceUsd:undefined}).success);if(invalid>=0){setPiecePage(Math.floor(invalid/5));showToast({title:"Revisa el paquete "+(invalid+2),description:"Completa peso, medidas o cotización.",variant:"error"});return;}}
+      const clover=payment.method==="clover"&&!data.reject;
+      const location=payment.warehouseId??(locations.length===1?locations[0].id:undefined);
+      if(clover&&!location){setPaymentNotice("Selecciona la ubicación del cobro.");return;}
+      let source:string|undefined;
+      if(clover){try{source=await card.current?.tokenize();if(!source)throw new Error("Espera a que Clover esté listo.");}catch(error){setPaymentNotice(error instanceof Error?error.message:"Revisa los datos de la tarjeta.");return;}}
+      const paymentInput={method:payment.method,warehouseId:location,reference:payment.reference,...(["tarjeta","transferencia","deposito"].includes(payment.method)?{amount:payment.amount}:{})};
+      let result=pendingReceipt;
+      if(!result){
+        const upload=new FormData();if(photo)upload.set("file",photo);
+        const base={...data,invoiceNow:clover||data.invoiceNow,customPriceUsd:isExceeded&&!data.reject?data.customPriceUsd:undefined};
+        const batch=Array.from({length:quantity},(_,i)=>i===0?base:{...base,...resolvedPieces[i-1],customPriceUsd:mode==="manual"?resolvedPieces[i-1]?.customPriceUsd:undefined,overrideCategory:"",overrideReason:"",prealertId:""});
+        requestId.current??=crypto.randomUUID();
+        let saved;
+        try{saved=await receivePackageGroup(batch,upload,data.reject||clover?undefined:paymentInput,requestId.current);}catch{setReceiptUncertain(true);setPaymentNotice("No se confirmó el guardado. Conserva esta pantalla y vuelve a intentar: se recuperará la misma recepción, sin duplicar paquetes.");return;}
+        if(!saved.ok){setReceiptUncertain(false);setPaymentNotice(saved.error);return;}
+        result=saved;setReceiptUncertain(false);
+        if(clover)setPendingReceipt(saved);
+      }else if(!clover){
+        const saved=await completeReceptionPayment(requestId.current!,paymentInput);
+        if(!saved.ok){setPaymentNotice(saved.error);return;}
+        completeReceipt(saved);return;
+      }
+      if(!clover){completeReceipt(result);return;}
+      const invoiceIds=result.results.flatMap(r=>r.invoice?[r.invoice.id]:[]);
+      setPaymentNotice("Confirmando el pago con Clover…");
+      let charged;
+      try{charged=await submitCloverPayment(invoiceIds,source!,pendingReceipt?.total??total,location);}catch{charged={ok:false as const,error:"Se interrumpió la confirmación. Verifica el estado antes de volver a pagar."};}
+      if(charged.ok&&charged.attempt.status==="paid"){completeReceipt(result);return;}
+      if(charged.ok&&charged.attempt.status==="declined"){setPaymentNotice("Tarjeta rechazada. No se confirmó ningún pago. Puedes probar otra tarjeta o seleccionar otro método aquí; no se crearán más paquetes.");return;}
+      if(!charged.ok){
+        setPaymentNotice(charged.error);
+        try{const status=await prepareCloverPayment(invoiceIds);if(status.ok&&status.attempt?.status==="paid"){completeReceipt(result);return;}if(status.ok&&status.config){setPaymentReview(false);return;}}catch{}
+      }
+      setPaymentReview(true);setPaymentNotice("El resultado del cargo está en verificación. No cambies de método hasta confirmarlo.");
+    }catch{setPaymentNotice("No se confirmó la operación. Consulta las facturas antes de volver a cobrar.");}
+    finally{submitLock.current=false;}
+  })(event)} className={`${styles.pos} grid items-start gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(300px,1fr)]`}>
+    <fieldset disabled={isSubmitting||Boolean(pendingReceipt)||receiptUncertain} className="grid min-w-0 gap-4">
       <section className="grid gap-3 rounded-2xl border border-stone-200 bg-white p-4">
         <Select label="Almacén de origen · recepción" required value={values.originWarehouseId??""} options={[{value:"",label:"Selecciona dónde recibes el paquete"},...origins.map(w=>({value:w.id,label:w.name}))]} onChange={e=>{setValue("originWarehouseId",e.target.value);setPayment(p=>({...p,warehouseId:e.target.value}));}}/>{!origins.length&&<p className="text-sm text-orange-700">Configura primero un almacén de origen activo en Administración → Almacenes.</p>}<div className="flex items-start justify-between gap-3"><StepHeading number="01" title="Cliente y prealerta" description="Cliente y contacto de entrega."/><CustomerQuickCreate compact onCreated={user=>{setCustomers(current=>[...current.filter(item=>item.id!==user.id),user]);setValue("prealertId","");setValue("customer",user.id,{shouldValidate:true});setValue("recipientId","");}}/></div>
         <div className="min-w-0">
@@ -117,11 +159,14 @@ export function ReceptionForm({ users, prealerts = [], excessPolicy, excessFeeUs
         </div></details>
         <div className={`rounded-xl border p-4 ${values.reject?"border-red-200 bg-red-50":"border-stone-200"}`}><Checkbox label="Rechazar este paquete" {...register("reject")}/>{values.reject&&<div className="mt-4"><Textarea label="Motivo del rechazo" error={errors.rejectionReason?.message} {...register("rejectionReason")}/></div>}</div>
       </section>
-    </div>
+    </fieldset>
     <aside className="lg:sticky lg:top-4 grid min-w-0 gap-4 rounded-2xl border border-stone-200 bg-white p-4">
-      <p className="text-lg font-bold">{quantity} paquete(s) · {formatUsd(total)}</p><StepHeading number="03" title={values.reject?"Confirmar rechazo":"Forma de pago"} description={values.reject?"No se registrará un cobro para este paquete.":"Selecciona método y ubicación. El folio se genera al guardar."}/>
-      {!values.reject&&<PaymentCapture locations={locations} value={payment} onChange={setPayment} total={total}/>}
-      <div className="border-t border-stone-200 pt-5"><Button type="submit" className="w-full" loading={isSubmitting} disabled={photoBusy||selectingPrealert||!values.recipientId||(!values.reject&&!billing)}><PackageCheck className="size-4"/>{photoBusy?"Comprimiendo foto…":isSubmitting&&photo?"Guardando recepción y foto…":values.reject?"Guardar rechazo":payment.method==="clover"?"Guardar y continuar a Clover":"Guardar recepción"}</Button><p className="mt-3 text-center text-xs leading-5 text-navy-500">{values.reject?"El motivo quedará en el historial del cliente.":"Al guardar podrás imprimir la etiqueta del paquete."}</p></div>
+      <p className="text-lg font-bold">{quantity} paquete(s) · {formatUsd(pendingReceipt?.total??total)}</p><StepHeading number="03" title={values.reject?"Confirmar rechazo":"Forma de pago"} description={values.reject?"No se registrará un cobro para este paquete.":"Selecciona método y ubicación. El folio se genera al guardar."}/>
+      {!values.reject&&<fieldset disabled={isSubmitting||paymentReview||receiptUncertain}><PaymentCapture locations={locations} value={payment} onChange={setPayment} total={pendingReceipt?.total??total}/></fieldset>}
+      {paymentNotice&&<p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm leading-5 text-amber-900">{paymentNotice}</p>}
+      {pendingReceipt&&!paymentReview&&<p className="text-xs leading-5 text-navy-500">Recepción guardada · pago pendiente. Cambiar de método conserva los mismos paquetes.</p>}
+      {paymentReview&&pendingReceipt?<CloverCheckout autoOpen invoiceIds={pendingReceipt.results.flatMap(r=>r.invoice?[r.invoice.id]:[])} warehouseId={payment.warehouseId??(locations.length===1?locations[0].id:undefined)} requireLocation onPaid={()=>completeReceipt(pendingReceipt)} onPayable={()=>{setPaymentReview(false);setPaymentNotice("No hay un cargo pendiente. Puedes elegir cómo pagar.");}}/>:payment.method==="clover"&&!values.reject&&<CloverCardFields ref={card} onReady={setCardReady}/>}
+      <div className="border-t border-stone-200 pt-5"><Button type="submit" className="w-full" loading={isSubmitting} disabled={paymentReview||photoBusy||selectingPrealert||!values.recipientId||(!values.reject&&!billing)||(payment.method==="clover"&&!values.reject&&!cardReady)}><PackageCheck className="size-4"/>{photoBusy?"Comprimiendo foto…":isSubmitting&&photo?"Guardando recepción y foto…":values.reject?"Guardar rechazo":payment.method==="clover"?`Cobrar ${formatUsd(pendingReceipt?.total??total)} y finalizar`:pendingReceipt?"Confirmar método y finalizar":"Guardar recepción"}</Button><p className="mt-3 text-center text-xs leading-5 text-navy-500">{values.reject?"El motivo quedará en el historial del cliente.":"Al guardar podrás imprimir la etiqueta del paquete."}</p></div>
 
     </aside>
   </form>;

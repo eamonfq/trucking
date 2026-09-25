@@ -1,12 +1,26 @@
 import 'server-only';
 
+// Safe diagnostics: names/instructions only, never credential values.
+export function cloverConfigurationIssues() {
+  const issues:string[]=[];
+  if(process.env.CLOVER_ENABLED!=='true')issues.push('Activa CLOVER_ENABLED=true.');
+  const environment=process.env.CLOVER_ENVIRONMENT;
+  if(!['sandbox','production'].includes(environment??''))issues.push('Configura CLOVER_ENVIRONMENT como production o sandbox.');
+  for(const name of ['CLOVER_MERCHANT_ID','CLOVER_PUBLIC_KEY','CLOVER_PRIVATE_KEY'])if(!process.env[name]?.trim())issues.push(`Falta ${name} en el proceso del servidor.`);
+  if(environment==='production'){
+    if(!process.env.NEXT_PUBLIC_SITE_URL?.startsWith('https://'))issues.push('NEXT_PUBLIC_SITE_URL debe usar HTTPS en producción.');
+    if(process.env.TRUST_PROXY!=='true')issues.push('Configura el proxy confiable y TRUST_PROXY=true en producción.');
+  }
+  return issues;
+}
 export function cloverConfig() {
   const environment=process.env.CLOVER_ENVIRONMENT;
   const publicKey=process.env.CLOVER_PUBLIC_KEY?.trim();
   const privateKey=process.env.CLOVER_PRIVATE_KEY?.trim();
   const merchantId=process.env.CLOVER_MERCHANT_ID?.trim();
-  if(process.env.CLOVER_ENABLED!=='true'||!['sandbox','production'].includes(environment??'')||!publicKey||!privateKey||!merchantId) throw new Error('Clover no está habilitado. Configura el entorno, Merchant ID y los tokens Hosted iFrame + API/SDK.');
-  if(environment==='production'&&(!process.env.NEXT_PUBLIC_SITE_URL?.startsWith('https://')||process.env.TRUST_PROXY!=='true'))throw new Error('Clover producción requiere HTTPS y un proxy confiable configurado.');
+  const issues=cloverConfigurationIssues();
+  if(issues.length)throw new Error(`Clover no está habilitado: ${issues.join(' ')}`);
+  if(!publicKey||!privateKey||!merchantId)throw new Error('Faltan credenciales Clover.');
   return {environment:environment as 'sandbox'|'production',publicKey,privateKey,merchantId,
     sdkUrl:environment==='production'?'https://checkout.clover.com/sdk.js':'https://checkout.sandbox.dev.clover.com/sdk.js',
     apiUrl:environment==='production'?'https://scl.clover.com':'https://scl-sandbox.dev.clover.com'};
