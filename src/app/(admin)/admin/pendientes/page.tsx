@@ -1,10 +1,12 @@
+import {canAdminPath} from "@/lib/auth/admin-permissions";
+import { requireAdminUser } from "@/lib/auth/actions";
 import { SectionTitle } from "@/components/cliente/section-title";
 import { AttentionBoard, type AttentionItem } from "@/components/admin/attention-board";
 import { logisticsService } from "@/lib/services/logistics";
 import { isInvoiceOverdue, invoiceTotal } from "@/lib/utils/invoices";
 import { formatUsd } from "@/lib/utils/format";
 
-export default async function AttentionPage() {
+export default async function AttentionPage() { const actor=await requireAdminUser(["pendientes"]);
   const [boxes,shipments,invoices,tickets,users]=await Promise.all([logisticsService.getBoxes(),logisticsService.getShipments(),logisticsService.getInvoices(),logisticsService.getSupportTickets(),logisticsService.getUsers()]);
   const customer=(id:string)=>{const user=users.find(item=>item.id===id);return user?`${user.firstName} ${user.paternalLastName} · ${user.lockerCode}`:"Cliente no disponible";};
   const items:AttentionItem[]=[];
@@ -16,5 +18,5 @@ export default async function AttentionPage() {
   for(const invoice of invoices) if((invoice.cloverPaymentId&&invoice.status!=="pagada")||invoice.status==="pendiente-pago-destino"||invoice.status==="pago-reportado"||isInvoiceOverdue(invoice))items.push({id:invoice.id,kind:"Pagos",title:invoice.number,detail:`${invoice.cloverPaymentId&&invoice.status!=="pagada"?"Clover: conciliar cargo antes de volver a cobrar":invoice.status==="pendiente-pago-destino"?"Pendiente de pago en destino":invoice.status==="pago-reportado"?"Reporte pendiente de validación":"Factura vencida"} · ${formatUsd(invoiceTotal(invoice))}`,customer:customer(invoice.userId),at:invoice.paymentReport?.reportedAt??invoice.dueAt,href:`/admin/facturas?invoice=${encodeURIComponent(invoice.id)}`,priority:true});
   for(const ticket of tickets.filter(item=>item.status!=="cerrado"))items.push({id:ticket.id,kind:"Soporte",title:`${ticket.code} · ${ticket.subject}`,detail:ticket.messages.at(-1)?.author==="cliente"?"El cliente espera una respuesta":"En seguimiento con soporte",customer:customer(ticket.userId),at:ticket.updatedAt,href:`/admin/soporte?ticket=${encodeURIComponent(ticket.id)}`,priority:ticket.messages.at(-1)?.author==="cliente"});
   items.sort((a,b)=>Number(b.priority)-Number(a.priority)||a.at.localeCompare(b.at));
-  return <><SectionTitle eyebrow="Mesa operativa" title="Pendientes" description="Prioridades reales del sistema, ordenadas por atención y antigüedad. Cada pendiente te lleva a la herramienta para resolverlo." /><AttentionBoard items={items} /></>;
+  return <><SectionTitle eyebrow="Mesa operativa" title="Pendientes" description="Prioridades reales del sistema, ordenadas por atención y antigüedad. Cada pendiente te lleva a la herramienta para resolverlo." /><AttentionBoard items={items.filter(item=>canAdminPath(actor,item.href))} /></>;
 }

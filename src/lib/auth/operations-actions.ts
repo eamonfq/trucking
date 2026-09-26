@@ -12,10 +12,10 @@ import { SUPPORT_STATUSES } from "@/lib/types";
 
 const supportInput = z.object({ ticketId: z.string().min(1), expectedUpdatedAt: z.string().min(1), body: z.string().trim().max(4000).default(""), status: z.enum(SUPPORT_STATUSES) });
 export async function manageSupportTicket(input: unknown) {
-  return runMutation("admin", async () => {
+  return runMutation("admin:soporte", async () => {
     const parsed = supportInput.safeParse(input);
     if (!parsed.success) return { ok: false as const, error: "Revisa el mensaje y el estado del ticket." };
-    const actor = await requireAdminUser();
+    const actor = await requireAdminUser(["soporte"]);
     const { ticketId, expectedUpdatedAt, body, status } = parsed.data;
     const ticket = supportTickets.find(item => item.id === ticketId);
     if (!ticket) return { ok: false as const, error: "No encontramos el ticket." };
@@ -38,10 +38,10 @@ export async function manageSupportTicket(input: unknown) {
 
 const deliveryInput = z.object({ boxId: z.string().min(1), receivedBy: z.string().trim().min(3, "Escribe el nombre de quien recibe.").max(160), note: z.string().trim().min(5, "Documenta cómo se verificó la entrega.").max(1000) });
 export async function registerDelivery(input: unknown) {
-  return runMutation("admin", async () => {
+  return runMutation("admin:entregas", async () => {
     const parsed = deliveryInput.safeParse(input);
     if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Revisa la entrega." };
-    const actor = await requireAdminUser();
+    const actor = await requireAdminUser(["entregas"]);
     const { boxId, receivedBy, note } = parsed.data;
     const target=boxes.find(b=>b.id===boxId);
     if(!target)return {ok:false as const,error:"Paquete no encontrado."};

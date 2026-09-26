@@ -1,8 +1,9 @@
+import { requireAdminUser } from "@/lib/auth/actions";
 import { notFound } from "next/navigation";
 import { CustomerDetail } from "@/components/admin/customer-detail";
 import { logisticsService } from "@/lib/services/logistics";
 
-export default async function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) { await requireAdminUser(["clientes"]);
   const { id } = await params;
   const [customer, addresses, recipients, boxes, shipments, invoices] = await Promise.all([logisticsService.getUserById(id), logisticsService.getAddresses(), logisticsService.getRecipients(), logisticsService.getBoxes(), logisticsService.getShipments(), logisticsService.getInvoices()]);
   if (!customer || customer.role !== "cliente") notFound();

@@ -7,6 +7,7 @@ const links = [
   { label: "Cómo funciona", href: "/como-funciona" },
   { label: "Cobertura", href: "/#cobertura" },
   { label: "Preguntas", href: "/#faq" },
+  { label: "App A&L", href: "/#app" },
 ];
 
 export function MarketingHeader() {

@@ -2,7 +2,8 @@ import { getSession } from "@/lib/auth/actions";
 import { connection } from "next/server";
 import { CatalogProvider } from "@/components/ui/catalog-provider";
 import { configService } from "@/lib/services/config";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import {PwaProvider} from '@/components/pwa/pwa-provider';
 import localFont from "next/font/local";
 import { ToastProvider } from "@/components/ui/toast";
 import "./globals.css";
@@ -24,6 +25,8 @@ const bricolage = localFont({
 });
 
 export const metadata: Metadata = {
+  appleWebApp:{capable:true,title:'A&L',statusBarStyle:'default'},
+  icons:{apple:'/pwa/apple-touch-icon.png'},
   metadataBase: new URL(seoConfig.origin),
   title: { default: "A&L Trucking Logistics", template: "%s | A&L Trucking Logistics" },
   description: homeDescription,
@@ -32,13 +35,14 @@ export const metadata: Metadata = {
   robots: { index: seoConfig.indexable, follow: seoConfig.indexable },
 };
 
+export const viewport:Viewport={themeColor:'#101b30'};
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   await connection();
   const [categories,flow]=await Promise.all([configService.getCatalog(),configService.getFlowConfig()]);
   const operator=(await getSession())?.role==="operador";
   return (
     <html lang="es-MX" data-scroll-behavior="smooth">
-      <body className={`${inter.variable} ${bricolage.variable} font-sans antialiased`}><ToastProvider><CatalogProvider categories={operator ? [] : categories} destinations={flow.destinationCities}>{children}</CatalogProvider></ToastProvider></body>
+      <body className={`${inter.variable} ${bricolage.variable} font-sans antialiased`}><PwaProvider><ToastProvider><CatalogProvider categories={operator ? [] : categories} destinations={flow.destinationCities}>{children}</CatalogProvider></ToastProvider></PwaProvider></body>
     </html>
   );
 }

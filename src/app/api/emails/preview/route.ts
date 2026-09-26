@@ -1,14 +1,16 @@
-import { getSession } from "@/lib/auth/actions";
+import { getCurrentUser } from "@/lib/auth/actions";
+import {canAdmin,isFullAdmin} from "@/lib/auth/admin-permissions";
 import { decryptEmail, siteUrl } from "@/lib/services/email";
 import { renderEmail, type EmailInput } from "@/lib/services/email-template";
 import { pool } from "@/lib/db/pool";
 import type { RowDataPacket } from "mysql2/promise";
 export async function GET(request: Request) {
-  if ((await getSession())?.role !== "admin") return new Response(null, { status: 401 });
+  if (!canAdmin(await getCurrentUser(),"correos")) return new Response(null, { status: 401 });
   const params = new URL(request.url).searchParams;
   const id = params.get("id");
   let input: EmailInput;
   if (id) {
+    if(!isFullAdmin(await getCurrentUser()))return new Response(null,{status:403});
     if (process.env.NODE_ENV === "production" || process.env.EMAIL_DELIVERY !== "preview") return new Response(null, { status: 404 });
     const [rows] = await pool().execute<RowDataPacket[]>("SELECT payload FROM email_outbox WHERE id=? AND status='queued'", [id]);
     if (!rows[0]) return new Response(null, { status: 404 });

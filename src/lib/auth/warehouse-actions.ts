@@ -23,7 +23,7 @@ async function notifyClient(userId: string, title: string, body: string) {
 }
 
 export async function saveAdminPrealert(input: unknown, id?: string) {
-  return runMutation("admin",async()=>{
+  return runMutation("admin:prealertas",async()=>{
     const parsed=prealertSchema.extend({userId:z.string().min(1)}).safeParse(input);
     if(!parsed.success)return {ok:false as const,error:parsed.error.issues[0]?.message ?? "Revisa la prealerta."};
     const data=parsed.data;
@@ -34,7 +34,7 @@ export async function saveAdminPrealert(input: unknown, id?: string) {
     if(id&&(!existing||existing.status!=="pre-alertada"))return {ok:false as const,error:"Solo puedes editar o reasignar prealertas no recibidas."};
     const tracking=data.tracking.trim();
     if(boxes.some(item=>item.id!==id&&item.originTracking?.toLowerCase()===tracking.toLowerCase()))return {ok:false as const,error:"Ese tracking ya existe."};
-    const actor=await requireAdminUser(), at=new Date().toISOString();
+    const actor=await requireAdminUser(["prealertas"]), at=new Date().toISOString();
     const previousUser=existing?.userId;
     const box:Box={id:existing?.id??crypto.randomUUID(),code:existing?.code??`BX-${crypto.randomUUID().slice(0,8).toUpperCase()}`,userId:user.id,categoryId:category.id,categoryName:category.name,status:"pre-alertada",dimensions:{...category.dimensions},weightLb:0,originTracking:tracking,prealertDetails:{store:data.store,description:data.description,declaredValue:data.declaredValue},timeline:[...(existing?.timeline??[]),{from:existing?.status??null,to:"pre-alertada",actor:actor.id,at,note:`${data.store}: ${data.description}. Valor declarado USD ${data.declaredValue}. Asignada a ${user.lockerCode}.`}]};
     if(existing)boxes[boxes.findIndex(item=>item.id===id)]=box;else boxes.push(box);
@@ -45,11 +45,11 @@ export async function saveAdminPrealert(input: unknown, id?: string) {
 }
 
 export async function selectPrealertAtWarehouse(boxId:string,userId:string) {
-  return runMutation("admin",async()=>{
+  return runMutation("admin:recepcion",async()=>{
     const box=boxes.find(item=>item.id===boxId&&item.userId===userId&&item.status==="pre-alertada");
     if(!box)return {ok:false as const,error:"La prealerta ya no está disponible para este cliente."};
     if(box.prealertSelection)return {ok:true as const};
-    const actor=await requireAdminUser();
+    const actor=await requireAdminUser(["recepcion"]);
     box.prealertSelection={actorId:actor.id,at:new Date().toISOString()};
     await notifyClient(box.userId,"Prealerta seleccionada en recepción",`El equipo seleccionó ${box.code} (tracking ${box.originTracking}) para revisar su recepción. La confirmación física se notificará por separado.`);
     return {ok:true as const};
@@ -58,7 +58,7 @@ export async function selectPrealertAtWarehouse(boxId:string,userId:string) {
 
 const warehouseSchema=z.object({kind:z.enum(WAREHOUSE_KINDS).default("destino"),country:z.string().trim().max(80).optional(),state:z.string().trim().max(80).optional(),address:z.string().trim().max(300).optional(),id:z.string().optional(),name:z.string().trim().min(2).max(100),city:z.string().trim().min(2).max(80),active:z.boolean(),arrivalMessage:z.string().trim().min(10).max(300)});
 export async function saveWarehouse(input:unknown) {
-  return runMutation("admin",async()=>{
+  return runMutation("admin:almacenes",async()=>{
     const parsed=warehouseSchema.safeParse(input);if(!parsed.success)return {ok:false as const,error:"Revisa el nombre, ciudad y mensaje de llegada."};
     const data=parsed.data,existing=warehouses.find(item=>item.id===data.id);
     if(data.id&&!existing)return {ok:false as const,error:"El almacén no existe."};
@@ -71,14 +71,14 @@ export async function saveWarehouse(input:unknown) {
       const flow=await configService.getFlowConfig();
       if(!flow.destinationCities.includes(value.city))await configService.updateFlowConfig({destinationCities:[...flow.destinationCities,value.city]});
     }
-    await audit((await requireAdminUser()).id,"warehouse.updated");
+    await audit((await requireAdminUser(["almacenes"])).id,"warehouse.updated");
     return {ok:true as const,warehouse:value};
   });
 }
 
 const grantSchema=z.array(z.object({warehouseId:z.string(),receive:z.boolean(),viewContacts:z.boolean()})).max(100);
 export async function saveWarehouseOperator(input:unknown) {
-  return runMutation("admin",async()=>{
+  return runMutation("admin:almacenes",async()=>{
     const parsed=z.object({id:z.string().optional(),firstName:z.string().trim().min(2),paternalLastName:z.string().trim().min(2),email:z.email(),phone:z.union([mexicanPhoneSchema,z.literal("")]).default(""),active:z.boolean(),grants:grantSchema}).safeParse(input);
     if(!parsed.success)return {ok:false as const,error:parsed.error.issues[0]?.message??"Revisa el operador."};
     const data=parsed.data;
@@ -97,14 +97,19 @@ export async function saveWarehouseOperator(input:unknown) {
       await sql().execute("UPDATE accounts SET active=? WHERE user_id=?",[data.active,user.id]);
       await revokeSessions(user.id);
     }
-    await audit((await requireAdminUser()).id,"warehouse.operator.permissions");
+    await audit((await requireAdminUser(["almacenes"])).id,"warehouse.operator.permissions");
     return {ok:true as const};
   });
 }
 
 export async function getWarehouseAdministration() {
-  await requireAdminUser();
+  await requireAdminUser(["almacenes"]);
   return withStore(async()=>({warehouses:[...warehouses],operators:users.filter(user=>user.role==="operador").map(({id,firstName,paternalLastName,email,phone,active,warehouseGrants})=>({id,firstName,paternalLastName,email,phone,active,warehouseGrants}))}));
+}
+
+export async function getOperationalLocations() {
+  await requireAdminUser(["recepcion","facturas","camiones","entregas"]);
+  return withStore(async()=>({warehouses:structuredClone([...warehouses])}));
 }
 
 function can(grants:WarehouseGrant[]|undefined,id:string,permission:"receive"|"viewContacts") { return grants?.some(g=>g.warehouseId===id&&g[permission])??false; }
@@ -131,7 +136,7 @@ export async function getDestinationDesk() {
 }
 
 export async function scanLoad(truckId:string,code:string,warehouseId:string) {
-  return runMutation("admin",async()=>{
+  return runMutation("admin:camiones",async()=>{
     if(!trucks.some(t=>t.id===truckId&&t.stops?.length))return {ok:false as const,error:"Configura las paradas y fechas del viaje antes de cargar."};
     const box=boxes.find(b=>b.code===code.trim().toUpperCase());
     if(!box)return {ok:false as const,error:"Código de paquete no encontrado."};
@@ -170,7 +175,7 @@ export async function scanUnload(truckId:string,warehouseId:string,code:string) 
 }
 
 export async function saveTruckStops(truckId:string,input:unknown,originWarehouseId?:string) {
-  return runMutation("admin",async()=>{
+  return runMutation("admin:camiones",async()=>{
     const truck=trucks.find(t=>t.id===truckId);
     if(!truck||!["planificado","cargando"].includes(truck.status))return {ok:false as const,error:"Solo puedes cambiar paradas antes del despacho."};
     const origins=warehouses.filter(w=>w.active&&warehouseSupports(w,"origen"));
@@ -188,7 +193,7 @@ export async function saveTruckStops(truckId:string,input:unknown,originWarehous
     truck.destinationCity=truck.stops[0].city;
     truck.originWarehouseId=origin?.id;truck.originWarehouseName=origin?.name;
     truck.route=(origin?.name??"Origen por confirmar")+" → "+truck.stops.map(s=>warehouses.find(w=>w.id===s.warehouseId)!.name+" ("+s.city+")").join(" → ");
-    truck.timeline.push({from:truck.status,to:truck.status,at:new Date().toISOString(),actor:(await requireAdminUser()).id,note:"Paradas y fechas estimadas actualizadas."});
+    truck.timeline.push({from:truck.status,to:truck.status,at:new Date().toISOString(),actor:(await requireAdminUser(["camiones"])).id,note:"Paradas y fechas estimadas actualizadas."});
     return {ok:true as const,truck:{...truck}};
   });
 }

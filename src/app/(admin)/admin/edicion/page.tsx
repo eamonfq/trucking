@@ -1,5 +1,5 @@
 import { configService } from "@/lib/services/config";
-import Link from "next/link";
+import Link from "@/components/admin/admin-access";
 import { requireAdminUser } from "@/lib/auth/actions";
 import { logisticsService as service } from "@/lib/services/logistics";
 import { editableRecords } from "@/lib/services/editable-records";

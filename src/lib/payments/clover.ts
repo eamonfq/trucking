@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto';
 import {collection,withStore} from '@/lib/db/store';
 import {invoices,users,boxes,notifications} from '@/lib/db/collections';
 import {getCurrentUser} from '@/lib/auth/actions';
+import {canCollectInvoice,type AdminPrincipal} from '@/lib/auth/admin-permissions';
 import {invoiceTotal} from '@/lib/utils/invoices';
 import {appendPayment,paymentLocation} from '@/lib/services/payment-records';
 import {sendEmail,siteUrl} from '@/lib/services/email';
@@ -13,10 +14,10 @@ type Attempt={id:string;invoiceIds:string[];customerId:string;actorId:string;war
 const attempts=collection<Attempt>('cloverAttempts');
 const hash=(value:string)=>createHash('sha256').update(value).digest('hex');
 async function actor(){const user=await getCurrentUser();if(!user||!['admin','cliente'].includes(user.role))throw new Error('No tienes permiso para cobrar o pagar.');return user;}
-function selected(ids:string[],user:{id:string;role:string}){
+function selected(ids:string[],user:AdminPrincipal & {id:string}){
   if(!Array.isArray(ids)||!ids.length||ids.length>50||new Set(ids).size!==ids.length||ids.some(id=>typeof id!=='string'||id.length>100))throw new Error('Selecciona entre 1 y 50 facturas.');
   const list=ids.map(id=>invoices.find(i=>i.id===id));
-  if(list.some(i=>!i||(user.role!=='admin'&&i.userId!==user.id))||new Set(list.map(i=>i?.userId)).size!==1)throw new Error('Las facturas deben pertenecer al mismo cliente y estar dentro de tus permisos.');
+  if(list.some(i=>!i||!canCollectInvoice(user,i))||new Set(list.map(i=>i?.userId)).size!==1)throw new Error('Las facturas deben pertenecer al mismo cliente y estar dentro de tus permisos.');
   return list as Invoice[];
 }
 function activeAttempt(list:Invoice[]){const ids=new Set(list.map(i=>i.cloverPaymentId).filter(Boolean));if(ids.size>1)throw new Error('Hay distintos cobros en curso. Revisa cada factura.');const attempt=ids.size?attempts.find(a=>a.id===[...ids][0]):undefined;if(ids.size&&!attempt)throw new Error('El pago requiere revisión administrativa.');if(attempt&&list.some(i=>!attempt.invoiceIds.includes(i.id)))throw new Error('No mezcles facturas nuevas con un cargo existente.');return attempt;}

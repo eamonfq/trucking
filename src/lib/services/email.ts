@@ -7,6 +7,7 @@ import { sql } from "@/lib/auth/repository";
 import { pool } from "@/lib/db/pool";
 import { renderEmail, type EmailInput } from "./email-template";
 import {receptionPhotoAttachment} from './email-photo';
+import {queueEmailPush} from './push';
 export function siteUrl() {
   const url = new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3100");
   if (process.env.NODE_ENV === "production" && url.protocol !== "https:" && !["localhost", "127.0.0.1"].includes(url.hostname)) throw new Error("El sitio público requiere HTTPS");
@@ -30,6 +31,7 @@ export async function sendEmail(input: EmailInput) {
   const id = crypto.randomUUID();
   if(emailBatch.getStore())return {status:"consolidated" as const,id};
   await sql().execute("INSERT INTO email_outbox(id,payload) VALUES (?,?)", [id, JSON.stringify(encrypt(input))]);
+  await queueEmailPush(id,input);
   return { status: "queued" as const, id };
 }
 export async function deliverPendingEmails() {

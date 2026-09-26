@@ -1,18 +1,25 @@
 import { createHash } from "node:crypto";
 import type { RowDataPacket } from "mysql2/promise";
-import { getSession } from "@/lib/auth/actions";
+import { getCurrentUser } from "@/lib/auth/actions";
+import {canAnyAdmin,isFullAdmin} from "@/lib/auth/admin-permissions";
+import {logisticsService} from "@/lib/services/logistics";
 import { pool } from "@/lib/db/pool";
 import {getPhoto} from '@/lib/files/r2';
 
 export const runtime = "nodejs";
 export async function GET(_request: Request, {params}: {params:Promise<{id:string}>}) {
-  const session = await getSession();
+  const user = await getCurrentUser();
+  const session=user?{userId:user.id,role:user.role}:null;
   if (!session) return new Response(null,{status:401,headers:{"Cache-Control":"private, no-store"}});
   const {id} = await params;
   if (!/^[a-f0-9-]{36}$/i.test(id)) return new Response(null,{status:404});
-  const [rows] = await pool().execute<RowDataPacket[]>("SELECT original_name,mime_type,content,sha256,storage_provider,object_key FROM private_files WHERE id=? AND (?='admin' OR owner_id=?)",[id,session.role,session.userId]);
+  const [rows] = await pool().execute<RowDataPacket[]>("SELECT entity_type,entity_id,original_name,mime_type,content,sha256,storage_provider,object_key FROM private_files WHERE id=? AND (?='admin' OR owner_id=?)",[id,session.role,session.userId]);
   const file = rows[0];
   if (!file) return new Response(null,{status:404,headers:{"Cache-Control":"private, no-store"}});
+  if(user?.role==="admin"&&!isFullAdmin(user)){
+    const permitted=file.entity_type==="box"?canAnyAdmin(user,["recepcion","bodega","clientes","camiones","entregas"]):(await logisticsService.getInvoices()).some(i=>i.id===file.entity_id);
+    if(!permitted)return new Response(null,{status:403,headers:{"Cache-Control":"private, no-store"}});
+  }
   let bytes:Buffer;
   try{bytes=file.storage_provider==='r2'?await getPhoto(file.object_key):Buffer.from(file.content);}catch{return new Response('No se pudo recuperar la foto. Intenta nuevamente.',{status:503,headers:{'Cache-Control':'private, no-store'}});}
   if (createHash("sha256").update(bytes).digest("hex") !== file.sha256) return new Response("No se pudo verificar la integridad del archivo.",{status:500});

@@ -8,6 +8,7 @@ import { allowAttempt, findAccount, audit } from "./repository";
 import { checkPassword, hashPassword } from "./crypto";
 import { loginSchema } from "@/lib/schemas/auth";
 import { toClientUser } from "@/lib/utils/users";
+import { canAnyAdmin, isFullAdmin, adminLanding, type AdminSection } from "./admin-permissions";
 export async function requestLimit(action: string, identifier: string, limit = 8) {
   const h = await headers();
   const source = process.env.TRUST_PROXY === "true" ? h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown" : "local";
@@ -47,5 +48,5 @@ export async function getCurrentUser() {
   return withStore(async () => { const user = users.find(item => item.id === session?.userId && item.role === session?.role && item.active); return user ? toClientUser(user) : null; });
 }
 export async function requireClientUser() { const user = await getCurrentUser(); if (!user || user.role !== "cliente") redirect("/login?siguiente=/cliente"); return user; }
-export async function requireAdminUser() { const user = await getCurrentUser(); if (!user || user.role !== "admin") redirect("/login?siguiente=/admin"); return user; }
-export async function requireWarehouseUser() { const user = await getCurrentUser(); if (!user || !["admin","operador"].includes(user.role)) redirect("/login?siguiente=/almacen"); return user; }
+export async function requireAdminUser(sections:readonly AdminSection[] = []) { const user = await getCurrentUser(); if (!user || user.role !== "admin") redirect("/login?siguiente=/admin"); if(!isFullAdmin(user)&&!canAnyAdmin(user,sections))redirect(adminLanding(user)); return user; }
+export async function requireWarehouseUser() { const user = await getCurrentUser(); if (!user || !["admin","operador"].includes(user.role)) redirect("/login?siguiente=/almacen"); if(user.role==="admin"&&!canAnyAdmin(user,["recepcion-destino"]))redirect(adminLanding(user)); return user; }

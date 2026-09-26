@@ -6,6 +6,7 @@ import { appendPayment, paymentLocation } from "@/lib/services/payment-records";
 import { calculateBilling, billingDescription } from "@/lib/utils/billing";
 import { CUSTOM_CARGO_ID, CUSTOM_CARGO_NAME } from "@/lib/config/custom-cargo";
 import { requireAdminUser } from "./actions";
+import { canCollectInvoice } from "./admin-permissions";
 import { warehouses } from "@/lib/db/collections";
 import { recordRevision } from "@/lib/db/revision";
 import { runMutation } from "@/lib/db/mutation";
@@ -54,7 +55,7 @@ type NewCustomer = {
 async function registerCustomer(data: NewCustomer) { return createAccount(data, randomToken()); }
 
 export async function createCustomerAsAdmin(input: unknown) {
-  return runMutation("admin", async () => {
+  return runMutation("admin:clientes", async () => {
   await simulateLatency();
   const parsed = quickCustomerSchema.safeParse(input);
   if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Revisa los datos del cliente." };
@@ -72,7 +73,7 @@ export async function createCustomerAsAdmin(input: unknown) {
  * se envía una invitación de un solo uso para que el cliente defina su contraseña.
  */
 export async function createCustomerAtReception(input: unknown) {
-  return runMutation("admin", async () => {
+  return runMutation("admin:recepcion", async () => {
   await simulateLatency();
   const parsed = quickCustomerSchema.safeParse(input);
   if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Revisa los datos del cliente." };
@@ -86,7 +87,7 @@ export async function createCustomerAtReception(input: unknown) {
 }
 
 export async function updateCustomerProfile(userId: string, input: unknown) {
-  return runMutation("admin", async () => {
+  return runMutation("admin:clientes", async () => {
   await simulateLatency();
   const user = findCustomer(userId);
   if (!user) return { ok: false as const, error: "No encontramos el cliente seleccionado." };
@@ -103,7 +104,7 @@ export async function updateCustomerProfile(userId: string, input: unknown) {
 }
 
 export async function toggleCustomerStatus(userId: string) {
-  return runMutation("admin", async () => {
+  return runMutation("admin:clientes", async () => {
   await simulateLatency();
   const user = findCustomer(userId);
   if (!user) return { ok: false as const, error: "No encontramos el cliente seleccionado." };
@@ -116,7 +117,7 @@ export async function toggleCustomerStatus(userId: string) {
 }
 
 export async function resetCustomerPassword(userId: string) {
-  return runMutation("admin", async () => {
+  return runMutation("admin:clientes", async () => {
   await simulateLatency();
   const user = findCustomer(userId);
   if (!user) return { ok: false as const, error: "No encontramos el cliente seleccionado." };
@@ -128,7 +129,7 @@ export async function resetCustomerPassword(userId: string) {
 }
 
 export async function changeCustomerLocker(userId: string, input: string) {
-  return runMutation("admin", async () => {
+  return runMutation("admin:clientes", async () => {
   await simulateLatency();
   const user = findCustomer(userId);
   if (!user) return { ok: false as const, error: "No encontramos el cliente seleccionado." };
@@ -144,7 +145,7 @@ export async function changeCustomerLocker(userId: string, input: string) {
 }
 
 export async function addCustomerNote(userId: string, input: unknown) {
-  return runMutation("admin", async () => {
+  return runMutation("admin:clientes", async () => {
   await simulateLatency();
   const user = findCustomer(userId);
   if (!user) return { ok: false as const, error: "No encontramos el cliente seleccionado." };
@@ -159,7 +160,7 @@ export async function addCustomerNote(userId: string, input: unknown) {
 }
 
 export async function upsertCustomerAddress(userId: string, input: unknown, addressId?: string) {
-  return runMutation("admin", async () => {
+  return runMutation("admin:clientes|recepcion", async () => {
   await simulateLatency();
   const user = findCustomer(userId);
   if (!user) return { ok: false as const, error: "No encontramos el cliente seleccionado." };
@@ -183,7 +184,7 @@ export async function upsertCustomerAddress(userId: string, input: unknown, addr
 }
 
 export async function deleteCustomerAddress(userId: string, addressId: string) {
-  return runMutation("admin", async () => {
+  return runMutation("admin:clientes|recepcion", async () => {
   await simulateLatency();
   const user = findCustomer(userId);
   const index = addresses.findIndex((item) => item.id === addressId && item.userId === userId);
@@ -197,7 +198,7 @@ export async function deleteCustomerAddress(userId: string, addressId: string) {
 }
 
 export async function upsertCustomerRecipient(userId: string, input: unknown, recipientId?: string, newAddress?: unknown) {
-  return runMutation("admin", async () => {
+  return runMutation("admin:clientes|recepcion", async () => {
   await simulateLatency();
   const user = findCustomer(userId);
   if (!user) return { ok: false as const, error: "No encontramos el cliente seleccionado." };
@@ -227,7 +228,7 @@ export async function upsertCustomerRecipient(userId: string, input: unknown, re
 }
 
 export async function deleteCustomerRecipient(userId: string, recipientId: string) {
-  return runMutation("admin", async () => {
+  return runMutation("admin:clientes|recepcion", async () => {
   await simulateLatency();
   const user = findCustomer(userId);
   const index = recipients.findIndex((item) => item.id === recipientId && item.userId === userId);
@@ -276,7 +277,7 @@ async function createInvoiceForBoxes(userId: string, invoiceBoxes: Box[], actor:
 }
 
 export async function receiveBox(input: unknown) {
-  return runMutation("admin", async () => {
+  return runMutation("admin:recepcion", async () => {
   await simulateLatency();
   const parsed = receptionSchema.safeParse(input);
   if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Revisa los datos de recepción." };
@@ -331,7 +332,7 @@ export async function receiveBox(input: unknown) {
   else boxes.push(box);
   const notification = pushNotification(customer.id, rejected ? "Caja rechazada" : "Caja recibida", rejected ? `${code} fue rechazada: ${parsed.data.rejectionReason}.` : `${code} fue registrada en bodega como ${box.categoryName}.`);
   let invoice: Invoice | undefined;
-  if (!rejected && (flow.billingMoment === "al-recibir" || parsed.data.invoiceNow)) invoice = await createInvoiceForBoxes(customer.id, [box], adminActor);
+  if (!rejected && (flow.billingMoment === "al-recibir" || parsed.data.invoiceNow)) { invoice = await createInvoiceForBoxes(customer.id, [box], adminActor); invoice.receptionActorId=(await requireAdminUser(["recepcion"])).id; }
   await sendEmail({ to: customer.email, subject: rejected ? `Recepción rechazada ${code}` : `Caja recibida ${code}`, heading: rejected ? "La recepción requiere tu atención" : "Tu caja ya está en bodega", body: notification.body, actionLabel: "Ver mis cajas", actionUrl: `${siteUrl()}/cliente/cajas` });
   return { ok: true as const, suggestion, code, box, invoice, notification };
 
@@ -339,7 +340,7 @@ export async function receiveBox(input: unknown) {
 }
 
 export async function loadBoxesOnTruck(boxIds: string[], truckId: string) {
-  return runMutation("admin", async () => {
+  return runMutation("admin:camiones", async () => {
   await simulateLatency();
   const truck = trucks.find((item) => item.id === truckId);
   if (!truck) return { ok: false as const, error: "Selecciona un camión disponible." };
@@ -356,7 +357,7 @@ export async function loadBoxesOnTruck(boxIds: string[], truckId: string) {
 }
 
 export async function transitionTruckState(truckId: string, note?: string) {
-  return runMutation("admin", async () => {
+  return runMutation("admin:camiones", async () => {
   await simulateLatency();
   const truckIndex = trucks.findIndex((item) => item.id === truckId);
   if (truckIndex < 0) return { ok: false as const, error: "No encontramos el camión seleccionado." };
@@ -387,14 +388,15 @@ export async function approvePayment(invoiceId: string, note: string, expectedRe
   return approveValidatedPayment(invoiceId, note, expectedReportedAt, warehouseId);
 }
 async function approveValidatedPayment(invoiceId: string, note: string, expectedReportedAt?: string, warehouseId?:string) {
-  return runMutation("admin", async () => {
+  return runMutation("admin:facturas|recepcion", async () => {
     const invoice = invoices.find(item => item.id === invoiceId);
+    const actor=await requireAdminUser(["facturas","recepcion"]);
+    if(!invoice||!canCollectInvoice(actor,invoice))return {ok:false as const,error:"No tienes permiso para confirmar este cobro."};
     if (expectedReportedAt && invoice?.paymentReport?.reportedAt !== expectedReportedAt) return {ok:false as const,error:"El cliente corrigió el reporte. Actualiza y vuelve a revisar antes de aprobar."};
     if (!invoice?.paymentReport || !matchesInvoiceTotal(invoice, invoice.paymentReport.amountUsd)) return { ok: false as const, error: "El reporte debe cubrir el total exacto de la factura. Rechaza el importe incorrecto y solicita un nuevo reporte." };
     const existing=invoice.payments?.findLast(p=>p.status==="pendiente");
     const location=paymentLocation(warehouseId??existing?.warehouseId);
     if(!location)return {ok:false as const,error:"Selecciona la ubicación donde confirmas el pago."};
-    const actor=await requireAdminUser();
     const entry=existing??appendPayment(invoice,actor,"pendiente",invoice.paymentReport.method,invoice.paymentReport.reference,location.id);
     entry.status="confirmado";entry.confirmedAt=new Date().toISOString();entry.confirmedBy=actor.id;entry.confirmedByName=`${actor.firstName} ${actor.paternalLastName}`;
     entry.warehouseId=location.id;entry.warehouseName=location.name;
@@ -402,16 +404,16 @@ async function approveValidatedPayment(invoiceId: string, note: string, expected
   });
 }
 async function approvePaymentTransition(invoiceId: string, note: string) {
-  return runMutation("admin", async () => { await simulateLatency(); if (note.trim().length < 5) return { ok: false as const, error: "Agrega una nota de validación de al menos 5 caracteres." }; const index = invoices.findIndex((item) => item.id === invoiceId); if (index < 0) return { ok: false as const, error: "No encontramos la factura seleccionada." }; const result = transitionInvoice(invoices[index]!, "pagada", { actor: "Operaciones A&L", note }); if (!result.ok) return result; invoices[index] = { ...result.value, paymentReviewNote: note }; pushNotification(result.value.userId, "Pago aprobado", `Validamos el pago de ${result.value.number}. La factura quedó como pagada.`); const user = users.find((item) => item.id === result.value.userId); if (user) await sendEmail({ to: user.email, subject: "Pago aprobado", heading: "Tu pago fue aprobado", body: `La factura ${result.value.number} ahora aparece como pagada.`, actionLabel: "Ver factura", actionUrl: `${siteUrl()}/cliente/facturas/${result.value.id}` }); return { ok: true as const, invoice: invoices[index]! };
+  return runMutation("admin:facturas|recepcion", async () => { await simulateLatency(); if (note.trim().length < 5) return { ok: false as const, error: "Agrega una nota de validación de al menos 5 caracteres." }; const index = invoices.findIndex((item) => item.id === invoiceId); if (index < 0) return { ok: false as const, error: "No encontramos la factura seleccionada." }; const result = transitionInvoice(invoices[index]!, "pagada", { actor: "Operaciones A&L", note }); if (!result.ok) return result; invoices[index] = { ...result.value, paymentReviewNote: note }; pushNotification(result.value.userId, "Pago aprobado", `Validamos el pago de ${result.value.number}. La factura quedó como pagada.`); const user = users.find((item) => item.id === result.value.userId); if (user) await sendEmail({ to: user.email, subject: "Pago aprobado", heading: "Tu pago fue aprobado", body: `La factura ${result.value.number} ahora aparece como pagada.`, actionLabel: "Ver factura", actionUrl: `${siteUrl()}/cliente/facturas/${result.value.id}` }); return { ok: true as const, invoice: invoices[index]! };
 
   });
 }
 export async function rejectPayment(invoiceId: string, note: string, expectedReportedAt?: string) {
-  return runMutation("admin", async () => { await simulateLatency(); if (note.trim().length < 5) return { ok: false as const, error: "Explica el rechazo con al menos 5 caracteres." }; const index = invoices.findIndex((item) => item.id === invoiceId); if (index < 0) return { ok: false as const, error: "No encontramos la factura seleccionada." }; if (expectedReportedAt && invoices[index]!.paymentReport?.reportedAt !== expectedReportedAt) return {ok:false as const,error:"El reporte cambió. Actualiza antes de rechazarlo."}; if (invoices[index]!.status !== "pago-reportado") return { ok: false as const, error: "Solo puedes rechazar un pago que esté reportado y pendiente de revisión." }; const result = transitionInvoice(invoices[index]!, "emitida", { actor: adminActor, note }); if (!result.ok) return result; invoices[index] = { ...result.value, payments:result.value.payments?.map(p=>p.status==="pendiente"?{...p,status:"rechazado" as const}:p), paymentReviewNote: note, paymentReport: undefined }; pushNotification(result.value.userId, "Reporte de pago rechazado", `${result.value.number} necesita un nuevo reporte: ${note}`); const user = users.find((item) => item.id === result.value.userId); if (user) await sendEmail({ to: user.email, subject: "Reporte de pago rechazado", heading: "Necesitamos revisar tu reporte", body: `El reporte de ${result.value.number} fue rechazado: ${note}`, actionLabel: "Revisar factura", actionUrl: `${siteUrl()}/cliente/facturas/${result.value.id}` }); return { ok: true as const, invoice: invoices[index]! };
+  return runMutation("admin:facturas", async () => { await simulateLatency(); if (note.trim().length < 5) return { ok: false as const, error: "Explica el rechazo con al menos 5 caracteres." }; const index = invoices.findIndex((item) => item.id === invoiceId); if (index < 0) return { ok: false as const, error: "No encontramos la factura seleccionada." }; if (expectedReportedAt && invoices[index]!.paymentReport?.reportedAt !== expectedReportedAt) return {ok:false as const,error:"El reporte cambió. Actualiza antes de rechazarlo."}; if (invoices[index]!.status !== "pago-reportado") return { ok: false as const, error: "Solo puedes rechazar un pago que esté reportado y pendiente de revisión." }; const result = transitionInvoice(invoices[index]!, "emitida", { actor: adminActor, note }); if (!result.ok) return result; invoices[index] = { ...result.value, payments:result.value.payments?.map(p=>p.status==="pendiente"?{...p,status:"rechazado" as const}:p), paymentReviewNote: note, paymentReport: undefined }; pushNotification(result.value.userId, "Reporte de pago rechazado", `${result.value.number} necesita un nuevo reporte: ${note}`); const user = users.find((item) => item.id === result.value.userId); if (user) await sendEmail({ to: user.email, subject: "Reporte de pago rechazado", heading: "Necesitamos revisar tu reporte", body: `El reporte de ${result.value.number} fue rechazado: ${note}`, actionLabel: "Revisar factura", actionUrl: `${siteUrl()}/cliente/facturas/${result.value.id}` }); return { ok: true as const, invoice: invoices[index]! };
   });
 }
 export async function createTruck(input: unknown) {
-  return runMutation("admin", async () => {
+  return runMutation("admin:camiones", async () => {
   await simulateLatency();
   const parsed = truckSchema.safeParse(input);
   if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Revisa los datos del camión." };
@@ -447,7 +449,7 @@ export async function createTruck(input: unknown) {
 }
 
 export async function updateTruck(truckId: string, input: unknown) {
-  return runMutation("admin", async () => {
+  return runMutation("admin:camiones", async () => {
   await simulateLatency();
   const truckIndex = trucks.findIndex((item) => item.id === truckId);
   if (truckIndex < 0) return { ok: false as const, error: "No encontramos el camión seleccionado." };
@@ -467,7 +469,7 @@ export async function updateTruck(truckId: string, input: unknown) {
 }
 
 export async function assignBoxToTruck(truckId: string, boxId: string, scan?: { code: string; warehouseId: string }) {
-  return runMutation("admin", async () => {
+  return runMutation("admin:camiones", async () => {
   await simulateLatency();
   const truck = trucks.find((item) => item.id === truckId);
   const box = boxes.find((item) => item.id === boxId);
@@ -497,7 +499,7 @@ export async function assignBoxToTruck(truckId: string, boxId: string, scan?: { 
     Object.assign(box, transition.value);
   }
   box.truckId = truck.id;
-  if (scan) { box.destinationWarehouseId = scan.warehouseId; box.loadScan={at:new Date().toISOString(),actorId:(await requireAdminUser()).id,truckId:truck.id}; }
+  if (scan) { box.destinationWarehouseId = scan.warehouseId; box.loadScan={at:new Date().toISOString(),actorId:(await requireAdminUser(["camiones"])).id,truckId:truck.id}; }
   if (shipment) shipment.truckId = truck.id;
   truck.boxIds = [...truck.boxIds, box.id];
   return { ok: true as const, truck, box };
@@ -506,7 +508,7 @@ export async function assignBoxToTruck(truckId: string, boxId: string, scan?: { 
 }
 
 export async function removeBoxFromTruck(truckId: string, boxId: string) {
-  return runMutation("admin", async () => {
+  return runMutation("admin:camiones", async () => {
   await simulateLatency();
   const truck = trucks.find((item) => item.id === truckId);
   const box = boxes.find((item) => item.id === boxId);
@@ -526,15 +528,15 @@ export async function removeBoxFromTruck(truckId: string, boxId: string) {
   });
 }
 export async function saveFlowConfig(input: FlowConfig) {
-  return runMutation("admin", async () => { return configService.updateFlowConfig(input);
+  return runMutation("admin:configuracion", async () => { return configService.updateFlowConfig(input);
   });
 }
 export async function saveRateTable(input: BoxCategory[]) {
-  return runMutation("admin", async () => { return configService.updateRateTable(input);
+  return runMutation("admin:configuracion", async () => { return configService.updateRateTable(input);
   });
 }
 export async function saveSystemConfig(flow: FlowConfig, rates: BoxCategory[], expectedRevision?: string) {
-  return runMutation("admin", async () => {
+  return runMutation("admin:configuracion", async () => {
     try {
       if(expectedRevision && recordRevision({flow:await configService.getFlowConfig(),rates:await configService.getCatalog()})!==expectedRevision) return {ok:false as const,error:"Otro operador cambió la configuración. Actualiza antes de guardar."};
       const savedFlow = await configService.updateFlowConfig(flow);

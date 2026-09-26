@@ -1,4 +1,8 @@
 import { beforeAll, afterAll, describe, expect, it, vi } from "vitest";
+import {saveAdministrativeStaff,getAdministrativeStaff,inviteAdministrativeStaff} from "@/lib/auth/staff-actions";
+import {requireAdminUser} from "@/lib/auth/actions";
+import {GET as previewEmail} from "@/app/api/emails/preview/route";
+import {GET as invoicePdf} from "@/app/api/facturas/[id]/pdf/route";
 import mysql from "mysql2/promise";
 import sharp from 'sharp';
 import {normalizePhoto} from '@/lib/files/normalize-photo';
@@ -14,6 +18,10 @@ import { editOperation } from "@/lib/auth/edit-actions";
 import { sendProviderTest } from "@/lib/auth/email-actions";
 const cookieJar = vi.hoisted(() => new Map<string, { value: string; options?: Record<string, unknown> }>());
 const emailSend = vi.hoisted(() => vi.fn());
+const pushSend=vi.hoisted(()=>vi.fn(async()=>({statusCode:201})));
+vi.mock('web-push',()=>({default:{sendNotification:pushSend}}));
+import {subscribePush,unsubscribePush,pushSettings} from '@/lib/auth/push-actions';
+import {deliverPendingPush,allowedPushEndpoint,operationalEmail} from '@/lib/services/push';
 vi.mock("resend", async importOriginal => {
   const original = await importOriginal<typeof import("resend")>();
   return { ...original, Resend: class extends original.Resend { constructor(key?: string) { super(key); this.emails.send = emailSend; } } };
@@ -84,6 +92,7 @@ beforeAll(async () => {
   await root.query(await readFile(new URL("../migrations/001-real-system.sql",import.meta.url),"utf8"));
   await root.query(await readFile(new URL("../migrations/002-private-files.sql",import.meta.url),"utf8"));
   await root.query(await readFile(new URL("../migrations/005-r2-photos.sql",import.meta.url),"utf8"));
+  await root.query(await readFile(new URL("../migrations/006-web-push.sql",import.meta.url),"utf8"));
   await root.query(await readFile(new URL("../migrations/003-warehouse-operators.sql",import.meta.url),"utf8"));
   await root.query(await readFile(new URL("../migrations/004-warehouse-kinds.sql",import.meta.url),"utf8"));
   url.pathname=`/${database}`; process.env.DATABASE_URL=url.toString();
@@ -1150,6 +1159,28 @@ describe.sequential("Real MySQL authentication and operations", () => {
 
 });
 
+describe.sequential('Web Push with real MySQL and mocked delivery',()=>{
+ it('binds subscriptions to the session, queues operational emails only and delivers once per device',async()=>{
+  const previous={...process.env};
+  Object.assign(process.env,{PUSH_ENABLED:'true',VAPID_PUBLIC_KEY:'public-test',VAPID_PRIVATE_KEY:'private-test',VAPID_SUBJECT:'mailto:test@example.invalid'});
+  try{
+   const token=await createSessionToken(operationClient,'cliente',true);cookieJar.set('ayl_session',{value:token});
+   const sub={endpoint:'https://fcm.googleapis.com/fcm/send/test-device',keys:{auth:'a'.repeat(22),p256dh:'B'.repeat(87)}};
+   expect((await subscribePush({...sub,endpoint:'http://127.0.0.1/private'})).ok).toBe(false);
+   expect((await subscribePush(sub)).ok).toBe(true);expect((await pushSettings(sub.endpoint)).active).toBe(true);
+   const account=await accountById(operationClient);const origin=process.env.NEXT_PUBLIC_SITE_URL??'http://localhost:3100';
+   const mail={to:account!.email,subject:'Recepción de 3 unidades',heading:'Novedades',body:'Datos privados no deben salir en el push',actionUrl:new URL('/cliente/cajas',origin).href};
+   await withStore(()=>sendEmail(mail),true);
+   await withStore(()=>sendEmail({...mail,actionUrl:new URL('/restablecer?token=secret',origin).href}),true);
+   await deliverPendingPush();await deliverPendingPush();expect(pushSend).toHaveBeenCalledTimes(1);expect(pushSend.mock.calls[0]).not.toContain('Datos privados');
+   expect((await unsubscribePush(sub.endpoint)).ok).toBe(true);expect((await pushSettings(sub.endpoint)).active).toBe(false);
+   expect((await subscribePush(sub)).ok).toBe(true);await deleteSession(token);
+   const [rows]=await root.query<mysql.RowDataPacket[]>('SELECT id FROM push_subscriptions WHERE user_id=?',[operationClient]);expect(rows).toHaveLength(0);
+   expect(allowedPushEndpoint('https://fcm.googleapis.com.evil.test/test')).toBe(false);
+   expect(operationalEmail({...mail,expiresAt:new Date(Date.now()+10000).toISOString()})).toBe(false);
+  }finally{for(const key of ['PUSH_ENABLED','VAPID_PUBLIC_KEY','VAPID_PRIVATE_KEY','VAPID_SUBJECT']){if(previous[key]===undefined)delete process.env[key];else process.env[key]=previous[key];}cookieJar.set('ayl_session',{value:adminSession});}
+ });
+});
 describe.sequential('Clover with real MySQL and mocked bank requests',()=>{
  it('recovers the same reception and allows cash after decline, but blocks uncertain charges',async()=>sandbox(async fetch=>{
   cookieJar.set('ayl_session',{value:adminSession});
@@ -1228,4 +1259,58 @@ describe.sequential('Clover with real MySQL and mocked bank requests',()=>{
   expect((await chargeClover(batch.ids,'clv_clientcard',batch.amount,'127.0.0.1')).status).toBe('paid');
   expect(JSON.parse(fetch.mock.calls[0][1].body).ecomind).toBe('ecom');expect((await logisticsService.getInvoices()).find(i=>i.id===batch.ids[0])?.payments?.at(-1)?.warehouseName).toContain('Portal del cliente');
  }));
+});
+
+describe.sequential("Administrative staff permissions in MySQL",()=>{
+ it("persists invitations and permissions, isolates invoices, and enforces revocation",async()=>{
+  cookieJar.set("ayl_session",{value:adminSession});
+  const beforeInvoices=await logisticsService.getInvoices();
+  const foreignInvoice=beforeInvoices[0];expect(foreignInvoice).toBeDefined();
+  const input={firstName:"Recepción",paternalLastName:"Prueba",email:"rbac-reception@example.invalid",phone:"",active:true,fullAccess:false,permissions:["recepcion","prealertas","clientes","pendientes"]};
+  expect((await saveAdministrativeStaff(input)).ok).toBe(true);
+  expect((await saveAdministrativeStaff(input)).ok).toBe(false);
+  const staff=(await getAdministrativeStaff()).find(u=>u.email===input.email)!;
+  expect(staff.permissions).toEqual(input.permissions);
+  expect((await accountById(staff.id))?.verified_at).toBeNull();
+  const invitation=await withStore(()=>issueToken(staff.id,"invite"),true);
+  expect((await consumeToken(invitation,"reset",password))?.id).toBe(staff.id);
+  const token=await createSessionToken(staff.id,"admin");
+  cookieJar.set("ayl_session",{value:token});
+  expect((await requireAdminUser(["recepcion"])).id).toBe(staff.id);
+  await expect(requireAdminUser(["facturas"])).rejects.toThrow("REDIRECT:");
+  await expect(getAdministrativeStaff()).rejects.toThrow("REDIRECT:");
+  await expect(saveAdministrativeStaff({...input,id:staff.id,fullAccess:true})).rejects.toThrow("REDIRECT:");
+  await expect(inviteAdministrativeStaff(staff.id)).rejects.toThrow("REDIRECT:");
+  await expect(saveFlowConfig(DEFAULT_FLOW_CONFIG)).rejects.toThrow("REDIRECT:");
+  await expect(createNewTruck({})).rejects.toThrow("REDIRECT:");
+  await expect(getWarehouseAdministration()).rejects.toThrow("REDIRECT:");
+  expect(await logisticsService.getInvoices()).toEqual([]);
+  expect((await logisticsService.getUsers()).every(u=>u.role==="cliente")).toBe(true);
+  expect((await previewEmail(new Request("http://localhost/api/emails/preview?template=reset"))).status).toBe(401);
+  expect((await invoicePdf(new Request("http://localhost/api/facturas/id/pdf"),{params:Promise.resolve({id:foreignInvoice.id})})).status).toBe(404);
+  await expect(quoteClover([foreignInvoice.id])).rejects.toThrow("permisos");
+  expect((await approvePaymentAction(foreignInvoice.id,"Intento no autorizado")).ok).toBe(false);
+  const origin=await withStore(async()=>warehouses.find(w=>w.active&&(w.kind==="origen"||w.kind==="ambos"))!);
+  expect(origin).toBeDefined();
+  const reception=await receivePackageGroup([{customer:operationClient,originWarehouseId:origin.id,billingMode:"peso-real",weightLb:10,invoiceNow:true}],new FormData(),{method:"efectivo",warehouseId:origin.id});
+  expect(reception.ok).toBe(true);
+  if(!reception.ok)throw new Error(reception.error);
+  expect(reception.results[0].invoice).toMatchObject({status:"pagada",receptionActorId:staff.id});
+  expect((await logisticsService.getInvoices()).map(i=>i.id)).toEqual([reception.results[0].invoice!.id]);
+  cookieJar.set("ayl_session",{value:adminSession});
+  expect((await saveAdministrativeStaff({...staff,permissions:["prealertas"]})).ok).toBe(true);
+  expect(await verifySessionToken(token)).toBeNull();
+  const newToken=await createSessionToken(staff.id,"admin");cookieJar.set("ayl_session",{value:newToken});
+  await expect(requireAdminUser(["recepcion"])).rejects.toThrow("REDIRECT:");
+  expect((await requireAdminUser(["prealertas"])).id).toBe(staff.id);
+  expect(await logisticsService.getInvoices()).toEqual([]);
+  cookieJar.set("ayl_session",{value:adminSession});
+ });
+ it("protects the current full administrator from self-lockout",async()=>{
+  cookieJar.set("ayl_session",{value:adminSession});
+  const current=await requireAdminUser(),staff=(await getAdministrativeStaff()).find(u=>u.id===current.id)!;
+  expect((await saveAdministrativeStaff({...staff,fullAccess:false,permissions:["recepcion"]})).ok).toBe(false);
+  expect((await saveAdministrativeStaff({...staff,active:false})).ok).toBe(false);
+  expect((await requireAdminUser()).id).toBe(current.id);
+ });
 });

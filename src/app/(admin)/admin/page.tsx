@@ -1,4 +1,5 @@
-import Link from "next/link";
+import { requireAdminUser } from "@/lib/auth/actions";
+import Link from "@/components/admin/admin-access";
 import { ArrowUpRight, Boxes, CircleDollarSign, MessageSquare, PackageCheck, Truck } from "lucide-react";
 import { SectionTitle } from "@/components/cliente/section-title";
 import { StatCard } from "@/components/ui/stat-card";
@@ -7,7 +8,7 @@ import { logisticsService } from "@/lib/services/logistics";
 import { formatUsd } from "@/lib/utils/format";
 import { invoiceTotal, isInvoiceOverdue } from "@/lib/utils/invoices";
 
-export default async function AdminDashboard() {
+export default async function AdminDashboard() { await requireAdminUser(["resumen"]);
   const [boxes,trucks,invoices,tickets]=await Promise.all([logisticsService.getBoxes(),logisticsService.getTrucks(),logisticsService.getInvoices(),logisticsService.getSupportTickets()]);
   const balance=invoices.filter(invoice=>!["pagada","borrador"].includes(invoice.status)).reduce((sum,invoice)=>sum+invoiceTotal(invoice),0);
   const shortcuts=[{label:"Pagos por revisar",value:invoices.filter(item=>item.status==="pago-reportado").length,href:"/admin/facturas",icon:CircleDollarSign},{label:"Consultas sin respuesta",value:tickets.filter(item=>item.status!=="cerrado"&&item.messages.at(-1)?.author==="cliente").length,href:"/admin/soporte",icon:MessageSquare},{label:"Cajas listas para entrega",value:boxes.filter(item=>item.status==="en-destino").length,href:"/admin/entregas",icon:PackageCheck}];

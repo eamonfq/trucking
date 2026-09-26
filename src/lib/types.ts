@@ -30,6 +30,7 @@ export type Warehouse = { kind?:import("./config/warehouses").WarehouseKind; cou
 export type TruckStop = { warehouseId: string; city: string; arrivalDate: string };
 
 export type User = {
+  adminPermissions?: import("./auth/admin-permissions").AdminSection[];
   warehouseGrants?: WarehouseGrant[];
   id: string;
   role: Role;
@@ -162,6 +163,7 @@ export type InvoiceLine = {
 export type PaymentRecord = { folio:string; status:"pendiente"|"confirmado"|"rechazado"|"acuerdo"; amountUsd:number; method:string; externalReference?:string; recordedAt:string; actorId:string; actorName:string; warehouseId?:string; warehouseName?:string; customerId:string; invoiceId:string; boxIds:string[]; shipmentId?:string; confirmedAt?:string; confirmedBy?:string; confirmedByName?:string; boxCodes?:string[]; shipmentCodes?:string[] };
 
 export type Invoice = {
+  receptionActorId?: string;
   cloverPaymentId?: string;
   payments?: PaymentRecord[];
   collectionReferences?: Array<{reference:string;method:"efectivo"|"destino"|"tarjeta"|"transferencia"|"deposito"|"clover";at:string}>;

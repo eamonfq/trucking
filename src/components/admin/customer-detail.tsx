@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link,{useAdminPermission} from "@/components/admin/admin-access";
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { useForm } from "react-hook-form";
@@ -34,6 +34,8 @@ type RecipientInput = z.input<typeof customerRecipientSchema>;
 type NoteInput = z.input<typeof internalNoteSchema>;
 
 export function CustomerDetail({ initialUser, initialAddresses, initialRecipients, boxes, shipments, invoices }: { initialUser: User; initialAddresses: Address[]; initialRecipients: Recipient[]; boxes: Box[]; shipments: Shipment[]; invoices: Invoice[] }) {
+  const canViewInvoices=useAdminPermission("facturas"),canViewSummary=useAdminPermission("resumen");
+  const canViewBilling=canViewInvoices||canViewSummary;
   const [customer, setCustomer] = useState(initialUser);
   const [addresses, setAddresses] = useState(initialAddresses);
   const [recipients, setRecipients] = useState(initialRecipients);
@@ -79,17 +81,17 @@ export function CustomerDetail({ initialUser, initialAddresses, initialRecipient
         <div><div className="flex flex-wrap items-center gap-3"><span className="grid size-12 place-items-center rounded-2xl bg-white/10"><UserRound className="size-6 text-orange-400" /></span><div><p className="text-xs font-bold uppercase tracking-[.18em] text-orange-400">{customer.lockerCode}</p><h1 className="mt-1 font-display text-2xl font-bold sm:text-3xl">{customer.firstName} {customer.paternalLastName} {customer.maternalLastName}</h1></div><span className={`rounded-full px-3 py-1 text-xs font-bold ${CUSTOMER_STATUS[customer.active ? "active" : "inactive"].className}`}>{CUSTOMER_STATUS[customer.active ? "active" : "inactive"].label}</span></div><p className="mt-4 max-w-2xl text-sm leading-6 text-white/65">{CUSTOMER_COPY.detail.description}</p></div>
         <div className="flex flex-wrap gap-2"><Link href={`/admin/recepcion?customer=${customer.id}`} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-orange-500 px-5 text-sm font-bold text-white hover:bg-orange-600"><PackagePlus className="size-4" />Crear caja</Link><Button variant="secondary" onClick={() => setConfirmation("status")}><ArchiveRestore className="size-4" />{customer.active ? "Desactivar" : "Activar"}</Button></div>
       </div>
-      <div className="grid border-t border-white/10 sm:grid-cols-3"><Metric label="Correo y teléfono" value={customer.email} note={customer.phone} /><Metric label="Saldo pendiente" value={formatUsd(balance)} note={`${invoices.length} documentos`} /><Metric label="Operación" value={`${boxes.length} cajas`} note={`${shipments.length} envíos`} /></div>
+      <div className="grid border-t border-white/10 sm:grid-cols-3"><Metric label="Correo y teléfono" value={customer.email} note={customer.phone} />{canViewBilling&&<Metric label="Saldo pendiente" value={formatUsd(balance)} note={`${invoices.length} documentos`} />}<Metric label="Operación" value={`${boxes.length} cajas`} note={`${shipments.length} envíos`} /></div>
     </section>
 
-    <div className="overflow-x-auto border-b border-stone-200" role="tablist" aria-label="Expediente del cliente"><div className="flex min-w-max gap-1">{CUSTOMER_COPY.tabs.map((item) => <button key={item} type="button" role="tab" aria-selected={tab === item} onClick={() => setTab(item)} className={`min-h-12 border-b-2 px-4 text-sm font-bold transition ${tab === item ? "border-orange-500 text-orange-600" : "border-transparent text-navy-500 hover:text-navy-950"}`}>{item}</button>)}</div></div>
+    <div className="overflow-x-auto border-b border-stone-200" role="tablist" aria-label="Expediente del cliente"><div className="flex min-w-max gap-1">{CUSTOMER_COPY.tabs.filter(item=>item!=="Facturas"||canViewBilling).map((item) => <button key={item} type="button" role="tab" aria-selected={tab === item} onClick={() => setTab(item)} className={`min-h-12 border-b-2 px-4 text-sm font-bold transition ${tab === item ? "border-orange-500 text-orange-600" : "border-transparent text-navy-500 hover:text-navy-950"}`}>{item}</button>)}</div></div>
 
     {tab === "Datos" && <ProfilePanel customer={customer} onUpdate={setCustomer} onResetPassword={() => { setTemporaryPassword(""); setConfirmation("password"); }} onChangeLocker={() => { setLockerCode(customer.lockerCode); setConfirmation("locker"); }} />}
     {tab === "Direcciones" && <AddressPanel customer={customer} items={addresses} recipients={recipients} onItems={setAddresses} onCustomer={setCustomer} />}
     {tab === "Destinatarios" && <RecipientPanel customer={customer} items={recipients} addresses={addresses} onItems={setRecipients} onCustomer={setCustomer} />}
     {tab === "Cajas" && <BoxesPanel boxes={boxes} />}
     {tab === "Envíos" && <ShipmentsPanel shipments={shipments} />}
-    {tab === "Facturas" && <InvoicesPanel invoices={invoices} balance={balance} />}
+    {canViewBilling && tab === "Facturas" && <InvoicesPanel invoices={invoices} balance={balance} />}
     {tab === "Notas internas" && <NotesPanel customer={customer} onCustomer={setCustomer} />}
     {tab === "Actividad" && <ActivityPanel customer={customer} />}
 

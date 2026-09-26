@@ -1,5 +1,5 @@
 "use client";
-import Link from "next/link";
+import Link from "@/components/admin/admin-access";
 import { useState } from "react";
 import { ArrowUpRight, CheckCheck, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";

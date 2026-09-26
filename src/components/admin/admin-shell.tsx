@@ -6,8 +6,11 @@ import { PencilLine, Boxes, ClipboardCheck, FileText, Gauge, Mail, Menu, Setting
 import { Sidebar } from "@/components/ui/sidebar";
 import { BrandLogo } from "@/components/marketing/brand-logo";
 import { signOut } from "@/lib/auth/actions";
+import { canAdminPath, type AdminPrincipal } from "@/lib/auth/admin-permissions";
+import {AdminAccessProvider} from "./admin-access";
 
-const items = [
+const navigation = [
+  { label: "Usuarios y permisos", href: "/admin/usuarios", icon: UsersRound },
   { label: "Resumen", href: "/admin", icon: Gauge },
   { label: "Pendientes", href: "/admin/pendientes", icon: ListTodo },
   { label: "Recepción", href: "/admin/recepcion", icon: ClipboardCheck },
@@ -25,9 +28,10 @@ const items = [
   { label: "Configuración", href: "/admin/configuracion", icon: Settings },
 ];
 
-export function AdminShell({ children }: { children: ReactNode }) {
+export function AdminShell({ children, user }: { children: ReactNode; user: AdminPrincipal }) {
+  const items=navigation.filter(item=>canAdminPath(user,item.href));
   return (
-    <main className="min-h-screen bg-navy-950 p-3 sm:p-5">
+    <AdminAccessProvider user={user}><main className="min-h-screen bg-navy-950 p-3 sm:p-5">
       <div className="mx-auto grid max-w-[1700px] gap-5 lg:grid-cols-[18rem_1fr]">
         <div className="hidden lg:block">
           <div className="sticky top-5 h-[calc(100vh-2.5rem)]">
@@ -66,6 +70,6 @@ export function AdminShell({ children }: { children: ReactNode }) {
           {children}
         </div>
       </div>
-    </main>
+    </main></AdminAccessProvider>
   );
 }

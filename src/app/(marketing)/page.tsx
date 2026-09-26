@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import {AppPromotion} from '@/components/pwa/app-promotion';
 import Link from "next/link";
 import { BoxIso, BoxIsoDefs } from "@/components/marketing/box-iso";
 import { FaqList } from "@/components/marketing/faq-list";
@@ -230,6 +231,7 @@ export default async function LandingPage() {
       </section>
 
       {/* Preguntas */}
+      <AppPromotion />
       <section id="faq" className="bg-white px-5 py-24 sm:px-8 lg:px-18 lg:py-28">
         <div className="mx-auto grid max-w-[90rem] gap-14 lg:grid-cols-[1fr_1.4fr] lg:items-start">
           <div className="flex flex-col gap-5">

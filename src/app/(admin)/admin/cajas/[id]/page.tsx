@@ -1,6 +1,7 @@
+import { requireAdminUser } from "@/lib/auth/actions";
 import {formatDimensions} from "@/lib/utils/format";
 import { billingDescription } from "@/lib/utils/billing";
-import Link from "next/link";
+import Link from "@/components/admin/admin-access";
 import { PrivatePhoto } from "@/components/ui/private-photo";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Camera, FileText, Package } from "lucide-react";
@@ -12,7 +13,7 @@ import { logisticsService } from "@/lib/services/logistics";
 import { formatDate, formatUsd } from "@/lib/utils/format";
 import { invoiceTotal } from "@/lib/utils/invoices";
 
-export default async function AdminBoxDetail({ params }: { params: Promise<{ id: string }> }) {
+export default async function AdminBoxDetail({ params }: { params: Promise<{ id: string }> }) { await requireAdminUser(["bodega","recepcion","clientes","camiones"]);
   const { id } = await params;
   const [box, users, trucks, shipments, invoices, rates] = await Promise.all([logisticsService.getBoxById(id), logisticsService.getUsers(), logisticsService.getTrucks(), logisticsService.getShipments(), logisticsService.getInvoices(), configService.getCatalog()]);
   if (!box) notFound();

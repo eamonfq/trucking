@@ -1,4 +1,5 @@
 import Link from "next/link";
+import {AppPromotion} from '@/components/pwa/app-promotion';
 import { Bell, Box, CircleDollarSign, MapPin, PackageCheck, Truck } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -40,6 +41,7 @@ export default async function ClientDashboard() {
       <StatCard label="En México" value={count(["en-destino"])} icon={MapPin} />
       <StatCard label="Entregadas" value={count(["entregada"])} icon={PackageCheck} />
     </div>
+    <AppPromotion compact />
     <div className="mt-7 grid gap-5 xl:grid-cols-2">
       <Card className="shadow-none">
         <div className="flex items-center justify-between"><h2 className="font-display text-xl font-bold text-navy-950">Cajas recientes</h2><Link href="/cliente/cajas" className="text-xs font-bold text-orange-600">Ver todas</Link></div>

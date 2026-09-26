@@ -9,7 +9,7 @@ import { withStore } from "@/lib/db/store";
 import { revalidatePath } from "next/cache";
 
 export async function checkEmailProvider() {
-  const actor=await requireAdminUser();
+  const actor=await requireAdminUser(["correos"]);
   if (!await allowAttempt(`email-diagnose/${actor.id}`,5,600)) return {ok:false as const,error:"Espera unos minutos antes de consultar de nuevo."};
   if (!process.env.RESEND_API_KEY) return {ok:false as const,error:"Falta RESEND_API_KEY en la configuración privada del servidor."};
   try {
@@ -23,7 +23,7 @@ export async function checkEmailProvider() {
 }
 
 export async function sendProviderTest(input:unknown) {
-  const actor=await requireAdminUser();
+  const actor=await requireAdminUser(["correos"]);
   const parsed=z.object({from:z.string().trim().email(),to:z.string().trim().email(),confirmed:z.literal(true)}).safeParse(input);
   if (!parsed.success) return {ok:false as const,error:"Indica remitente, destinatario y confirma que autorizas el envío real."};
   if (!process.env.RESEND_API_KEY) return {ok:false as const,error:"Falta configurar la clave de Resend en el servidor."};

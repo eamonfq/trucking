@@ -25,11 +25,11 @@ function savedReception(request:typeof receptionRequests[number]){
 }
 
 export async function receivePackageGroup(input:unknown,data:FormData,paymentInput?:unknown,requestId?:string){
-  return runMutation("admin",async()=>withConsolidatedEmail(async()=>{
+  return runMutation("admin:recepcion",async()=>withConsolidatedEmail(async()=>{
     const parsed=z.array(receptionSchema).min(1).max(50).safeParse(input);
     if(!parsed.success)return {ok:false as const,error:parsed.error.issues[0]?.message??"Revisa los paquetes (máximo 50)."};
     const items=parsed.data;
-    const actor=await requireAdminUser();
+    const actor=await requireAdminUser(["recepcion"]);
     if(requestId&&!z.string().uuid().safeParse(requestId).success)return {ok:false as const,error:'Identificador de recepción inválido.'};
     const fingerprint=recordRevision({items,payment:paymentInput??null});
     const previous=requestId?receptionRequests.find(r=>r.id===requestId):undefined;
@@ -60,8 +60,8 @@ export async function receivePackageGroup(input:unknown,data:FormData,paymentInp
 
 // Complete an already saved reception after a declined card. Never creates more boxes.
 export async function completeReceptionPayment(requestId:string,input:unknown){
- return runMutation('admin',async()=>withConsolidatedEmail(async()=>{
-  const actor=await requireAdminUser(),request=receptionRequests.find(r=>r.id===requestId&&r.actorId===actor.id);
+ return runMutation("admin:recepcion",async()=>withConsolidatedEmail(async()=>{
+  const actor=await requireAdminUser(["recepcion"]),request=receptionRequests.find(r=>r.id===requestId&&r.actorId===actor.id);
   if(!request)return {ok:false as const,error:'No encontramos esta recepción. Revisa las facturas.'};
   const parsed=receptionPaymentSchema.safeParse(input);if(!parsed.success)return {ok:false as const,error:'Revisa el método, monto y ubicación.'};
   const result=savedReception(request),payment=parsed.data;
@@ -87,7 +87,7 @@ function receptionEmail(result:{results:Array<{box:Box;invoice?:Invoice}>;total:
 }
 
 export async function receiveBoxWithPhoto(input: unknown, data: FormData, paymentInput?: unknown) {
-  return runMutation("admin", async () => withConsolidatedEmail(async () => {
+  return runMutation("admin:recepcion", async () => withConsolidatedEmail(async () => {
     const upload = await validateUpload(data,"box");
     if (!upload.ok) return upload;
     const payment = paymentInput === undefined ? null : receptionPaymentSchema.safeParse(paymentInput);
@@ -138,7 +138,7 @@ async function recordWarehousePayment(invoiceId: string, payment: { method: "efe
   if (!invoice || !["emitida", "pendiente-pago-destino", "vencida"].includes(invoice.status)) return {ok:false as const,error:"La factura ya cambió. Actualiza antes de registrar el cobro."};
   if (["tarjeta","transferencia","deposito"].includes(payment.method) && !matchesInvoiceTotal(invoice, payment.amount ?? 0)) return {ok:false as const,error:"El monto recibido debe coincidir con el total exacto de la factura."};
   if(!paymentLocation(payment.warehouseId))return {ok:false as const,error:"Selecciona una ubicación activa para el cobro."};
-  const actor = await requireAdminUser();
+  const actor = await requireAdminUser(["recepcion","facturas"]);
   const at = new Date().toISOString();
   const next = transitionInvoice(invoice, payment.method === "destino" ? "pendiente-pago-destino" : "pago-reportado", {actor:actor.id, at, note:payment.method === "destino" ? "Acuerdo de pago pendiente en destino. No se ha recibido dinero." : `Cobro en ${payment.method} registrado por operaciones.`});
   if (!next.ok) return next;
@@ -160,7 +160,7 @@ async function recordWarehousePayment(invoiceId: string, payment: { method: "efe
 }
 
 export async function collectDestinationPayment(invoiceId: string, input: unknown, data: FormData) {
-  return runMutation("admin", async () => {
+  return runMutation("admin:facturas", async () => {
     const invoice = invoices.find(item => item.id === invoiceId);
     if (!invoice || !["emitida","pendiente-pago-destino","vencida"].includes(invoice.status)) return {ok:false as const,error:"La factura no tiene un cobro pendiente. Actualiza antes de continuar."};
     const payment = receptionPaymentSchema.safeParse(input);

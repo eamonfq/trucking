@@ -14,7 +14,7 @@ import { PackageQuantity, PackageMeasurements } from "./package-batch-controls";
 import { ReceptionRecipient } from "./reception-recipient";
 import { receivePackageGroup,completeReceptionPayment } from "@/lib/auth/file-actions";
 import { selectPrealertAtWarehouse } from "@/lib/auth/warehouse-actions";
-import Link from "next/link";
+import Link from "@/components/admin/admin-access";
 import { PaymentCapture, type PaymentChoice } from "@/components/admin/payment-capture";
 import { CustomerSearch } from "@/components/admin/customer-search";
 import { CustomerQuickCreate } from "@/components/admin/customer-quick-create";

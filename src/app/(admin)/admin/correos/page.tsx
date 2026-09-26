@@ -1,12 +1,12 @@
 import { EmailControls } from "@/components/admin/email-controls";
 import { siteUrl } from "@/lib/services/email";
-import Link from "next/link";
+import Link from "@/components/admin/admin-access";
 import type { RowDataPacket } from "mysql2/promise";
 import { pool } from "@/lib/db/pool";
 import { requireAdminUser } from "@/lib/auth/actions";
 import { SectionTitle } from "@/components/cliente/section-title";
 export default async function EmailsPage() {
-  await requireAdminUser();
+  await requireAdminUser(["correos"]);
   const [rows] = await pool().query<RowDataPacket[]>("SELECT id,status,attempts,created_at,last_error FROM email_outbox ORDER BY created_at DESC LIMIT 100");
   const preview = process.env.NODE_ENV !== "production" && process.env.EMAIL_DELIVERY === "preview";
   const labels: Record<string,string> = {queued:"En cola",retry:"Reintentando",sent:"Aceptado por Resend",delivered:"Entregado",failed:"Fallido",bounced:"Rebotado",complained:"Marcado como spam"};

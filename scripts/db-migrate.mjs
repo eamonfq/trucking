@@ -25,5 +25,6 @@ try {
   }
   const [r2Photos] = await connection.query("SELECT version FROM schema_migrations WHERE version=5");
   if (!r2Photos.length) await connection.query(await readFile(new URL('../migrations/005-r2-photos.sql', import.meta.url),'utf8'));
-  console.log(`Migraciones 001–005 aplicadas en ${database}. No se importaron usuarios ni operaciones de demo.`);
+  await connection.query(await readFile(new URL('../migrations/006-web-push.sql', import.meta.url),'utf8'));
+  console.log(`Migraciones 001–006 aplicadas en ${database}. No se importaron usuarios ni operaciones de demo.`);
 } finally { await connection.end(); }
