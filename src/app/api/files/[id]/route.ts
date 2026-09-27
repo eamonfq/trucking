@@ -13,7 +13,7 @@ export async function GET(_request: Request, {params}: {params:Promise<{id:strin
   if (!session) return new Response(null,{status:401,headers:{"Cache-Control":"private, no-store"}});
   const {id} = await params;
   if (!/^[a-f0-9-]{36}$/i.test(id)) return new Response(null,{status:404});
-  const [rows] = await pool().execute<RowDataPacket[]>("SELECT entity_type,entity_id,original_name,mime_type,content,sha256,storage_provider,object_key FROM private_files WHERE id=? AND (?='admin' OR owner_id=?)",[id,session.role,session.userId]);
+  const [rows] = await pool().execute<RowDataPacket[]>("SELECT entity_type,entity_id,original_name,mime_type,content,sha256,storage_provider,object_key FROM private_files WHERE NOT EXISTS (SELECT 1 FROM entities WHERE collection_name='deletedFiles' AND entity_id=private_files.id) AND id=? AND (?='admin' OR owner_id=?)",[id,session.role,session.userId]);
   const file = rows[0];
   if (!file) return new Response(null,{status:404,headers:{"Cache-Control":"private, no-store"}});
   if(user?.role==="admin"&&!isFullAdmin(user)){

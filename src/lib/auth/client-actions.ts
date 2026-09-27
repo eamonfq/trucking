@@ -1,4 +1,6 @@
 "use server";
+import {nextDocumentSequence} from "@/lib/db/document-sequence";
+import {mexicanAddressSchema} from "@/lib/schemas/address";
 import {conflictingDeliverySnapshots} from "@/lib/utils/recipient-snapshot";
 import { runMutation } from "@/lib/db/mutation";
 
@@ -56,7 +58,7 @@ export async function createPrealert(input: unknown) {
   if (!category) return { ok: false as const, error: "Selecciona una categoría disponible." };
   if (boxes.some((box) => box.originTracking?.toLowerCase() === parsed.data.tracking.toLowerCase())) return { ok: false as const, error: "Ese tracking ya fue registrado." };
   const at = new Date().toISOString();
-  const box: Box = { id: nextId("box", boxes.length), code: `BX-26${String(boxes.length + 1).padStart(4, "0")}`, userId: user.id, categoryId: category.id, categoryName: category.name, status: "pre-alertada", dimensions: { ...category.dimensions }, weightLb: 0, originTracking: parsed.data.tracking, prealertDetails:{store:parsed.data.store,description:parsed.data.description,declaredValue:parsed.data.declaredValue}, photos: [], timeline: [{ from: null, to: "pre-alertada", actor: fullName(user), at, note: `${parsed.data.store}: ${parsed.data.description}. Valor declarado USD ${parsed.data.declaredValue}.` }] };
+  const box: Box = { id: nextId("box", boxes.length), code: `BX-26${String(nextDocumentSequence("box")).padStart(4, "0")}`, userId: user.id, categoryId: category.id, categoryName: category.name, status: "pre-alertada", dimensions: { ...category.dimensions }, weightLb: 0, originTracking: parsed.data.tracking, prealertDetails:{store:parsed.data.store,description:parsed.data.description,declaredValue:parsed.data.declaredValue}, photos: [], timeline: [{ from: null, to: "pre-alertada", actor: fullName(user), at, note: `${parsed.data.store}: ${parsed.data.description}. Valor declarado USD ${parsed.data.declaredValue}.` }] };
   boxes.push(box);
   recordActivity(user, "pre-alerta", `Pre-alerta ${box.code} registrada con tracking ${parsed.data.tracking}.`);
   await notify(user.id, "Pre-alerta registrada", `${box.code} quedó vinculada al tracking ${parsed.data.tracking}.`, `/cliente/cajas/${box.code}`);
@@ -82,16 +84,18 @@ export async function createClientShipment(input: unknown) {
   if (!recipient || !address) return { ok: false as const, error: "Selecciona un destinatario con dirección vigente." };
   if(conflictingDeliverySnapshots(selected))return {ok:false as const,error:"Estas piezas tienen datos de entrega distintos registrados en recepción. Crea envíos separados o solicita una corrección."};
   const receiptSnapshot=selected.find(b=>b.recipientSnapshot)?.recipientSnapshot;
-  const deliveryAddress=receiptSnapshot?.address??address;
+  const deliveryAddress=receiptSnapshot && mexicanAddressSchema.safeParse(receiptSnapshot.address).success ? receiptSnapshot.address : address;
+  if(parsed.data.deliveryMethod === "domicilio" && !mexicanAddressSchema.safeParse(deliveryAddress).success)return {ok:false as const,error:"Completa la dirección del destinatario antes de solicitar entrega a domicilio."};
+  if(!deliveryAddress.municipality)return {ok:false as const,error:"Indica la ciudad del destinatario antes de solicitar el envío."};
   const flow = await configService.getFlowConfig();
   if (parsed.data.deliveryMethod === "domicilio" && flow.deliveryMode === "sucursal") return { ok: false as const, error: "La entrega a domicilio no está habilitada en este momento." };
   if (parsed.data.deliveryMethod === "sucursal" && flow.deliveryMode === "domicilio") return { ok: false as const, error: "Por ahora solo operamos entrega a domicilio." };
   const at = new Date().toISOString();
-  const draft: Shipment = { id: nextId("ship", shipments.length), code: `SH-26${String(shipments.length + 1).padStart(4, "0")}`, userId: user.id, recipientId: recipient.id, boxIds: selected.map((box) => box.id), status: "pendiente", destinationCity: deliveryAddress.municipality, timeline: [{ from: null, to: "pendiente", actor: fullName(user), at, note: `Solicitud creada con ${selected.length} cajas. Entrega: ${parsed.data.deliveryMethod === "domicilio" ? "a domicilio" : "en sucursal"}.` }] };
+  const draft: Shipment = { id: nextId("ship", shipments.length), code: `SH-26${String(nextDocumentSequence("shipment")).padStart(4, "0")}`, userId: user.id, recipientId: recipient.id, boxIds: selected.map((box) => box.id), status: "pendiente", destinationCity: deliveryAddress.municipality, timeline: [{ from: null, to: "pendiente", actor: fullName(user), at, note: `Solicitud creada con ${selected.length} cajas. Entrega: ${parsed.data.deliveryMethod === "domicilio" ? "a domicilio" : "en sucursal"}.` }] };
   const confirmed = transitionShipment(draft, "confirmado", { actor: "Sistema A&L", at, note: "Cajas elegibles y destinatario validados." });
   if (!confirmed.ok) return confirmed;
   confirmed.value.deliveryMethod = parsed.data.deliveryMethod;
-  confirmed.value.recipientSnapshot = receiptSnapshot?{...receiptSnapshot,address:{...receiptSnapshot.address}}:{ name: recipient.name, phone: recipient.phone, address: { ...address } };
+  confirmed.value.recipientSnapshot = {name:receiptSnapshot?.name??recipient.name,phone:receiptSnapshot?.phone??recipient.phone,address:{...deliveryAddress}};
   shipments.push(confirmed.value);
   selected.forEach((box) => { box.shipmentId = confirmed.value.id; });
   recordActivity(user, "envío", `Envío ${confirmed.value.code} creado hacia ${confirmed.value.destinationCity}.`);

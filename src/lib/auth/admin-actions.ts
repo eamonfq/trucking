@@ -1,4 +1,6 @@
 "use server";
+import {nextDocumentSequence} from "@/lib/db/document-sequence";
+import {hasAddressData} from "@/lib/schemas/optional-contact";
 import {truckLoad} from "@/lib/utils/truck-load";
 import {matchesWarehouseDestination} from "@/lib/utils/warehouse-destination";
 import { warehouseSupports } from "@/lib/config/warehouses";
@@ -35,7 +37,7 @@ import { suggestCategory } from "@/lib/utils/suggest-category";
 import { receptionSchema, truckSchema } from "@/lib/schemas/admin";
 import { getStatusLabel } from "@/lib/config/status";
 import { CUSTOMER_COPY } from "@/lib/config/customers";
-import { customerAddressSchema, customerProfileSchema, customerRecipientSchema, internalNoteSchema, lockerCodeSchema, quickCustomerSchema } from "@/lib/schemas/customer";
+import { administrativeAddressSchema as customerAddressSchema, customerProfileSchema, administrativeRecipientSchema as customerRecipientSchema, internalNoteSchema, lockerCodeSchema, quickCustomerSchema } from "@/lib/schemas/customer";
 
 const adminActor = "Operaciones A&L";
 const now = () => new Date().toISOString();
@@ -59,7 +61,7 @@ export async function createCustomerAsAdmin(input: unknown) {
   await simulateLatency();
   const parsed = quickCustomerSchema.safeParse(input);
   if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Revisa los datos del cliente." };
-  if (users.some((user) => user.email.toLowerCase() === parsed.data.email.toLowerCase())) return { ok: false as const, error: "Ya existe una cuenta con ese correo." };
+  if (parsed.data.email && users.some((user) => user.email.toLowerCase() === parsed.data.email.toLowerCase())) return { ok: false as const, error: "Ya existe una cuenta con ese correo." };
   const { user, address } = await registerCustomer(parsed.data);
   for(const person of parsed.data.recipients??[])recipients.push({id:crypto.randomUUID(),userId:user.id,addressId:address.id,...person});
   await sendAccountLink(user, "invite");
@@ -77,11 +79,11 @@ export async function createCustomerAtReception(input: unknown) {
   await simulateLatency();
   const parsed = quickCustomerSchema.safeParse(input);
   if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Revisa los datos del cliente." };
-  if (users.some((user) => user.email.toLowerCase() === parsed.data.email.toLowerCase())) return { ok: false as const, error: "Ya existe una cuenta con ese correo." };
+  if (parsed.data.email && users.some((user) => user.email.toLowerCase() === parsed.data.email.toLowerCase())) return { ok: false as const, error: "Ya existe una cuenta con ese correo." };
   const { user, address } = await registerCustomer(parsed.data);
   await sendAccountLink(user, "invite");
   for(const person of parsed.data.recipients??[])recipients.push({id:crypto.randomUUID(),userId:user.id,addressId:address.id,...person});
-  return { ok: true as const, user, address, invitationStatus: "Invitación en cola" };
+  return { ok: true as const, user, address, invitationStatus: user.email ? "Invitación en cola" : "Sin correo: invitación no enviada" };
 
   });
 }
@@ -93,10 +95,12 @@ export async function updateCustomerProfile(userId: string, input: unknown) {
   if (!user) return { ok: false as const, error: "No encontramos el cliente seleccionado." };
   const parsed = customerProfileSchema.safeParse(input);
   if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Revisa los datos del cliente." };
-  if (users.some((item) => item.id !== userId && item.email.toLowerCase() === parsed.data.email.toLowerCase())) return { ok: false as const, error: "Ese correo ya está asociado a otra cuenta." };
-  if (user.email !== parsed.data.email.toLowerCase()) return { ok: false as const, error: "Por seguridad, el correo de acceso no se modifica desde este formulario." };
+  if (parsed.data.email && users.some((item) => item.id !== userId && item.email.toLowerCase() === parsed.data.email.toLowerCase())) return { ok: false as const, error: "Ese correo ya está asociado a otra cuenta." };
+  if (user.email && user.email !== parsed.data.email.toLowerCase()) return { ok: false as const, error: "El correo de acceso existente requiere un cambio verificado. Puedes añadir un correo cuando el cliente aún no tiene uno." };
+  const activatingEmail=!user.email&&!!parsed.data.email;
   Object.assign(user, parsed.data, { email: parsed.data.email.toLowerCase(), phone: parsed.data.phone, rfc: parsed.data.rfc || undefined });
   await synchronizeAccount(user);
+  if(activatingEmail)await sendAccountLink(user,"invite");
   recordCustomerActivity(user, "perfil", CUSTOMER_COPY.activity.profileUpdated);
   return { ok: true as const, user };
 
@@ -121,6 +125,7 @@ export async function resetCustomerPassword(userId: string) {
   await simulateLatency();
   const user = findCustomer(userId);
   if (!user) return { ok: false as const, error: "No encontramos el cliente seleccionado." };
+  if(!user.email)return {ok:false as const,error:"Añade un correo al cliente antes de enviar un enlace de acceso."};
   recordCustomerActivity(user, "seguridad", CUSTOMER_COPY.activity.passwordReset);
   await sendAccountLink(user, "reset");
   return { ok: true as const, user, invitationStatus: "Recuperación en cola" };
@@ -204,10 +209,10 @@ export async function upsertCustomerRecipient(userId: string, input: unknown, re
   if (!user) return { ok: false as const, error: "No encontramos el cliente seleccionado." };
   const addressParsed = newAddress === undefined ? undefined : customerAddressSchema.safeParse(newAddress);
   if (addressParsed && !addressParsed.success) return {ok:false as const,error:addressParsed.error.issues[0]?.message??"Revisa la dirección."};
-  const pendingAddress = addressParsed?.success ? {id:nextId("addr",addresses.length),userId,...addressParsed.data} : undefined;
+  const pendingAddress = addressParsed?.success && hasAddressData(addressParsed.data) ? {id:nextId("addr",addresses.length),userId,...addressParsed.data} : undefined;
   const parsed = customerRecipientSchema.safeParse(pendingAddress && input && typeof input === "object" ? {...input,addressId:pendingAddress.id} : input);
   if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Revisa el destinatario." };
-  if (!pendingAddress && !addresses.some((address) => address.id === parsed.data.addressId && address.userId === userId)) return { ok: false as const, error: "Selecciona una dirección del cliente." };
+  if (!pendingAddress && parsed.data.addressId && !addresses.some((address) => address.id === parsed.data.addressId && address.userId === userId)) return { ok: false as const, error: "Selecciona una dirección del cliente." };
   const normalized = { ...parsed.data, phone: parsed.data.phone };
   let recipient: Recipient;
   if (recipientId) {
@@ -256,7 +261,7 @@ async function createInvoiceForBoxes(userId: string, invoiceBoxes: Box[], actor:
   const issuedAt = now();
   const invoice: Invoice = {
     id: nextId("inv", invoices.length),
-    number: `AL-26-${String(invoices.length + 1).padStart(4, "0")}`,
+    number: `AL-26-${String(nextDocumentSequence("invoice")).padStart(4, "0")}`,
     userId,
     shipmentId: invoiceBoxes.find((box) => box.shipmentId)?.shipmentId ?? "",
     boxIds: invoiceBoxes.map((box) => box.id),
@@ -285,7 +290,7 @@ export async function receiveBox(input: unknown) {
   if (!customer || !customer.active) return { ok: false as const, error: "Selecciona un cliente activo." };
   const recipient=parsed.data.recipientId?recipients.find(r=>r.id===parsed.data.recipientId&&r.userId===customer.id):undefined;
   const recipientAddress=recipient?addresses.find(a=>a.id===recipient.addressId&&a.userId===customer.id):undefined;
-  if(parsed.data.recipientId&&(!recipient||!recipientAddress))return {ok:false as const,error:"Selecciona un destinatario vigente de este cliente."};
+  if(parsed.data.recipientId&&(!recipient||(recipient.addressId&&!recipientAddress)))return {ok:false as const,error:"Selecciona un destinatario vigente de este cliente."};
   const prealert = parsed.data.prealertId ? boxes.find(item => item.id === parsed.data.prealertId) : undefined;
   if (parsed.data.prealertId && (!prealert || prealert.userId !== customer.id || prealert.status !== "pre-alertada")) return { ok: false as const, error: "La prealerta ya fue recibida o no pertenece a este cliente." };
   const [rates, flow, catalog] = await Promise.all([configService.getRateTable(), configService.getFlowConfig(), configService.getCatalog()]);
@@ -306,14 +311,14 @@ export async function receiveBox(input: unknown) {
   const createdAt = now();
   const id = prealert?.id ?? nextId("box", boxes.length);
   const receptionGroup=currentReceptionGroup();
-  const code = receptionGroup ? `${receptionGroup.code}${receptionGroup.total>1?`-${String(receptionGroup.index).padStart(2,"0")}`:""}` as const : prealert?.code ?? `BX-26${String(boxes.length + 1).padStart(4, "0")}` as const;
+  const code = receptionGroup ? `${receptionGroup.code}${receptionGroup.total>1?`-${String(receptionGroup.index).padStart(2,"0")}`:""}` as const : prealert?.code ?? `BX-26${String(nextDocumentSequence("box")).padStart(4, "0")}` as const;
   if(boxes.some(b=>b.code===code&&b.id!==id))return {ok:false as const,error:"El código de recepción ya existe. Actualiza e intenta nuevamente."};
   const rejected = Boolean(parsed.data.reject);
   const note = custom ? (mode==="manual" ? `Carga personalizada. Precio acordado USD ${parsed.data.customPriceUsd}. Medidas y peso reales registrados.` : mode==="volumen"?"Carga fuera de categoría estándar. Cobro por volumen.":"Cobro por peso real. Medidas opcionales.") : rejected ? parsed.data.rejectionReason : parsed.data.overrideCategory ? parsed.data.overrideReason : suggestion.reason ? `Categoría ajustada por ${suggestion.reason.replaceAll("-", " ")}.` : "Medidas y peso validados.";
   const billing = rejected ? undefined : calculateBilling(mode, dimensions, parsed.data.weightLb, flow, mode==="manual" ? parsed.data.customPriceUsd : rates.find(rate=>rate.id===categoryId)?.priceUsd);
   const box: Box = {
     receptionGroup,
-    recipientId:recipient?.id,recipientSnapshot:recipient&&recipientAddress?{name:recipient.name,phone:recipient.phone,address:{...recipientAddress}}:undefined,
+    recipientId:recipient?.id,recipientSnapshot:recipient?{name:recipient.name,phone:recipient.phone,address:recipientAddress?{...recipientAddress}:{id:"",userId:customer.id,label:"Sin dirección",street:"",exteriorNumber:"",neighborhood:"",postalCode:"",municipality:"",state:""}}:undefined,
     billing, originWarehouseId:origin?.id,originWarehouseName:origin?.name,
     id, code, userId: customer.id, categoryId, categoryName: custom ? (mode==="peso-real"?"Paquete por peso":mode==="volumen"?"Paquete por volumen":CUSTOM_CARGO_NAME) : rates.find(rate=>rate.id===categoryId)?.name ?? categoryId, customPriceUsd:billing?.amountUsd, status: rejected ? "rechazada" : "en-bodega", dimensions, weightLb: parsed.data.weightLb,
     excessFeeUsd: mode==="fijo" && !custom && !rejected && flow.excessPolicy === "recargo" && prealert && !suggestCategory(dimensions, parsed.data.weightLb, catalog.filter(rate => rate.id === prealert.categoryId)).category ? flow.excessFeeUsd : 0,

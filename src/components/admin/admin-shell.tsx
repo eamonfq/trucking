@@ -10,6 +10,7 @@ import { canAdminPath, type AdminPrincipal } from "@/lib/auth/admin-permissions"
 import {AdminAccessProvider} from "./admin-access";
 
 const navigation = [
+  { label: "Eliminar pruebas", href: "/admin/eliminar", icon: Settings },
   { label: "Usuarios y permisos", href: "/admin/usuarios", icon: UsersRound },
   { label: "Resumen", href: "/admin", icon: Gauge },
   { label: "Pendientes", href: "/admin/pendientes", icon: ListTodo },

@@ -1,6 +1,9 @@
 import { beforeAll, afterAll, describe, expect, it, vi } from "vitest";
+
 import {saveAdministrativeStaff,getAdministrativeStaff,inviteAdministrativeStaff} from "@/lib/auth/staff-actions";
 import {requireAdminUser} from "@/lib/auth/actions";
+import {getDeletionDirectory,previewDeletion,deleteTestRecord} from "@/lib/auth/deletion-actions";
+import {createCustomerAsAdmin,updateCustomerProfile} from "@/lib/auth/admin-actions";
 import {GET as previewEmail} from "@/app/api/emails/preview/route";
 import {GET as invoicePdf} from "@/app/api/facturas/[id]/pdf/route";
 import mysql from "mysql2/promise";
@@ -12,7 +15,7 @@ const r2Get=vi.hoisted(()=>vi.fn(async(key:string)=>{const bytes=r2Files.get(key
 const r2Delete=vi.hoisted(()=>vi.fn(async(key:string)=>{r2Files.delete(key);}));
 vi.mock('@/lib/files/r2',()=>({putPhoto:r2Put,getPhoto:r2Get,deletePhoto:r2Delete}));
 import { readFile } from "node:fs/promises";
-import { randomUUID, createHmac } from "node:crypto";
+import { randomUUID, createHmac, createHash } from "node:crypto";
 import { recordRevision } from "@/lib/db/revision";
 import { editOperation } from "@/lib/auth/edit-actions";
 import { sendProviderTest } from "@/lib/auth/email-actions";
@@ -95,6 +98,7 @@ beforeAll(async () => {
   await root.query(await readFile(new URL("../migrations/006-web-push.sql",import.meta.url),"utf8"));
   await root.query(await readFile(new URL("../migrations/003-warehouse-operators.sql",import.meta.url),"utf8"));
   await root.query(await readFile(new URL("../migrations/004-warehouse-kinds.sql",import.meta.url),"utf8"));
+  await root.query(await readFile(new URL("../migrations/007-optional-customer-contact.sql",import.meta.url),"utf8"));
   url.pathname=`/${database}`; process.env.DATABASE_URL=url.toString();
   process.env.AUTH_SECRET="integration-only-secret-with-at-least-32-characters";
   process.env.EMAIL_DELIVERY="preview";
@@ -1169,7 +1173,7 @@ describe.sequential('Web Push with real MySQL and mocked delivery',()=>{
    expect((await subscribePush({...sub,endpoint:'http://127.0.0.1/private'})).ok).toBe(false);
    expect((await subscribePush(sub)).ok).toBe(true);expect((await pushSettings(sub.endpoint)).active).toBe(true);
    const account=await accountById(operationClient);const origin=process.env.NEXT_PUBLIC_SITE_URL??'http://localhost:3100';
-   const mail={to:account!.email,subject:'Recepción de 3 unidades',heading:'Novedades',body:'Datos privados no deben salir en el push',actionUrl:new URL('/cliente/cajas',origin).href};
+   const mail={to:account!.email!,subject:'Recepción de 3 unidades',heading:'Novedades',body:'Datos privados no deben salir en el push',actionUrl:new URL('/cliente/cajas',origin).href};
    await withStore(()=>sendEmail(mail),true);
    await withStore(()=>sendEmail({...mail,actionUrl:new URL('/restablecer?token=secret',origin).href}),true);
    await deliverPendingPush();await deliverPendingPush();expect(pushSend).toHaveBeenCalledTimes(1);expect(pushSend.mock.calls[0]).not.toContain('Datos privados');
@@ -1312,5 +1316,86 @@ describe.sequential("Administrative staff permissions in MySQL",()=>{
   expect((await saveAdministrativeStaff({...staff,fullAccess:false,permissions:["recepcion"]})).ok).toBe(false);
   expect((await saveAdministrativeStaff({...staff,active:false})).ok).toBe(false);
   expect((await requireAdminUser()).id).toBe(current.id);
+ });
+});
+describe.sequential("Optional customer contact and full-admin test cleanup",()=>{
+ let customerId="",boxId="",originalCode="";
+ const minimal={firstName:"Sin correo",paternalLastName:"Prueba",phone:"5512345678"};
+ it("creates multiple customers without email or address and skips email/token generation",async()=>{
+  cookieJar.set("ayl_session",{value:adminSession});
+  for(let n=0;n<2;n++){
+   const result=await createCustomerAtReception({...minimal,recipients:[{name:"Recibe Prueba",phone:"5512345678"}]});
+   expect(result.ok).toBe(true);if(!result.ok)throw new Error(result.error);
+   customerId=result.user.id;expect(result.user.email).toBe("");expect(result.address.id).toBe("");
+   expect((await accountById(customerId))?.email).toBeNull();
+   expect(await withStore(async()=>addresses.filter(a=>a.userId===customerId))).toEqual([]);
+   const [tokens]=await root.query<mysql.RowDataPacket[]>("SELECT * FROM auth_tokens WHERE user_id=?",[customerId]);expect(tokens).toHaveLength(0);
+  }
+  expect((await sendEmail({to:"",subject:"Ignored",heading:"Ignored",body:"Ignored"})).status).toBe("skipped-no-email");
+  expect((await createCustomerAsAdmin({...minimal,email:"invalid"})).ok).toBe(false);
+  expect((await createCustomerAsAdmin({...minimal,postalCode:"abc"})).ok).toBe(false);
+  const partial=await createCustomerAsAdmin({...minimal,state:"Jalisco"});expect(partial.ok).toBe(true);
+  if(partial.ok)expect(partial.address.state).toBe("Jalisco");
+ });
+ it("receives a group for a recipient without address and previews all its units",async()=>{
+  const contacts=await getReceptionContacts(customerId);expect(contacts.addresses).toHaveLength(0);expect(contacts.recipients).toHaveLength(1);
+  expect((await upsertCustomerRecipient(customerId,{name:"Otro contacto",phone:"5512345678",addressId:""})).ok).toBe(true);
+  expect((await upsertCustomerRecipient(customerId,{name:"Contacto ajeno",phone:"5512345678",addressId:"foreign"})).ok).toBe(false);
+  const origin=await withStore(async()=>warehouses.find(w=>w.active&&(w.kind==="origen"||w.kind==="ambos"))!);
+  const item={customer:customerId,recipientId:contacts.recipients[0].id,originWarehouseId:origin.id,billingMode:"peso-real",weightLb:10,invoiceNow:true};
+  const received=await receivePackageGroup([item,item],new FormData(),{method:"efectivo",warehouseId:origin.id});
+  expect(received.ok).toBe(true);if(!received.ok)throw new Error(received.error);
+  boxId=received.results[0].box.id;originalCode=received.results[0].box.receptionGroup!.code!;
+  expect(received.results[0].box.recipientSnapshot?.name).toBe("Recibe Prueba");
+  const preview=await previewDeletion({kind:"order",id:boxId});
+  expect(preview.ok).toBe(true);if(preview.ok){expect(preview.counts.packages).toBe(2);expect(preview.paidInvoices).toBeGreaterThan(0);}
+  expect((await previewDeletion({kind:"user",id:customerId})).ok).toBe(false);
+ });
+ it("requires full admin and rejects self deletion and stale previews",async()=>{
+  const me=await requireAdminUser();expect((await previewDeletion({kind:"user",id:me.id})).ok).toBe(false);
+  const preview=await previewDeletion({kind:"order",id:boxId});if(!preview.ok)throw new Error(preview.error);
+  await withStore(async()=>{boxes.find(b=>b.id===boxId)!.weightLb=11;},true);
+  expect((await deleteTestRecord({kind:"order",id:boxId,revision:preview.revision,confirmation:"ELIMINAR",testData:true,reason:"Pruebas automatizadas"})).ok).toBe(false);
+  const staff=(await getAdministrativeStaff()).find(u=>u.email==="rbac-reception@example.invalid")!;
+  cookieJar.set("ayl_session",{value:await createSessionToken(staff.id,"admin")});
+  await expect(getDeletionDirectory()).rejects.toThrow("REDIRECT:");
+  await expect(deleteTestRecord({})).rejects.toThrow("REDIRECT:");
+  cookieJar.set("ayl_session",{value:adminSession});
+ });
+ it("blocks Clover records, removes a reception atomically and never reuses its code",async()=>{
+  const fileId=randomUUID(),bytes=Buffer.from("test photo");
+  await root.execute("INSERT INTO private_files(id,owner_id,entity_type,entity_id,original_name,mime_type,byte_size,sha256,content) VALUES (?,?,'box',?,'test.jpg','image/jpeg',?,?,?)",[fileId,customerId,boxId,bytes.length,createHash('sha256').update(bytes).digest('hex'),bytes]);
+  const truckId=await withStore(async()=>{const truck=trucks[0];truck.boxIds.push(boxId);return truck.id;},true);
+  expect((await downloadPrivateFile(new Request('http://localhost/api/files/'+fileId),{params:Promise.resolve({id:fileId})})).status).toBe(200);
+  const invoiceId=await withStore(async()=>invoices.find(i=>i.boxIds?.includes(boxId))!.id);
+  await withStore(async()=>{invoices.find(i=>i.id===invoiceId)!.collectionMethod="clover";},true);
+  expect((await previewDeletion({kind:"order",id:boxId})).ok).toBe(false);
+  await withStore(async()=>{invoices.find(i=>i.id===invoiceId)!.collectionMethod="efectivo";},true);
+  const preview=await previewDeletion({kind:"order",id:boxId});if(!preview.ok)throw new Error(preview.error);
+  const result=await deleteTestRecord({kind:"order",id:boxId,revision:preview.revision,confirmation:"ELIMINAR",testData:true,reason:"Pruebas automatizadas"});
+  expect(result.ok).toBe(true);
+  expect((await downloadPrivateFile(new Request('http://localhost/api/files/'+fileId),{params:Promise.resolve({id:fileId})})).status).toBe(404);
+  expect(await withStore(async()=>trucks.find(t=>t.id===truckId)!.boxIds.includes(boxId))).toBe(false);
+  expect(await withStore(async()=>boxes.some(b=>b.userId===customerId)||invoices.some(i=>i.userId===customerId))).toBe(false);
+  const origin=await withStore(async()=>warehouses.find(w=>w.active&&(w.kind==="origen"||w.kind==="ambos"))!);
+  const next=await receivePackageGroup([{customer:customerId,originWarehouseId:origin.id,billingMode:"peso-real",weightLb:10}],new FormData());
+  expect(next.ok).toBe(true);if(!next.ok)throw new Error(next.error);
+  expect(next.results[0].box.receptionGroup!.code).not.toBe(originalCode);
+  const nextPreview=await previewDeletion({kind:"order",id:next.results[0].box.id});if(!nextPreview.ok)throw new Error(nextPreview.error);
+  expect((await deleteTestRecord({kind:"order",id:next.results[0].box.id,revision:nextPreview.revision,confirmation:"ELIMINAR",testData:true,reason:"Pruebas automatizadas"})).ok).toBe(true);
+ });
+ it("adds email later, invites the customer, then disables the deleted account and frees email",async()=>{
+  const email="optional-added@example.invalid";
+  expect((await updateCustomerProfile(customerId,{...minimal,email})).ok).toBe(true);
+  expect((await accountById(customerId))?.verified_at).toBeNull();
+  const [tokens]=await root.query<mysql.RowDataPacket[]>("SELECT * FROM auth_tokens WHERE user_id=? AND purpose='invite'",[customerId]);expect(tokens).toHaveLength(1);
+  const preview=await previewDeletion({kind:"user",id:customerId});if(!preview.ok)throw new Error(preview.error);
+  expect((await deleteTestRecord({kind:"user",id:customerId,revision:preview.revision,confirmation:"ELIMINAR",testData:true,reason:"Pruebas automatizadas"})).ok).toBe(true);
+  expect((await accountById(customerId))?.active).toBe(0);
+  expect(await withStore(async()=>users.some(u=>u.id===customerId))).toBe(false);
+  expect(await findAccount(email)).toBeNull();
+  const [messages]=await root.query<mysql.RowDataPacket[]>("SELECT payload FROM email_outbox WHERE status IN ('queued','retry')");
+  expect(messages.map(row=>decryptEmail(typeof row.payload==='string'?JSON.parse(row.payload):row.payload).to)).not.toContain(email);
+  expect((await createCustomerAsAdmin({...minimal,email})).ok).toBe(true);
  });
 });

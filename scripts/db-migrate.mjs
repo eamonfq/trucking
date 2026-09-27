@@ -26,5 +26,7 @@ try {
   const [r2Photos] = await connection.query("SELECT version FROM schema_migrations WHERE version=5");
   if (!r2Photos.length) await connection.query(await readFile(new URL('../migrations/005-r2-photos.sql', import.meta.url),'utf8'));
   await connection.query(await readFile(new URL('../migrations/006-web-push.sql', import.meta.url),'utf8'));
-  console.log(`Migraciones 001–006 aplicadas en ${database}. No se importaron usuarios ni operaciones de demo.`);
+  const [optionalContact] = await connection.query("SELECT version FROM schema_migrations WHERE version=7");
+  if(!optionalContact.length)await connection.query(await readFile(new URL('../migrations/007-optional-customer-contact.sql', import.meta.url),'utf8'));
+  console.log(`Migraciones 001–007 aplicadas en ${database}. No se importaron usuarios ni operaciones de demo.`);
 } finally { await connection.end(); }

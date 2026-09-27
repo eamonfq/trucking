@@ -117,6 +117,7 @@ it('creates recipient and new address from an empty client without submitting re
  await act(async()=>{});expect(node.textContent).toContain('todavía no tiene destinatarios');
  act(()=>node.querySelector('button')!.click());
  await fill('recipientName',person.name);await fill('recipientPhone',person.phone);
+ await act(async()=>{const select=document.querySelector<HTMLSelectElement>('[role="dialog"] select')!;select.value='new';select.dispatchEvent(new Event('change',{bubbles:true}));});
  for(const key of ['label','street','exteriorNumber','neighborhood','postalCode','municipality','state'] as const)await fill('address-'+key,addr[key]);
  await act(async()=>{document.querySelector('[role="dialog"] form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));});
  expect(outer).not.toHaveBeenCalled();expect(upsertCustomerRecipient).toHaveBeenCalledWith('u',expect.objectContaining({name:person.name}),undefined,expect.objectContaining({street:'Reforma',postalCode:'49540'}));expect(onChange).toHaveBeenCalledWith('r');expect(node.textContent).toContain('guardado y seleccionado');expect(node.querySelectorAll('[data-testid="reception-recipient"]')).toHaveLength(1);

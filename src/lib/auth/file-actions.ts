@@ -1,4 +1,5 @@
 "use server";
+import {nextDocumentSequence} from "@/lib/db/document-sequence";
 import { appendPayment, paymentLocation } from "@/lib/services/payment-records";
 import { runMutation } from "@/lib/db/mutation";
 import { requireAdminUser } from "@/lib/auth/actions";
@@ -41,7 +42,7 @@ export async function receivePackageGroup(input:unknown,data:FormData,paymentInp
     if(payment&&!payment.success)return {ok:false as const,error:"Revisa el método y el monto del pago."};
     const results=[];
     const groupId=crypto.randomUUID();
-    const groupCode=boxes.find(b=>b.id===items[0].prealertId)?.code??`BX-26${String(boxes.length+1).padStart(4,"0")}` as const;
+    const groupCode=boxes.find(b=>b.id===items[0].prealertId)?.code??`BX-26${String(nextDocumentSequence("box")).padStart(4,"0")}` as const;
     for(const [index,item] of items.entries()){
       const result=await withReceptionPiece({id:groupId,code:groupCode,index:index+1,total:items.length},()=>receiveBoxWithPhoto({...item,invoiceNow:!!payment||item.invoiceNow},data));
       if(!result.ok)return result;

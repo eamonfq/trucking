@@ -3,6 +3,7 @@ import type { User } from "@/lib/types";
 import { issueToken } from "./repository";
 import { sendEmail, siteUrl } from "@/lib/services/email";
 export async function sendAccountLink(user: User, purpose: "verify" | "reset" | "invite") {
+  if(!user.email)return {status:"skipped-no-email" as const,id:""};
   const token = await issueToken(user.id, purpose);
   const copy = {
     verify: { subject: "Confirma tu correo · A&L", heading: "Un paso más. Todo listo para comenzar.", body: `Hola ${user.firstName}. Reservamos tu casillero ${user.lockerCode}. Confirma tu correo para activar el acceso. Este enlace vence en 24 horas.`, actionLabel: "Confirmar mi correo", path: "/verificar" },
