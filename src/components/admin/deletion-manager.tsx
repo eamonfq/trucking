@@ -9,9 +9,9 @@ import {Dialog} from "@/components/ui/dialog";
 type Data=Awaited<ReturnType<typeof getDeletionDirectory>>;
 type Row=Data["orders"][number]|Data["people"][number];
 type Preview=Awaited<ReturnType<typeof previewDeletion>>;
-export function DeletionManager({data}:{data:Data}){
- const router=useRouter(),[tab,setTab]=useState<"orders"|"people">("orders"),[query,setQuery]=useState(""),[page,setPage]=useState(0),[selected,setSelected]=useState<Row|null>(null),[preview,setPreview]=useState<Preview|null>(null),[confirmation,setConfirmation]=useState(""),[testData,setTestData]=useState(false),[reason,setReason]=useState(""),[message,setMessage]=useState(""),[pending,start]=useTransition();
- const rows=data[tab].filter(r=>(r.reference+" "+r.name+" "+r.detail).toLowerCase().includes(query.trim().toLowerCase())),pages=Math.max(1,Math.ceil(rows.length/10)),current=Math.min(page,pages-1);
+export function DeletionManager({data,initialUserId}:{data:Data;initialUserId?:string}){
+ const router=useRouter(),[tab,setTab]=useState<"orders"|"people">(initialUserId?"people":"orders"),[query,setQuery]=useState(initialUserId??""),[page,setPage]=useState(0),[selected,setSelected]=useState<Row|null>(null),[preview,setPreview]=useState<Preview|null>(null),[confirmation,setConfirmation]=useState(""),[testData,setTestData]=useState(false),[reason,setReason]=useState(""),[message,setMessage]=useState(""),[pending,start]=useTransition();
+ const rows=data[tab].filter(r=>(r.id+" "+r.reference+" "+r.name+" "+r.detail).toLowerCase().includes(query.trim().toLowerCase())),pages=Math.max(1,Math.ceil(rows.length/10)),current=Math.min(page,pages-1);
  function choose(row:Row){setSelected(row);setPreview(null);setMessage("");setConfirmation("");setReason("");setTestData(false);start(async()=>{try{setPreview(await previewDeletion({kind:row.kind,id:row.id}));}catch{setPreview({ok:false,error:"No se pudo consultar el alcance. Revisa tu conexión y acceso."});}});}
  function remove(){if(!selected||!preview?.ok)return;start(async()=>{try{const result=await deleteTestRecord({kind:selected.kind,id:selected.id,revision:preview.revision,confirmation,testData,reason});if(!result.ok){setMessage(result.error);return;}setSelected(null);setMessage(result.message);router.refresh();}catch{setMessage("No se confirmó la eliminación. Actualiza la lista antes de volver a intentarlo.");}});}
  return <section className="mt-6 space-y-5">

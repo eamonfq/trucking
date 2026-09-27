@@ -14,6 +14,11 @@ function input(label:string,value:string){const field=Array.from(document.queryS
 afterEach(()=>{act(()=>root?.unmount());node?.remove();vi.clearAllMocks();});
 const staff=Array.from({length:24},(_,i)=>({id:String(i),firstName:`Persona ${i}`,paternalLastName:"Equipo",email:`equipo${i}@example.invalid`,phone:"",active:true,fullAccess:false,permissions:["recepcion"] as ("recepcion")[]}));
 describe("Staff management UX",()=>{
+ it("offers contextual deletion for other staff but never for self",()=>{
+  render(<AdminAccessProvider user={{role:"admin"}}><StaffManager staff={staff} actorId="0"/></AdminAccessProvider>);
+  expect(node.querySelector('a[href="/admin/eliminar?usuario=0"]')).toBeNull();
+  expect(node.querySelector('a[href="/admin/eliminar?usuario=1"]')?.textContent).toBe("Eliminar");
+ });
  it("starts with a paginated searchable directory, not an open form",()=>{
   render(<StaffManager staff={staff} actorId="owner"/>);
   expect(document.querySelector('[role="dialog"]')).toBeNull();

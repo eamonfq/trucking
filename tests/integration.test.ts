@@ -1319,6 +1319,21 @@ describe.sequential("Administrative staff permissions in MySQL",()=>{
  });
 });
 describe.sequential("Optional customer contact and full-admin test cleanup",()=>{
+ it("lets full admin delete warehouse operators and administrative users and revokes their sessions",async()=>{
+  cookieJar.set("ayl_session",{value:adminSession});
+  const warehouse=await withStore(async()=>warehouses.find(w=>w.active)!);
+  expect((await saveWarehouseOperator({firstName:"Operador",paternalLastName:"Eliminar",email:"delete-operator@example.invalid",phone:"",active:true,grants:[{warehouseId:warehouse.id,receive:true,viewContacts:true}]})).ok).toBe(true);
+  for(const fullAccess of [false,true])expect((await saveAdministrativeStaff({firstName:"Admin",paternalLastName:"Eliminar",email:`delete-admin-${fullAccess}@example.invalid`,phone:"",active:true,fullAccess,permissions:["recepcion"]})).ok).toBe(true);
+  for(const email of ["delete-operator@example.invalid","delete-admin-false@example.invalid","delete-admin-true@example.invalid"]){
+   const user=await withStore(async()=>users.find(u=>u.email===email)!);
+   const token=await createSessionToken(user.id,user.role);
+   expect((await getDeletionDirectory()).people.some(p=>p.id===user.id)).toBe(true);
+   const preview=await previewDeletion({kind:"user",id:user.id});expect(preview.ok).toBe(true);if(!preview.ok)throw new Error(preview.error);
+   const result=await deleteTestRecord({kind:"user",id:user.id,revision:preview.revision,testData:true,confirmation:"ELIMINAR",reason:"Usuario de pruebas"});expect(result.ok).toBe(true);
+   expect(await verifySessionToken(token)).toBeNull();expect((await accountById(user.id))?.active).toBe(0);
+   expect((await getDeletionDirectory()).people.some(p=>p.id===user.id)).toBe(false);
+  }
+ });
  let customerId="",boxId="",originalCode="";
  const minimal={firstName:"Sin correo",paternalLastName:"Prueba",phone:"5512345678"};
  it("creates multiple customers without email or address and skips email/token generation",async()=>{
