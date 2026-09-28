@@ -11,12 +11,12 @@ vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT",true);
 const mounts:Array<{root:ReturnType<typeof createRoot>;node:HTMLElement}>=[];
 function mount(element:React.ReactNode){const node=document.createElement("div");document.body.append(node);const root=createRoot(node);mounts.push({root,node});act(()=>root.render(element));return node;}
 afterEach(()=>{for(const {root,node} of mounts.splice(0)){act(()=>root.unmount());node.remove();}vi.mocked(cloverAvailability).mockReset().mockResolvedValue({enabled:false,issues:[]});});
-it("keeps all six methods visible including unconfigured Clover without requiring an external cash reference",async()=>{
+it("keeps all seven methods visible including unconfigured Clover without requiring an external cash reference",async()=>{
  const change=vi.fn();
  const node=mount(React.createElement(PaymentCapture,{value:{method:"destino",amount:"",reference:"REC-1"},onChange:change,total:45}));
  expect(node.querySelector('input[type="file"]')).toBeNull();
  expect(node.querySelector('[name="paymentReference"]')).toBeNull();
- expect(node.querySelectorAll('input[type="radio"]')).toHaveLength(6);
+ expect(node.querySelectorAll('input[type="radio"]')).toHaveLength(7);
  expect(node.querySelector<HTMLInputElement>('input[value="clover"]')?.disabled).toBe(true);
  act(()=>node.querySelector<HTMLInputElement>('input[value="tarjeta"]')!.click());
  expect(change).toHaveBeenCalledWith({method:"tarjeta",amount:"",reference:""});

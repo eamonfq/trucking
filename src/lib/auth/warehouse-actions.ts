@@ -119,7 +119,7 @@ export async function getOriginInventory() {
     const allowed=warehouses.filter(w=>w.active&&warehouseSupports(w,"origen")&&(actor.role==="admin"||actor.warehouseGrants?.some(g=>g.warehouseId===w.id&&(g.receive||g.viewContacts))));
     return allowed.map(w=>({id:w.id,name:w.name,boxes:boxes.filter(b=>b.originWarehouseId===w.id).map(b=>{
       const user=users.find(u=>u.id===b.userId);
-      return {id:b.id,code:b.code,status:b.status,dimensions:b.dimensions,weightLb:b.weightLb,customer:user&&(actor.role==="admin"||can(actor.warehouseGrants,w.id,"viewContacts"))?{name:`${user.firstName} ${user.paternalLastName}`,phone:user.phone,email:user.email}:null};
+      return {id:b.id,code:b.code,status:b.status,dimensions:b.dimensions,weightLb:b.weightLb,weightProrated:!!b.billing?.groupWeight,customer:user&&(actor.role==="admin"||can(actor.warehouseGrants,w.id,"viewContacts"))?{name:`${user.firstName} ${user.paternalLastName}`,phone:user.phone,email:user.email}:null};
     })}));
   });
 }
@@ -131,7 +131,7 @@ export async function getDestinationDesk() {
     const visibleBoxes=boxes.filter(box=>box.destinationWarehouseId&&ids.has(box.destinationWarehouseId));
     return {warehouses:allowed.map(w=>({...w,canReceive:actor.role==="admin"||can(actor.warehouseGrants,w.id,"receive")})),
       trucks:trucks.filter(t=>t.stops?.some(s=>ids.has(s.warehouseId))).map(t=>({id:t.id,code:t.code,plate:t.plate,status:t.status,stops:t.stops!.filter(s=>ids.has(s.warehouseId))})),
-      boxes:visibleBoxes.map(box=>{const user=users.find(u=>u.id===box.userId);return {recipient:actor.role==="admin"||can(actor.warehouseGrants,box.destinationWarehouseId!,"viewContacts")?box.recipientSnapshot?{name:box.recipientSnapshot.name,phone:box.recipientSnapshot.phone}:null:null,id:box.id,code:box.code,truckId:box.truckId,warehouseId:box.destinationWarehouseId!,status:box.status,dimensions:box.dimensions,weightLb:box.weightLb,originTracking:box.originTracking,receivedAt:box.unloadScan?.at,customer:actor.role==="admin"||can(actor.warehouseGrants,box.destinationWarehouseId!,"viewContacts")?user?{name:`${user.firstName} ${user.paternalLastName}`,email:user.email,phone:user.phone,lockerCode:user.lockerCode}:null:null};})};
+      boxes:visibleBoxes.map(box=>{const user=users.find(u=>u.id===box.userId);return {recipient:actor.role==="admin"||can(actor.warehouseGrants,box.destinationWarehouseId!,"viewContacts")?box.recipientSnapshot?{name:box.recipientSnapshot.name,phone:box.recipientSnapshot.phone}:null:null,id:box.id,code:box.code,truckId:box.truckId,warehouseId:box.destinationWarehouseId!,status:box.status,dimensions:box.dimensions,weightLb:box.weightLb,weightProrated:!!box.billing?.groupWeight,originTracking:box.originTracking,receivedAt:box.unloadScan?.at,customer:actor.role==="admin"||can(actor.warehouseGrants,box.destinationWarehouseId!,"viewContacts")?user?{name:`${user.firstName} ${user.paternalLastName}`,email:user.email,phone:user.phone,lockerCode:user.lockerCode}:null:null};})};
   });
 }
 

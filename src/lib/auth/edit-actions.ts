@@ -50,9 +50,10 @@ export async function editOperation(input: unknown) {
           const rates = await configService.getRateTable();
           if(!(data.categoryId===CUSTOM_CARGO_ID && box.categoryId===CUSTOM_CARGO_ID && box.status!=="pre-alertada") && !rates.some(rate=>rate.id===data.categoryId)) throw new Error("Selecciona una categoría activa.");
           const dimensions = {length:data.length,width:data.width,height:data.height};
-          if(!["peso-real","manual"].includes(box.billing?.mode??"") && !Object.values(dimensions).every(n=>n>0)) throw new Error("Completa las tres medidas.");
-          if (box.status !== "pre-alertada" && !["peso-real","volumen","manual"].includes(box.billing?.mode??"") && data.categoryId!==CUSTOM_CARGO_ID && (data.weightLb<=0 || !suggestCategory(dimensions,data.weightLb,rates.filter(x=>x.id===data.categoryId)).category)) throw new Error("La categoría no admite las medidas/peso indicados.");
-          if(box.billing){
+          if(!["peso-real","peso-personalizado","manual"].includes(box.billing?.mode??"") && !Object.values(dimensions).every(n=>n>0)) throw new Error("Completa las tres medidas.");
+          if (box.status !== "pre-alertada" && !["peso-real","peso-personalizado","volumen","manual"].includes(box.billing?.mode??"") && data.categoryId!==CUSTOM_CARGO_ID && (data.weightLb<=0 || !suggestCategory(dimensions,data.weightLb,rates.filter(x=>x.id===data.categoryId)).category)) throw new Error("La categoría no admite las medidas/peso indicados.");
+          if(box.billing?.groupWeight&&(data.weightLb!==box.weightLb||Object.keys(dimensions).some(k=>dimensions[k as keyof typeof dimensions]!==box.dimensions[k as keyof typeof dimensions])))throw new Error("Esta pieza usa peso conjunto. No se puede cambiar su peso aisladamente; conserva el total de la recepción.");
+          if(box.billing&&!box.billing.groupWeight){
             const billing=calculateBilling(box.billing.mode,dimensions,data.weightLb,box.billing,box.billing.mode==="manual"?box.billing.amountUsd:rates.find(rate=>rate.id===data.categoryId)?.priceUsd,box.billing.volumePricing??"dimensional-lb");
             box.billing=billing;box.customPriceUsd=billing.amountUsd;
           }

@@ -315,7 +315,8 @@ export async function receiveBox(input: unknown) {
   if(boxes.some(b=>b.code===code&&b.id!==id))return {ok:false as const,error:"El código de recepción ya existe. Actualiza e intenta nuevamente."};
   const rejected = Boolean(parsed.data.reject);
   const note = custom ? (mode==="manual" ? `Carga personalizada. Precio acordado USD ${parsed.data.customPriceUsd}. Medidas y peso reales registrados.` : mode==="volumen"?"Carga fuera de categoría estándar. Cobro por volumen.":"Cobro por peso real. Medidas opcionales.") : rejected ? parsed.data.rejectionReason : parsed.data.overrideCategory ? parsed.data.overrideReason : suggestion.reason ? `Categoría ajustada por ${suggestion.reason.replaceAll("-", " ")}.` : "Medidas y peso validados.";
-  const billing = rejected ? undefined : calculateBilling(mode, dimensions, parsed.data.weightLb, flow, mode==="manual" ? parsed.data.customPriceUsd : rates.find(rate=>rate.id===categoryId)?.priceUsd);
+  const billing = rejected ? undefined : calculateBilling(mode, dimensions, parsed.data.weightLb, {...flow,...(mode==="peso-personalizado"?{pricePerLbUsd:parsed.data.customRatePerLbUsd!}:{})}, mode==="manual" ? parsed.data.customPriceUsd : rates.find(rate=>rate.id===categoryId)?.priceUsd);
+  if(billing&&receptionGroup?.groupWeight){billing.groupWeight=receptionGroup.groupWeight;billing.amountUsd=receptionGroup.allocatedAmountUsd!;billing.billableWeightLb=0;}
   const box: Box = {
     receptionGroup,
     recipientId:recipient?.id,recipientSnapshot:recipient?{name:recipient.name,phone:recipient.phone,address:recipientAddress?{...recipientAddress}:{id:"",userId:customer.id,label:"Sin dirección",street:"",exteriorNumber:"",neighborhood:"",postalCode:"",municipality:"",state:""}}:undefined,

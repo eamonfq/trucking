@@ -79,7 +79,7 @@ export type Recipient = {
 export type TimelineEvent = TransitionEvent;
 
 export type Box = {
-  receptionGroup?: { id:string; code?:string; index:number; total:number };
+  receptionGroup?: { id:string; code?:string; index:number; total:number; groupWeight?:{totalWeightLb:number;totalAmountUsd:number;pieces:number} };
   recipientId?: string;
   recipientSnapshot?: { name:string; phone:string; address:Address };
   originWarehouseId?:string;
@@ -166,8 +166,8 @@ export type Invoice = {
   receptionActorId?: string;
   cloverPaymentId?: string;
   payments?: PaymentRecord[];
-  collectionReferences?: Array<{reference:string;method:"efectivo"|"destino"|"tarjeta"|"transferencia"|"deposito"|"clover";at:string}>;
-  collectionMethod?: "efectivo" | "destino" | "tarjeta" | "transferencia" | "deposito" | "clover";
+  collectionReferences?: Array<{reference:string;method:"efectivo"|"destino"|"tarjeta"|"transferencia"|"deposito"|"zelle"|"mixto"|"clover";at:string}>;
+  collectionMethod?: "efectivo" | "destino" | "tarjeta" | "transferencia" | "deposito" | "zelle" | "mixto" | "clover";
   excessFeeUsd?: number;
   id: string;
   number: string;

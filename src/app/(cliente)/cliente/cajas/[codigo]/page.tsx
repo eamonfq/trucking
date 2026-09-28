@@ -30,7 +30,7 @@ export default async function BoxDetail({ params }: { params: Promise<{ codigo: 
           <p className="mt-1 font-display text-xl font-bold text-orange-600">{formatUsd(box.customPriceUsd ?? category?.priceUsd ?? 0)}</p>{box.billing&&<p className="mt-2 text-sm text-navy-500">{billingDescription(box.billing)}</p>}
           <dl className="mt-5 grid grid-cols-2 gap-4 border-t border-stone-200 pt-5 text-sm">
             <div><dt className="text-navy-400">Medidas</dt><dd className="mt-1 font-semibold">{formatDimensions(box.dimensions)}</dd></div>
-            <div><dt className="text-navy-400">Peso</dt><dd className="mt-1 font-semibold">{box.weightLb ? `${box.weightLb} lb` : "Se registra al recibir"}</dd></div>
+            <div><dt className="text-navy-400">{box.billing?.groupWeight?"Peso prorrateado (no individual)":"Peso"}</dt><dd className="mt-1 font-semibold">{box.weightLb ? `${box.weightLb} lb` : "Se registra al recibir"}{box.billing?.groupWeight&&<span className="block text-xs">Grupo: {box.billing.groupWeight.totalWeightLb} lb / {box.billing.groupWeight.pieces} piezas</span>}</dd></div>
             <div><dt className="text-navy-400">Tracking de origen</dt><dd className="mt-1 font-semibold">{box.originTracking ?? "No aplica"}</dd></div>
             <div><dt className="text-navy-400">Recepción</dt><dd className="mt-1 font-semibold">{box.receivedAt ? formatDate(box.receivedAt) : "Pendiente"}</dd></div>
           </dl>

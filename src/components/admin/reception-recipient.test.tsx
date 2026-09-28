@@ -24,6 +24,23 @@ function mount(element:React.ReactNode){const node=document.createElement('div')
 afterEach(()=>{for(const {root,node} of mounts.splice(0)){act(()=>root.unmount());node.remove();}vi.clearAllMocks();vi.mocked(cloverAvailability).mockResolvedValue({enabled:false,issues:[]});});
 const addr={id:'a',userId:'u',label:'Casa',street:'Reforma',exteriorNumber:'10',neighborhood:'Centro',postalCode:'49540',municipality:'Valle de Juárez',state:'Jalisco'};
 const person={id:'r',userId:'u',name:'Juan Perez',phone:'5512345678',addressId:'a'};
+it('captures one group weight and a variable rate with cash and Zelle without thirteen weight inputs',async()=>{
+ vi.mocked(getReceptionContacts).mockResolvedValue({recipients:[person],addresses:[addr]});
+ vi.mocked(receivePackageGroup).mockResolvedValue({ok:false,error:'Test captured, no save'});
+ const {node}=mount(<ReceptionForm users={[]} defaultCustomerId="u" rates={[]} origins={[{id:'origin',name:'Origen'}]} locations={[{id:'origin',name:'Origen'}]} excessPolicy="recargo"/>);await act(async()=>{});
+ await act(async()=>{const select=node.querySelector<HTMLSelectElement>('[name="billingMode"]')!;select.value='peso-personalizado';select.dispatchEvent(new Event('change',{bubbles:true}));});
+ await act(async()=>{const input=node.querySelector<HTMLInputElement>('[aria-label="Cantidad de paquetes"]')!;Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(input,'13');input.dispatchEvent(new Event('input',{bubbles:true}));});
+ await act(async()=>{const select=Array.from(node.querySelectorAll('select')).find(s=>s.closest('label')?.textContent?.includes('Cómo se pesaron'))!;select.value='grupo';select.dispatchEvent(new Event('change',{bubbles:true}));});
+ await fill('weightLb','726');await fill('customRatePerLbUsd','3.50');
+ expect(node.querySelector('[aria-label="Paquete 2 · Peso (lb)"]')).toBeNull();
+ expect(node.querySelector('[aria-label="Total de recepción"]')?.textContent).toContain('2,541.00');
+ await act(async()=>node.querySelector<HTMLInputElement>('input[value="mixto"]')!.click());
+ const first=node.querySelector<HTMLInputElement>('[name="splitAmount0"]')!;
+ await act(async()=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(first,'1000');first.dispatchEvent(new Event('input',{bubbles:true}));});
+ await act(async()=>Array.from(node.querySelectorAll('button')).filter(b=>b.textContent==='Completar restante')[1].click());
+ await act(async()=>node.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ const args=vi.mocked(receivePackageGroup).mock.calls[0];expect(args[0]).toHaveLength(13);expect(args[4]).toEqual({totalWeightLb:726});expect(args[2]).toMatchObject({method:'mixto',parts:[{method:'efectivo',amount:'1000'},{method:'zelle',amount:'1541.00'}]});
+});
 it('shows secure fields before saving and changes a declined card to cash without creating more packages',async()=>{
  vi.mocked(cloverAvailability).mockResolvedValue({enabled:true,environment:'sandbox',issues:[]});
  vi.mocked(getReceptionContacts).mockResolvedValue({recipients:[person],addresses:[addr]});

@@ -10,7 +10,7 @@ export function paymentLocation(id?:string) {
   return id?active.find(w=>w.id===id):active.length===1?active[0]:undefined;
 }
 // Called only inside the serialized write transaction; failed operations roll back the sequence too.
-export function appendPayment(invoice:Invoice,actor:Pick<User,"id"|"firstName"|"paternalLastName">,status:PaymentRecord["status"],method:string,reference?:string,warehouseId?:string) {
+export function appendPayment(invoice:Invoice,actor:Pick<User,"id"|"firstName"|"paternalLastName">,status:PaymentRecord["status"],method:string,reference?:string,warehouseId?:string,amountUsd?:number) {
   const location=paymentLocation(warehouseId);
   if(status!=="pendiente"&&!location)throw new Error("Selecciona la ubicación donde se registra el pago.");
   const year=new Date().getUTCFullYear(), id=`payments-${year}`;
@@ -19,5 +19,6 @@ export function appendPayment(invoice:Invoice,actor:Pick<User,"id"|"firstName"|"
   counter.value++;
   const entry:PaymentRecord={folio:`${status==="acuerdo"?"ACU":"PAG"}-${year}-${String(counter.value).padStart(6,"0")}`,status,amountUsd:invoiceTotal(invoice),method,externalReference:reference?.trim()||undefined,recordedAt:new Date().toISOString(),actorId:actor.id,actorName:`${actor.firstName} ${actor.paternalLastName}`,warehouseId:location?.id,warehouseName:location?.name,customerId:invoice.userId,invoiceId:invoice.id,boxIds:invoice.boxIds??boxes.filter(b=>b.shipmentId===invoice.shipmentId&&b.userId===invoice.userId).map(b=>b.id),shipmentId:invoice.shipmentId||undefined};
   entry.boxCodes=boxes.filter(b=>entry.boxIds.includes(b.id)&&b.userId===invoice.userId).map(b=>b.code);
+  if(amountUsd!==undefined){if(!Number.isFinite(amountUsd)||amountUsd<=0||amountUsd>invoiceTotal(invoice))throw new Error('Monto parcial inválido.');entry.amountUsd=amountUsd;}
   invoice.payments=[...(invoice.payments??[]),entry];return entry;
 }

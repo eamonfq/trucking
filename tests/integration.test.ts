@@ -1319,6 +1319,30 @@ describe.sequential("Administrative staff permissions in MySQL",()=>{
  });
 });
 describe.sequential("Optional customer contact and full-admin test cleanup",()=>{
+ it("receives 13 jointly weighed packages with a custom rate and cash plus Zelle exactly once",async()=>{
+  cookieJar.set('ayl_session',{value:adminSession});
+  const origin=await withStore(async()=>warehouses.find(w=>w.active&&(w.kind==='origen'||w.kind==='ambos'))!);
+  const item={customer:operationClient,originWarehouseId:origin.id,billingMode:'peso-personalizado',customRatePerLbUsd:3.5,weightLb:726,invoiceNow:true};
+  const items=Array.from({length:13},()=>({...item}));
+  const payment={method:'mixto',warehouseId:origin.id,parts:[{method:'efectivo',amount:1000},{method:'zelle',amount:1541,reference:'ZELLE-QA'}]};
+  const request=randomUUID(),scope={totalWeightLb:726};
+  const before=await withStore(async()=>boxes.length);
+  const short=await receivePackageGroup(items,new FormData(),{...payment,parts:[{method:'efectivo',amount:1000},{method:'zelle',amount:1540}]},randomUUID(),scope);
+  expect(short.ok).toBe(false);expect(await withStore(async()=>boxes.length)).toBe(before);
+  const received=await receivePackageGroup(items,new FormData(),payment,request,scope);
+  expect(received.ok).toBe(true);if(!received.ok)throw new Error(received.error);
+  expect(received.total).toBe(2541);expect(received.results).toHaveLength(13);
+  expect(received.results.reduce((s,r)=>s+Math.round(r.box.weightLb*1000),0)).toBe(726000);
+  for(const row of received.results){expect(row.box.billing?.groupWeight).toMatchObject({totalWeightLb:726,totalAmountUsd:2541,pieces:13});expect(row.invoice?.status).toBe('pagada');expect(row.invoice?.collectionMethod).toBe('mixto');}
+  const payments=received.results.flatMap(r=>r.invoice!.payments!.filter(p=>p.status==='confirmado'));
+  expect(payments.filter(p=>p.method==='efectivo').reduce((s,p)=>s+Math.round(p.amountUsd*100),0)).toBe(100000);
+  expect(payments.filter(p=>p.method==='zelle').reduce((s,p)=>s+Math.round(p.amountUsd*100),0)).toBe(154100);
+  expect(payments.filter(p=>p.method==='zelle').every(p=>p.externalReference==='ZELLE-QA')).toBe(true);
+  const replay=await receivePackageGroup(items,new FormData(),payment,request,scope);expect(replay.ok).toBe(true);
+  expect(await withStore(async()=>boxes.length)).toBe(before+13);
+  const stored=await withStore(async()=>invoices.filter(i=>received.results.some(r=>r.invoice?.id===i.id)).flatMap(i=>i.payments??[]));expect(stored).toHaveLength(payments.length);
+  expect((await receivePackageGroup([{...item,customRatePerLbUsd:undefined}],new FormData())).ok).toBe(false);
+ });
  it("lets full admin delete warehouse operators and administrative users and revokes their sessions",async()=>{
   cookieJar.set("ayl_session",{value:adminSession});
   const warehouse=await withStore(async()=>warehouses.find(w=>w.active)!);
