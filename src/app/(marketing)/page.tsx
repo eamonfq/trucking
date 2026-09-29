@@ -11,6 +11,10 @@ import { QuoteCalculator } from "@/components/marketing/quote-calculator";
 import { RouteMap } from "@/components/marketing/route-map";
 import { TrackingSearch } from "@/components/marketing/tracking-search";
 import type { BoxCategory } from "@/lib/config/box-categories";
+import { calculateBilling } from "@/lib/utils/billing";
+
+type VolumeCategory = BoxCategory & { volumePriceUsd: number };
+const usd = (value: number) => new Intl.NumberFormat("en-US", {style: "currency", currency: "USD"}).format(value);
 import { faqs } from "@/lib/data/faqs";
 import { siteUrl, homeDescription } from "@/lib/seo";
 import { configService } from "@/lib/services/config";
@@ -24,9 +28,10 @@ export const metadata: Metadata = {
 };
 
 export default async function LandingPage() {
-  const [flow, categories] = await Promise.all([configService.getFlowConfig(), configService.getRateTable()]);
+  const [flow, rates] = await Promise.all([configService.getFlowConfig(), configService.getRateTable()]);
+  const categories: VolumeCategory[] = rates.map(category => ({...category, volumePriceUsd: calculateBilling("volumen", category.dimensions, 0, flow).amountUsd}));
   const locker = flow.originMode === "casillero";
-  const cheapest = categories.reduce<(typeof categories)[number] | undefined>((lowest, category) => !lowest || category.priceUsd < lowest.priceUsd ? category : lowest, undefined);
+  const cheapest = categories.reduce<(typeof categories)[number] | undefined>((lowest, category) => !lowest || category.volumePriceUsd < lowest.volumePriceUsd ? category : lowest, undefined);
   const featured = categories[1]?.id;
   const MOBILE_LAYOUT: Record<string, { position: string; chip: "light" | "brand"; chipClass: string }> = {
     cubo: { position: "bottom-1.5 left-6.5", chip: "brand", chipClass: "-left-3.5 bottom-10.5" },
@@ -35,7 +40,7 @@ export default async function LandingPage() {
   };
   const mobileBoxes = categories.slice(0, 3).reverse()
     .map((category, index) => ({ category, ...Object.values(MOBILE_LAYOUT)[index]! }))
-    .filter((item): item is { category: BoxCategory; position: string; chip: "light" | "brand"; chipClass: string } => item.category !== undefined);
+    .filter((item): item is { category: VolumeCategory; position: string; chip: "light" | "brand"; chipClass: string } => item.category !== undefined);
 
   const structuredData = { "@context": "https://schema.org", "@graph": [
     { "@type": "Organization", "@id": siteUrl("/#organization"), name: "A&L Trucking Logistics", url: siteUrl("/"), logo: siteUrl("/brand/logoayl.png") },
@@ -67,15 +72,15 @@ export default async function LandingPage() {
             <h1 className="font-display text-[3.25rem] font-extrabold leading-[.86] tracking-[-.05em] text-white sm:text-7xl lg:text-[6.75rem]">
               Envía más,<br /><span className="text-brand-300">paga menos.</span>
             </h1>
-            <p className="max-w-[32.5rem] text-lg leading-relaxed text-[#B9C4DC] text-pretty">Cobro por libra o precio fijo por categoría, según tu envío. Comparamos el peso real y dimensional; las cargas especiales se cotizan de forma individual. Consulta tu estimación antes de empacar.</p>
+            <p className="max-w-[32.5rem] text-lg leading-relaxed text-[#B9C4DC] text-pretty">Cotiza por volumen o por peso real, según tu envío. Los precios de estas cajas se calculan por sus medidas; las cargas especiales se cotizan de forma individual.</p>
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
               <Link href="/registro" className="inline-flex min-h-14 items-center justify-center gap-2.5 rounded-lg bg-brand-600 px-7 text-base font-semibold text-white shadow-[0_14px_34px_rgba(232,98,28,.32)] transition hover:-translate-y-0.5 hover:bg-brand-700">Crear mi cuenta <span aria-hidden="true">→</span></Link>
               <Link href="/login" className="inline-flex min-h-14 items-center justify-center rounded-lg border-[1.5px] border-[#44567F] px-6 text-base font-semibold text-white transition hover:border-white">Ingresar a mi cuenta</Link>
               <Link href="#tarifas" className="inline-flex min-h-14 items-center justify-center rounded-lg border-[1.5px] border-[#44567F] px-6 text-base font-semibold text-white transition hover:border-white">Ver tarifas</Link>
             </div>
             <dl className="hidden flex-wrap gap-10 border-t border-[#2A3A5E] pt-7 lg:flex">
-              <HeroStat value={String(categories.length)} detail={<>categorías con<br />tarifa fija disponible</>} />
-              <HeroStat value={cheapest ? `$${cheapest.priceUsd}` : "—"} detail={<>USD desde, por caja<br />hasta {cheapest?.maxWeightLb ?? "—"} lb</>} />
+              <HeroStat value={String(categories.length)} detail={<>tamaños de referencia<br />con tarifa por volumen</>} />
+              <HeroStat value={cheapest ? usd(cheapest.volumePriceUsd) : "—"} detail={<>USD desde, por caja<br />cobro por volumen</>} />
               <HeroStat value="Rastreo" detail={<>consulta los avances<br />con tu código</>} />
             </dl>
           </div>
@@ -102,7 +107,7 @@ export default async function LandingPage() {
               <div key={category.id} className={`absolute ${position}`}>
                 <div className="relative motion-safe:[animation:float-y_8s_ease-in-out_infinite]">
                   <BoxIso category={category} scale={1.05} detailed className="drop-shadow-[0_16px_22px_rgba(0,0,0,.45)]" />
-                  <span className={`absolute rounded-md px-2 py-1 font-display text-base font-extrabold ${chip === "brand" ? "bg-brand-700 text-white" : "bg-cream-100 text-navy-950"} ${chipClass}`}>${category.priceUsd}</span>
+                  <span className={`absolute rounded-md px-2 py-1 font-display text-base font-extrabold ${chip === "brand" ? "bg-brand-700 text-white" : "bg-cream-100 text-navy-950"} ${chipClass}`}>{usd(category.volumePriceUsd)}</span>
                 </div>
               </div>
             ))}
@@ -128,9 +133,9 @@ export default async function LandingPage() {
           <div className="grid items-end gap-10 pb-16 lg:grid-cols-[1fr_30rem]">
             <div className="flex flex-col gap-5">
               <p className="text-over font-semibold uppercase text-brand-300">Tarifas transparentes</p>
-              <h2 className="font-display text-[2.75rem] font-extrabold leading-[.94] tracking-[-.04em] text-white sm:text-6xl lg:text-d2">Una caja.<br />Un precio fijo.</h2>
+              <h2 className="font-display text-[2.75rem] font-extrabold leading-[.94] tracking-[-.04em] text-white sm:text-6xl lg:text-d2">Tus medidas.<br />Tu precio.</h2>
             </div>
-            <p className="text-lg leading-relaxed text-[#A8B2CA] text-pretty">Las cajas están dibujadas a escala entre sí. Consulta la categoría compatible con tus medidas exteriores y peso total. Tarifas base en USD, sujetas a validación y ajustes aplicables; el límite incluye caja y contenido.</p>
+            <p className="text-lg leading-relaxed text-[#A8B2CA] text-pretty">Precios por volumen en USD para las medidas indicadas, calculados con la tarifa vigente de recepción. El peso no modifica este importe. Se confirman las medidas en bodega; servicios adicionales se cotizan aparte.</p>
           </div>
           <div className="grid gap-3 xl:grid-cols-5 xl:gap-5">
             {categories.map((category) => {
@@ -138,26 +143,26 @@ export default async function LandingPage() {
               return (
                 <article key={category.id} className={`relative flex items-center gap-4 rounded-xl border p-5 transition hover:-translate-y-0.5 xl:min-h-105 xl:flex-col xl:items-stretch xl:justify-between xl:p-7 ${highlight ? "border-brand-500 bg-cream-100 shadow-[0_0_0_3px_rgba(232,98,28,.35)]" : "border-navy-700 bg-navy-800"}`}>
                   {highlight && <span className="absolute -top-3 left-5 rounded-full bg-brand-700 px-3 py-1.5 text-[.6875rem] font-bold uppercase tracking-[.14em] text-white xl:left-6">Categoría destacada</span>}
-                  <div className="flex w-20 shrink-0 justify-center xl:hidden"><BoxIso category={category} scale={0.6} /></div>
+                  <div className="flex w-14 shrink-0 sm:w-20 justify-center xl:hidden"><BoxIso category={category} scale={0.6} /></div>
                   <div className="hidden h-42 items-end justify-center xl:flex"><BoxIso category={category} scale={1} /></div>
 
                   {/* Móvil: medidas y límite en líneas propias, así ninguna parte con el separador colgando */}
                   <div className="flex min-w-0 flex-1 flex-col gap-1 xl:hidden">
                     <p className={`text-base font-semibold ${highlight ? "text-navy-900" : "text-white"}`}>{category.name}</p>
-                    <p className={`text-sm ${highlight ? "text-ink-700" : "text-[#A8B2CA]"}`}>{category.dimensions.length} × {category.dimensions.width} × {category.dimensions.height} in · hasta {category.maxWeightLb} lb</p>
+                    <p className={`text-sm ${highlight ? "text-ink-700" : "text-[#A8B2CA]"}`}>{category.dimensions.length} × {category.dimensions.width} × {category.dimensions.height} in · por volumen</p>
                   </div>
-                  <p className={`shrink-0 font-display text-[1.875rem] font-extrabold leading-none tracking-[-.03em] xl:hidden ${highlight ? "text-navy-900" : "text-white"}`}>${category.priceUsd}</p>
+                  <p className={`shrink-0 font-display text-[1.5rem] sm:text-[1.875rem] font-extrabold leading-none tracking-[-.03em] xl:hidden ${highlight ? "text-navy-900" : "text-white"}`}>{usd(category.volumePriceUsd)}</p>
 
                   {/* Escritorio: precio como elemento dominante de la tarjeta */}
                   <div className="hidden flex-col gap-3.5 xl:flex">
                     <p className={`text-sm font-semibold ${highlight ? "text-navy-900" : "text-white"}`}>{category.name}</p>
-                    <p className="flex items-baseline gap-1.5">
-                      <span className={`font-display text-[3.25rem] font-extrabold leading-[.9] tracking-[-.04em] ${highlight ? "text-navy-900" : "text-white"}`}>${category.priceUsd}</span>
+                    <p className="flex flex-wrap items-baseline gap-1.5">
+                      <span className={`font-display text-[2.5rem] font-extrabold leading-[.9] tracking-[-.04em] ${highlight ? "text-navy-900" : "text-white"}`}>{usd(category.volumePriceUsd)}</span>
                       <span className={`text-xs font-medium ${highlight ? "text-ink-500" : "text-[#A8B2CA]"}`}>USD</span>
                     </p>
                     <div className={`flex flex-col gap-1.5 border-t pt-3.5 ${highlight ? "border-line-300" : "border-navy-700"}`}>
                       <span className={`text-sm ${highlight ? "text-ink-700" : "text-[#A8B2CA]"}`}>{category.dimensions.length} × {category.dimensions.width} × {category.dimensions.height} in</span>
-                      <span className={`text-sm font-medium ${highlight ? "text-brand-700" : "text-brand-300"}`}>Hasta {category.maxWeightLb} lb</span>
+                      <span className={`text-sm font-medium ${highlight ? "text-brand-700" : "text-brand-300"}`}>Precio por volumen</span>
                     </div>
                   </div>
                 </article>
@@ -173,9 +178,9 @@ export default async function LandingPage() {
           <div className="flex flex-col gap-5">
             <p className="text-over font-semibold uppercase text-brand-700">Cotizador en vivo</p>
             <h2 className="font-display text-[2.75rem] font-extrabold leading-[.96] tracking-[-.04em] text-navy-900 sm:text-[3.75rem]">Mide, pesa y<br />ve tu precio.</h2>
-            <p className="text-lg leading-relaxed text-ink-700 text-pretty">Escribe las medidas exteriores en pulgadas y el peso total en libras. Compara la tarifa por libra y el precio fijo por categoría. Para vehículos, maquinaria, mudanzas y otras cargas especiales, solicita una cotización manual.</p>
+            <p className="text-lg leading-relaxed text-ink-700 text-pretty">Por volumen, ingresa las medidas exteriores en pulgadas. Por peso, ingresa las libras reales. También puedes consultar precios fijos o solicitar una cotización para cargas especiales.</p>
           </div>
-          <QuoteCalculator rates={categories} weightPricing={{pricePerLbUsd:flow.pricePerLbUsd,dimensionalBase:flow.dimensionalBase,dimensionalFactor:flow.dimensionalFactor}} />
+          <QuoteCalculator rates={rates} weightPricing={{pricePerLbUsd:flow.pricePerLbUsd,dimensionalBase:flow.dimensionalBase,dimensionalFactor:flow.dimensionalFactor}} />
         </div>
       </section>
 
@@ -268,14 +273,14 @@ function HeroStat({ value, detail, pending = false }: { value: string; detail: R
   );
 }
 
-function ScaledBox({ categories, id, className, chip, chipClass }: { categories: BoxCategory[]; id: string; className: string; chip: "light" | "brand"; chipClass: string }) {
+function ScaledBox({ categories, id, className, chip, chipClass }: { categories: VolumeCategory[]; id: string; className: string; chip: "light" | "brand"; chipClass: string }) {
   const category = categories.find((item) => item.id === id);
   if (!category) return null;
   return (
     <div className={className}>
       <div className="relative motion-safe:[animation:float-y_8s_ease-in-out_infinite]">
         <BoxIso category={category} scale={1.6} detailed className="drop-shadow-[0_20px_26px_rgba(0,0,0,.45)]" />
-        <span className={`absolute rounded-md px-2.5 py-1.5 font-display text-lg font-extrabold tracking-[-.02em] ${chip === "brand" ? "bg-brand-700 text-white" : "bg-cream-100 text-navy-950"} ${chipClass}`}>${category.priceUsd}</span>
+        <span className={`absolute rounded-md px-2.5 py-1.5 font-display text-lg font-extrabold tracking-[-.02em] ${chip === "brand" ? "bg-brand-700 text-white" : "bg-cream-100 text-navy-950"} ${chipClass}`}>{usd(category.volumePriceUsd)}</span>
       </div>
     </div>
   );

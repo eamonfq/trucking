@@ -13,9 +13,10 @@ const numeric = (value: string) => {
 };
 
 export function QuoteCalculator({ rates, weightPricing, client = false }: { rates: BoxCategory[]; weightPricing: WeightPricing; client?: boolean }) {
-  const [mode,setMode]=useState<BillingMode>("peso");
+  const [mode,setMode]=useState<BillingMode>("volumen");
   const [values, setValues] = useState({ length: "", width: "", height: "", weight: "" });
-  const complete = Object.values(values).every((value) => numeric(value) > 0);
+  const dimensionsComplete = [values.length, values.width, values.height].every(value => numeric(value) > 0);
+  const complete = mode === "peso-real" ? numeric(values.weight) > 0 : mode === "volumen" ? dimensionsComplete : dimensionsComplete && numeric(values.weight) > 0;
   const result = useMemo(() => {
     if (!complete) return null;
     return suggestCategory({ length: numeric(values.length), width: numeric(values.width), height: numeric(values.height) }, numeric(values.weight), rates);
@@ -24,13 +25,13 @@ export function QuoteCalculator({ rates, weightPricing, client = false }: { rate
 
   const category = result?.category ?? null;
   let billing: ReturnType<typeof calculateBilling> | undefined;
-  if(complete&&mode!=="manual"&&(mode==="peso"||category)){
+  if(complete&&mode!=="manual"&&(mode==="peso-real"||mode==="volumen"||category)){
     try{billing=calculateBilling(mode,{length:numeric(values.length),width:numeric(values.width),height:numeric(values.height)},numeric(values.weight),weightPricing,category?.priceUsd);}catch{}
   }
-  const title = mode==="manual" ? "Carga especial" : mode==="peso" ? "Por libra" : !complete ? "Precio fijo" : category?.name ?? "Carga personalizada";
+  const title = mode==="manual" ? "Carga especial" : mode==="peso-real" ? "Por peso real" : mode==="volumen" ? "Por volumen" : !complete ? "Precio fijo" : category?.name ?? "Carga personalizada";
   const price = billing ? formatUsd(billing.amountUsd) : mode==="manual" ? "Por cotizar" : "—";
   const note = mode==="manual" ? "Vehículos, motos, cuatrimotos, maquinaria, mudanzas y otros artículos especiales requieren una cotización acordada con operaciones."
-    : !complete ? "Ingresa las dimensiones exteriores en pulgadas y el peso real en libras."
+    : !complete ? mode==="volumen" ? "Ingresa las tres medidas exteriores en pulgadas." : mode==="peso-real" ? "Ingresa el peso real en libras; no necesitas medidas." : "Ingresa las dimensiones exteriores en pulgadas y el peso real en libras."
     : mode==="fijo"&&!category ? "No coincide con una categoría de precio fijo. Puedes consultar por libra o solicitar una cotización manual; no significa que la carga sea rechazada."
     : !billing ? "Revisa las medidas y el peso: el importe queda fuera del rango permitido."
     : "Estimación por paquete. Se confirma con las medidas reales en bodega; no incluye seguro, entrega a domicilio ni recargos aplicables.";
@@ -39,15 +40,15 @@ export function QuoteCalculator({ rates, weightPricing, client = false }: { rate
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22.5rem] lg:items-start">
       <div className="grid min-w-0 gap-5 sm:grid-cols-2">
-        <fieldset className="sm:col-span-2"><legend className="mb-3 text-sm font-semibold text-ink-700">Cómo quieres cotizar</legend><div className="grid grid-cols-3 gap-2">{([{value:"peso",label:"Por libra"},{value:"fijo",label:"Precio fijo"},{value:"manual",label:"Carga especial"}] as const).map(option=><label key={option.value} className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border p-3 text-sm font-semibold focus-within:ring-2 focus-within:ring-brand-600 ${mode===option.value?"border-brand-600 bg-orange-50 text-orange-800":"border-line-300 bg-white text-navy-600"}`}><input className="sr-only" type="radio" name="quoteMode" checked={mode===option.value} onChange={()=>setMode(option.value)}/>{option.label}</label>)}</div></fieldset>
+        <fieldset className="sm:col-span-2"><legend className="mb-3 text-sm font-semibold text-ink-700">Cómo quieres cotizar</legend><div className="grid grid-cols-2 gap-2">{([{value:"volumen",label:"Por volumen"},{value:"peso-real",label:"Por peso"},{value:"fijo",label:"Precio fijo"},{value:"manual",label:"Carga especial"}] as const).map(option=><label key={option.value} className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border p-3 text-sm font-semibold focus-within:ring-2 focus-within:ring-brand-600 ${mode===option.value?"border-brand-600 bg-orange-50 text-orange-800":"border-line-300 bg-white text-navy-600"}`}><input className="sr-only" type="radio" name="quoteMode" checked={mode===option.value} onChange={()=>setMode(option.value)}/>{option.label}</label>)}</div></fieldset>
         {mode!=="manual"?<>
-        <Measure label="Largo (in)" placeholder="16" value={values.length} onChange={(value) => update("length", value)} />
+        {mode!=="peso-real"&&<><Measure label="Largo (in)" placeholder="16" value={values.length} onChange={(value) => update("length", value)} />
         <Measure label="Ancho (in)" placeholder="20" value={values.width} onChange={(value) => update("width", value)} />
-        <Measure label="Alto (in)" placeholder="15" value={values.height} onChange={(value) => update("height", value)} />
-        <Measure label="Peso total (lb)" placeholder="45" value={values.weight} onChange={(value) => update("weight", value)} />
+        <Measure label="Alto (in)" placeholder="15" value={values.height} onChange={(value) => update("height", value)} /></>}
+        <Measure label={mode==="volumen"?"Peso real (lb, opcional)":"Peso total (lb)"} placeholder="45" value={values.weight} onChange={(value) => update("weight", value)} />
         <p className="flex items-start gap-2.5 rounded-lg bg-cream-100 px-4.5 py-4 text-sm leading-6 text-ink-700 sm:col-span-2">
           <span aria-hidden="true" className="mt-0.5 font-bold text-brand-700">i</span>
-          El peso indicado incluye la caja y su contenido. Usa las medidas exteriores, no las del artículo.
+          {mode==="volumen" ? "El precio depende solo de las medidas exteriores. El peso es informativo y no modifica el cobro." : "El peso indicado incluye la caja y su contenido. Por peso se redondea hacia arriba a la siguiente libra completa."}
         </p></>:<p className="rounded-xl bg-cream-100 p-5 text-base leading-7 text-ink-700 sm:col-span-2">Las cargas especiales se cotizan de forma individual. Prepara una descripción, destino, medidas y peso aproximado; operaciones confirmará el importe antes de registrar el cobro.</p>}
       </div>
       <div className="flex min-h-75 min-w-0 flex-col justify-between gap-7 rounded-xl bg-navy-900 p-8">
@@ -55,8 +56,8 @@ export function QuoteCalculator({ rates, weightPricing, client = false }: { rate
         <div className="flex flex-col gap-3">
           <p className="font-display text-[2.5rem] font-extrabold leading-none tracking-[-.03em] text-white">{title}</p>
           <p aria-live="polite" className={`font-display text-[clamp(2rem,4vw,3.5rem)] break-words font-extrabold leading-none tracking-[-.04em] ${priceTone}`}>{price}</p>
-          {billing&&mode==="peso"&&<dl className="grid gap-2 rounded-lg bg-white/5 p-4 text-sm text-white"><div className="flex justify-between gap-3"><dt>Peso real</dt><dd>{billing.actualWeightLb} lb</dd></div><div className="flex justify-between gap-3"><dt>Peso dimensional</dt><dd>{billing.dimensionalWeightLb.toFixed(2)} lb</dd></div><div className="flex justify-between gap-3"><dt>Peso a cobrar</dt><dd>{billing.billableWeightLb} lb</dd></div><div className="border-t border-white/15 pt-2">{billing.billableWeightLb} lb × {formatUsd(billing.pricePerLbUsd)} / lb</div></dl>}
-          {mode==="peso"&&<p className="text-sm leading-6 text-[#A8B2CA]">Fórmula: largo × ancho × alto ÷ {weightPricing.dimensionalBase} × {weightPricing.dimensionalFactor}. Se cobra el mayor peso, redondeado hacia arriba a la libra completa.</p>}
+          {billing&&mode==="peso-real"&&<dl className="grid gap-2 rounded-lg bg-white/5 p-4 text-sm text-white"><div className="flex justify-between gap-3"><dt>Peso real</dt><dd>{billing.actualWeightLb} lb</dd></div><div className="flex justify-between gap-3"><dt>Peso a cobrar</dt><dd>{billing.billableWeightLb} lb</dd></div><div className="border-t border-white/15 pt-2">{billing.billableWeightLb} lb × {formatUsd(billing.pricePerLbUsd)} / lb</div></dl>}
+          {mode==="volumen"&&<p className="text-sm leading-6 text-[#A8B2CA]">Fórmula: (largo × ancho × alto ÷ {weightPricing.dimensionalBase}) × {weightPricing.dimensionalFactor} = importe en USD. No se multiplica por la tarifa por libra.</p>}
           <p role="status" className="text-sm leading-6 text-[#A8B2CA] text-pretty">{note}</p>
         </div>
         <Link href={client?"/cliente/soporte":"/registro"} className="flex h-13.5 items-center justify-center rounded-lg bg-brand-600 text-base font-semibold text-white transition hover:bg-brand-700">{client?"Consultar con operaciones":"Crear mi cuenta"}</Link>

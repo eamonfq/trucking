@@ -19,24 +19,23 @@ function measurements(values:number[]){
   input.dispatchEvent(new Event("input",{bubbles:true}));
  }));
 }
-it("matches reception dimensional billing and rounds the greater weight up",()=>{
+it("matches reception direct volume billing in the client calculator",()=>{
  mount();measurements([10,10,10,50.2]);
- expect(node.textContent).toContain("163.20");
- expect(node.textContent).toContain("19.00 lb");
- expect(node.textContent).toContain("51 lb");
+ expect(node.textContent).toContain("$19.00");
+ expect(node.textContent).not.toContain("51 lb");
  expect(node.querySelector("a")?.getAttribute("href")).toBe("/cliente/soporte");
 });
-it("keeps fixed pricing and accepts oversized cargo for weight estimates",()=>{
+it("keeps fixed pricing separate and accepts oversized cargo for volume estimates",()=>{
  mount();measurements([30,30,30,50]);
- expect(node.textContent).toContain("1,641.60");
- act(()=>node.querySelectorAll<HTMLInputElement>('input[type="radio"]')[1].click());
+ expect(node.textContent).toContain("513.00");
+ act(()=>node.querySelectorAll<HTMLInputElement>('input[type="radio"]')[2].click());
  expect(node.textContent).toContain("no significa que la carga sea rechazada");
  measurements([10,16,12,20]);
  expect(node.textContent).toContain("80.00");
 });
 it("does not invent a price for special cargo or incomplete measurements",()=>{
- mount();expect(node.textContent).toContain("Ingresa las dimensiones");
- act(()=>node.querySelectorAll<HTMLInputElement>('input[type="radio"]')[2].click());
+ mount();expect(node.textContent).toContain("Ingresa las tres medidas");
+ act(()=>node.querySelectorAll<HTMLInputElement>('input[type="radio"]')[3].click());
  expect(node.textContent).toContain("Por cotizar");
  expect(node.querySelectorAll('input[type="number"]')).toHaveLength(0);
  expect(node.textContent).toContain("maquinaria");
