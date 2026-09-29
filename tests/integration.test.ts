@@ -1096,7 +1096,7 @@ describe.sequential("Real MySQL authentication and operations", () => {
     cookieJar.set("ayl_session",{value:adminSession});
     const origin=(await getWarehouseAdministration()).warehouses.find(w=>w.kind==="origen")!;
     const category=(await configService.getRateTable())[0];
-    const base={customer:operationClient,originWarehouseId:origin.id,billingMode:"fijo",...category.dimensions,overrideCategory:category.id,overrideReason:"Selección de precio fijo por caja del catálogo.",reject:false};
+    const base={customer:operationClient,originWarehouseId:origin.id,billingMode:"fijo",...category.dimensions,overrideCategory:category.id,overrideReason:"Selección de precio fijo por caja del catálogo.",contentsNote:"  Herramientas y ropa  ",reject:false};
     const result=await receivePackageGroup([{...base,weightLb:1},{...base,weightLb:2}],new FormData(),{method:"destino",warehouseId:"qa-location"});
     expect(result.ok).toBe(true);if(!result.ok)throw new Error(result.error);
     expect(result.total).toBe(category.priceUsd*2);
@@ -1105,6 +1105,7 @@ describe.sequential("Real MySQL authentication and operations", () => {
       expect(saved?.billing).toMatchObject({mode:"fijo",amountUsd:category.priceUsd});
       expect(saved?.categoryId).toBe(category.id);
       expect(saved?.dimensions).toEqual(category.dimensions);
+      expect(saved?.contentsNote).toBe("Herramientas y ropa");
     }
   });
   it("persists independent weight, volume and manual receipts without inventing dimensions",async()=>{
@@ -1113,9 +1114,9 @@ describe.sequential("Real MySQL authentication and operations", () => {
     const base={customer:operationClient,originWarehouseId:origin.id,weightLb:50.2,reject:false};
     const settings=await configService.getFlowConfig();
     const result=await receivePackageGroup([
-      {...base,billingMode:"peso-real"},
-      {...base,billingMode:"volumen",length:16,width:26,height:15,weightLb:500},
-      {...base,billingMode:"manual",customPriceUsd:125},
+      {...base,billingMode:"peso-real",contentsNote:"Equipo deportivo"},
+      {...base,billingMode:"volumen",length:16,width:26,height:15,weightLb:500,contentsNote:"Repuestos"},
+      {...base,billingMode:"manual",customPriceUsd:125,contentsNote:"Motocicleta con accesorios"},
     ],new FormData(),{method:"destino",warehouseId:"qa-location"});
     expect(result.ok).toBe(true);if(!result.ok)throw new Error(result.error);
     const volumeAmount=Math.round(16*26*15/settings.dimensionalBase*settings.dimensionalFactor*100)/100;
@@ -1125,6 +1126,9 @@ describe.sequential("Real MySQL authentication and operations", () => {
     const saved=await logisticsService.getBoxById(result.results[0].box.id);
     expect(saved?.dimensions).toEqual({length:0,width:0,height:0});
     expect(saved?.billing?.mode).toBe("peso-real");
+    expect(saved?.contentsNote).toBe("Equipo deportivo");
+    expect((await logisticsService.getBoxById(result.results[1].box.id))?.contentsNote).toBe("Repuestos");
+    expect((await logisticsService.getBoxById(result.results[2].box.id))?.contentsNote).toBe("Motocicleta con accesorios");
     expect((await logisticsService.getBoxById(result.results[1].box.id))?.weightLb).toBe(500);
     const invalid=await receivePackageGroup([{...base,billingMode:"volumen",length:16,width:26,height:15,weightLb:0}],new FormData());
     expect(invalid.ok).toBe(false);

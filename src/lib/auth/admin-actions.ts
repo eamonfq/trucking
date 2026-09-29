@@ -318,6 +318,7 @@ export async function receiveBox(input: unknown) {
   const billing = rejected ? undefined : calculateBilling(mode, dimensions, parsed.data.weightLb, {...flow,...(mode==="peso-personalizado"?{pricePerLbUsd:parsed.data.customRatePerLbUsd!}:{})}, mode==="manual" ? parsed.data.customPriceUsd : rates.find(rate=>rate.id===categoryId)?.priceUsd);
   if(billing&&receptionGroup?.groupWeight){billing.groupWeight=receptionGroup.groupWeight;billing.amountUsd=receptionGroup.allocatedAmountUsd!;billing.billableWeightLb=0;}
   const box: Box = {
+    contentsNote: parsed.data.contentsNote || undefined,
     receptionGroup,
     recipientId:recipient?.id,recipientSnapshot:recipient?{name:recipient.name,phone:recipient.phone,address:recipientAddress?{...recipientAddress}:{id:"",userId:customer.id,label:"Sin dirección",street:"",exteriorNumber:"",neighborhood:"",postalCode:"",municipality:"",state:""}}:undefined,
     billing, originWarehouseId:origin?.id,originWarehouseName:origin?.name,

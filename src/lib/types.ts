@@ -79,6 +79,7 @@ export type Recipient = {
 export type TimelineEvent = TransitionEvent;
 
 export type Box = {
+  contentsNote?: string;
   receptionGroup?: { id:string; code?:string; index:number; total:number; groupWeight?:{totalWeightLb:number;totalAmountUsd:number;pieces:number} };
   recipientId?: string;
   recipientSnapshot?: { name:string; phone:string; address:Address };
