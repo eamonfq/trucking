@@ -1092,6 +1092,21 @@ describe.sequential("Real MySQL authentication and operations", () => {
     expect(messages.some(m=>m.body.includes("pendiente-pago-destino"))).toBe(true);
     expect(messages.some(m=>m.body.includes("pagada"))).toBe(true);
   });
+  it("persists catalog fixed prices per box independently of volume and weight rates",async()=>{
+    cookieJar.set("ayl_session",{value:adminSession});
+    const origin=(await getWarehouseAdministration()).warehouses.find(w=>w.kind==="origen")!;
+    const category=(await configService.getRateTable())[0];
+    const base={customer:operationClient,originWarehouseId:origin.id,billingMode:"fijo",...category.dimensions,overrideCategory:category.id,overrideReason:"Selección de precio fijo por caja del catálogo.",reject:false};
+    const result=await receivePackageGroup([{...base,weightLb:1},{...base,weightLb:2}],new FormData(),{method:"destino",warehouseId:"qa-location"});
+    expect(result.ok).toBe(true);if(!result.ok)throw new Error(result.error);
+    expect(result.total).toBe(category.priceUsd*2);
+    for(const item of result.results){
+      const saved=await logisticsService.getBoxById(item.box.id);
+      expect(saved?.billing).toMatchObject({mode:"fijo",amountUsd:category.priceUsd});
+      expect(saved?.categoryId).toBe(category.id);
+      expect(saved?.dimensions).toEqual(category.dimensions);
+    }
+  });
   it("persists independent weight, volume and manual receipts without inventing dimensions",async()=>{
     cookieJar.set("ayl_session",{value:adminSession});
     const origin=(await getWarehouseAdministration()).warehouses.find(w=>w.kind==="origen")!;

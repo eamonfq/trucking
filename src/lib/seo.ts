@@ -1,4 +1,4 @@
-export const homeDescription = "Envía cajas de USA a México con A&L Trucking Logistics. Consulta precios por volumen, cotiza por medidas o peso real y da seguimiento a tu envío.";
+export const homeDescription = "Envía cajas de USA a México con A&L Trucking Logistics. Consulta precios fijos por caja, cotiza por volumen o peso real y da seguimiento a tu envío.";
 
 export function getSeoConfig(origin = process.env.NEXT_PUBLIC_SITE_URL, enabled = process.env.SEO_INDEXABLE) {
   const url = new URL(origin || "http://localhost:3100");
