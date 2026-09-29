@@ -8,6 +8,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { createClientShipment } from "@/lib/auth/client-actions";
+import { formatDeliveryAddress } from "@/lib/utils/address-display";
 import type { BoxCategory } from "@/lib/config/box-categories";
 import { FLOW_OPTION_LABELS, type FlowConfig } from "@/lib/config/flow";
 import { createShipmentSchema } from "@/lib/schemas/logistics";
@@ -33,6 +34,7 @@ export function ShipmentCreator({ boxes, recipients, excessPolicy, deliveryMode,
   const { register, handleSubmit, control, setValue, formState: { errors, isSubmitting } } = useForm<ShipmentInput>({ resolver: zodResolver(createShipmentSchema), defaultValues: { boxIds: [], recipientId: "", deliveryMethod: options[0]?.value as ShipmentInput["deliveryMethod"] } });
   const selected = useWatch({ control, name: "boxIds" }) ?? [];
   const recipientId=useWatch({control,name:"recipientId"})??"";
+  const deliveryMethod=useWatch({control,name:"deliveryMethod"});
   const [search,setSearch]=useState("");
   const selectedBoxes = boxes.filter((box) => selected.includes(box.id));
   const category = (box: Box) => rates.find((rate) => rate.id === box.categoryId);
@@ -65,8 +67,9 @@ export function ShipmentCreator({ boxes, recipients, excessPolicy, deliveryMode,
       {errors.boxIds?.message && <p className="text-sm text-danger-700">{errors.boxIds.message}</p>}
       <h2 className="mt-4 font-display text-xl font-bold">2. Entrega</h2>
       <Select label="Destinatario" options={[{ value: "", label: "Selecciona" }, ...recipients.filter(r=>assignedIds.size!==1||assignedIds.has(r.id)).map((recipient) => ({ value: recipient.id, label: `${recipient.name} · ${recipient.phone}` }))]} error={errors.recipientId?.message} {...register("recipientId")} />
-      {address&&<div className="rounded-xl border bg-white p-4 text-sm"><strong>{receiver?.name??contact?.name} · {receiver?.phone??contact?.phone}</strong><p className="mt-2">{address.street} {address.exteriorNumber}{address.interiorNumber?` int. ${address.interiorNumber}`:""}, {address.neighborhood}, C.P. {address.postalCode}, {address.municipality}, {address.state}</p>{receiver&&<p className="mt-2 text-xs">Se conserva la dirección registrada al recibir estos paquetes.</p>}</div>}<div className="flex gap-4 text-sm underline"><Link href="/cliente/direcciones">Mis direcciones</Link><Link href="/cliente/destinatarios">Mis destinatarios</Link></div>
+      {address&&<div className="rounded-xl border bg-white p-4 text-sm"><strong>{receiver?.name??contact?.name} · {receiver?.phone??contact?.phone}</strong><p className="mt-2">{formatDeliveryAddress(address)}</p>{receiver&&<p className="mt-2 text-xs">Se conserva la dirección registrada al recibir estos paquetes.</p>}</div>}<div className="flex gap-4 text-sm underline"><Link href="/cliente/direcciones">Mis direcciones</Link><Link href="/cliente/destinatarios">Mis destinatarios</Link></div>
       <Select label="Método" options={options} error={errors.deliveryMethod?.message} {...register("deliveryMethod")} />
+      {deliveryMethod==="sucursal"&&address&&!address.municipality&&<div className="grid gap-2"><Input label="Ciudad de la bodega de retiro (opcional si la referencia ya la indica)" placeholder={address.references||address.label||"Ej. Valle de Juárez"} error={errors.destinationCity?.message} {...register("destinationCity")}/><p className="text-xs text-navy-500">Usaremos esta ciudad para organizar la ruta. Si la referencia no indica la ciudad, escríbela aquí.</p></div>}
       {deliveryMode !== "ambas" && <p className="text-xs text-navy-500">Por ahora A&amp;L opera únicamente {FLOW_OPTION_LABELS[deliveryMode]?.toLowerCase()}.</p>}
     </div>
     <aside className="h-fit rounded-card bg-navy-950 p-6 text-white lg:sticky lg:top-8">

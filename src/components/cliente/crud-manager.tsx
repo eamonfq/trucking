@@ -11,6 +11,7 @@ import { deleteClientAddress, deleteClientRecipient, upsertClientAddress, upsert
 import { MEXICO_STATES, POSTAL_CODE_CATALOG } from "@/lib/config/mexico";
 import { customerAddressSchema, customerRecipientSchema } from "@/lib/schemas/customer";
 import type { Address, Recipient } from "@/lib/types";
+import { formatDeliveryAddress } from "@/lib/utils/address-display";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -52,10 +53,10 @@ export function AddressManager({ initialItems }: { initialItems: Address[] }) {
   };
   return <>
     <div className="flex flex-wrap items-center justify-between gap-3"><Link href="/cliente/destinatarios" className="text-sm font-bold underline">Ver quién recibe en cada dirección</Link><Button onClick={() => begin()}><Plus className="size-4" />Agregar dirección</Button></div>
-    <div className="mt-5">{directory.controls}{items.length ? <div className="grid gap-4 md:grid-cols-2">{directory.visible.map((item) => <ManagerCard key={item.id} label={item.label} detail={`${item.street} ${item.exteriorNumber}${item.interiorNumber ? ` int. ${item.interiorNumber}` : ""}, ${item.neighborhood}, C.P. ${item.postalCode}, ${item.municipality}, ${item.state}`} onEdit={() => begin(item)} onDelete={() => setRemoving(item)} />)}</div> : <EmptyState title="Todavía no tienes direcciones" description="Registra el domicilio en México donde quieres recibir tus cajas." action={<Button onClick={() => begin()}><Plus className="size-4" />Agregar dirección</Button>} />}</div>
-    <Dialog open={Boolean(editing)} onClose={() => setEditing(null)} size="large" title={editing === "new" ? "Nueva dirección" : "Editar dirección"} description="Al escribir el código postal completamos municipio y estado.">
+    <div className="mt-5">{directory.controls}{items.length ? <div className="grid gap-4 md:grid-cols-2">{directory.visible.map((item) => <ManagerCard key={item.id} label={item.label} detail={formatDeliveryAddress(item)} onEdit={() => begin(item)} onDelete={() => setRemoving(item)} />)}</div> : <EmptyState title="Todavía no tienes direcciones" description="Registra el domicilio en México donde quieres recibir tus cajas." action={<Button onClick={() => begin()}><Plus className="size-4" />Agregar dirección</Button>} />}</div>
+    <Dialog open={Boolean(editing)} onClose={() => setEditing(null)} size="large" title={editing === "new" ? "Nueva dirección" : "Editar dirección"} description="Para retiro en bodega basta un nombre o referencia. Completa el domicilio si deseas entrega en casa.">
       <form onSubmit={save} className="grid max-h-[65vh] gap-4 overflow-y-auto px-1">
-        <Input label="Nombre para identificarla" error={errors.label?.message} {...register("label")} />
+        <Input label="Nombre de bodega o referencia" placeholder="Ej. Bodega Valle de Juárez" error={errors.label?.message} {...register("label")} />
         <div className="grid gap-4 sm:grid-cols-2">
           <Input label="Calle" error={errors.street?.message} {...register("street")} />
           <Input label="Número exterior" error={errors.exteriorNumber?.message} {...register("exteriorNumber")} />
@@ -65,7 +66,7 @@ export function AddressManager({ initialItems }: { initialItems: Address[] }) {
           <Input label="Municipio o alcaldía" error={errors.municipality?.message} {...register("municipality")} />
         </div>
         <Select label="Estado" options={[{ value: "", label: "Selecciona" }, ...MEXICO_STATES.map((state) => ({ value: state, label: state }))]} error={errors.state?.message} {...register("state")} />
-        <Textarea label="Referencias (opcional)" error={errors.references?.message} {...register("references")} />
+        <Textarea label="Referencia adicional (opcional)" error={errors.references?.message} {...register("references")} />
         <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setEditing(null)}>Cancelar</Button><Button type="submit" loading={isSubmitting}>Guardar dirección</Button></div>
       </form>
     </Dialog>
@@ -109,7 +110,7 @@ export function RecipientManager({ initialItems, addresses }: { initialItems: Re
       <form onSubmit={save} className="grid gap-4">
         <Input label="Nombre completo" error={errors.name?.message} {...register("name")} />
         <Input label="Teléfono" inputMode="tel" placeholder="+502 5555 1234" error={errors.phone?.message} {...register("phone")} />
-        <Select label="Dirección de entrega" options={[{ value: "", label: "Selecciona" }, ...addresses.map((item) => ({ value: item.id, label: `${item.label} · ${item.street} ${item.exteriorNumber}, ${item.municipality}` }))]} error={errors.addressId?.message} {...register("addressId")} />
+        <Select label="Dirección o bodega de retiro" options={[{ value: "", label: "Selecciona" }, ...addresses.map((item) => ({ value: item.id, label: formatDeliveryAddress(item) || item.label }))]} error={errors.addressId?.message} {...register("addressId")} />
         <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setEditing(null)}>Cancelar</Button><Button type="submit" loading={isSubmitting}>Guardar destinatario</Button></div>
       </form>
     </Dialog>
@@ -123,7 +124,7 @@ function ManagerCard({ label, detail, onEdit, onDelete }: { label: string; detai
   return <article className="rounded-card border border-stone-200 bg-white p-5"><div className="flex justify-between gap-4"><div><h2 className="font-display text-lg font-bold text-navy-950">{label}</h2><p className="mt-2 text-sm leading-6 text-navy-500">{detail}</p></div><div className="flex shrink-0 gap-1"><button type="button" onClick={onEdit} aria-label={`Editar ${label}`} className="grid size-10 place-items-center rounded-full hover:bg-cream-100"><Edit3 className="size-4" /></button><button type="button" onClick={onDelete} aria-label={`Eliminar ${label}`} className="grid size-10 place-items-center rounded-full text-danger-700 hover:bg-danger-50"><Trash2 className="size-4" /></button></div></div></article>;
 }
 async function attempt<T>(work:()=>Promise<T>):Promise<T|{ok:false;error:string}>{try{return await work();}catch{return {ok:false,error:"No se confirmó la operación. Tus datos se conservan; revisa la conexión antes de reintentar."};}}
-function addressText(a?:Address){return a?`${a.label}: ${a.street} ${a.exteriorNumber}, ${a.municipality}, ${a.state}`:"Dirección no disponible";}
+function addressText(a?:Address){return a?formatDeliveryAddress(a):"Dirección no disponible";}
 function useDirectory<T extends {id:string}>(items:T[]){
  const [query,setQuery]=useState(""),[page,setPage]=useState(1);
  const normalize=(s:string)=>s.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();

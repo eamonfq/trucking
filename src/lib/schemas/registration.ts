@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { accountRegistrationSchema } from "@/lib/schemas/auth";
-import { mexicanAddressSchema, rfcSchema } from "@/lib/schemas/address";
+import { rfcSchema } from "@/lib/schemas/address";
+import { optionalAddressSchema } from "@/lib/schemas/optional-contact";
 
-export const registrationSchema = accountRegistrationSchema.and(mexicanAddressSchema.extend({ rfc: rfcSchema }));
-export type RegistrationInput = z.infer<typeof registrationSchema>;
+export const registrationSchema = accountRegistrationSchema.and(optionalAddressSchema.extend({ rfc: rfcSchema }));
+export type RegistrationInput = z.input<typeof registrationSchema>;

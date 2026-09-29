@@ -23,7 +23,8 @@ it('prints sender and recipient contacts separately and explicitly marks missing
  expect(container.querySelectorAll('.label-contact')[1].textContent).toContain('Recibe:Karla Ponce6785437790');
  expect(markup).toContain('No registradas');expect(markup).not.toContain('0 × 0');
  if(process.env.LABEL_QA==='1'){
-  const labels=renderToStaticMarkup(<>{[1,2,3].map(i=><PackageLabel key={i} code={`BX-260015-0${i}`} receptionCode="BX-260015" position={`${i}/3`} controls={i===1} dimensions={i===3?{length:0,width:0,height:0}:{length:16,width:26,height:15}} weightLb={50} lockerCode="AL-MX-0008" sender={{name:'Agustín Orozco',phone:'2036900651'}} recipient={{name:'Karla Ponce',phone:'6785437790'}}/>)}</>);
+  const previewAddress={id:'qa',userId:'qa',label:'Casa',street:'Avenida de los Pinos y Calle Principal',exteriorNumber:'1234',neighborhood:'Colonia Las Cuatro Esquinas',postalCode:'49540',municipality:'Valle de Juárez',state:'Jalisco',references:'Portón azul frente a la plaza, dejar con la persona encargada de recepción'};
+  const labels=renderToStaticMarkup(<>{[1,2,3].map(i=><PackageLabel key={i} code={`BX-260015-0${i}`} receptionCode="BX-260015" position={`${i}/3`} controls={i===1} dimensions={i===3?{length:0,width:0,height:0}:{length:16,width:26,height:15}} weightLb={50} lockerCode="AL-MX-0008" sender={{name:'Agustín Orozco',phone:'2036900651'}} recipient={{name:'Karla Ponce',phone:'6785437790',address:i===2?previewAddress:{...previewAddress,label:'Bodega Valle de Juárez',street:'',exteriorNumber:'',neighborhood:'',postalCode:'',municipality:'',state:'',references:''}}}/>)}</>);
   const doc=document.createElement('div');doc.innerHTML=labels;
   doc.querySelectorAll('svg').forEach((svg,i)=>JsBarcode(svg,`BX-260015-0${i+1}`,{format:'CODE128',width:2,height:85,margin:20,displayValue:false}));
   doc.querySelectorAll('article').forEach(article=>{const img=document.createElement('img');img.className='label-logo';img.alt='A&L';img.src='data:image/png;base64,'+readFileSync('public/brand/logoayl.png').toString('base64');article.prepend(img);});
@@ -35,4 +36,19 @@ it('prints one reception number with an unambiguous barcode identity per unit',(
  container.innerHTML=renderToStaticMarkup(<>{[1,2].map(i=><PackageLabel key={i} code={`BX-260001-0${i}`} receptionCode="BX-260001" dimensions={{length:10,width:10,height:10}} weightLb={20} lockerCode="AL-MX-0001" position={`${i}/2`}/>)}</>);
  expect(Array.from(container.querySelectorAll('h1'),n=>n.textContent)).toEqual(['BX-260001','BX-260001']);
  expect(Array.from(container.querySelectorAll('svg'),n=>n.getAttribute('aria-label'))).toEqual(['Código de barras BX-260001-01','Código de barras BX-260001-02']);
+});
+it('prints a pickup reference or full address beneath the recipient without hiding long text',()=>{
+ const pickup={id:'a',userId:'u',label:'Bodega Valle de Juárez',street:'',exteriorNumber:'',neighborhood:'',postalCode:'',municipality:'',state:'',references:''};
+ const full={...pickup,label:'Casa',street:'Calle Principal',exteriorNumber:'42',neighborhood:'Centro',postalCode:'49540',municipality:'Valle de Juárez',state:'Jalisco',references:'Portón azul frente a la plaza'};
+ const common={code:'BX-260015',dimensions:{length:16,width:26,height:15},weightLb:50,lockerCode:'AL-MX-0008'};
+ const pickupNode=document.createElement('div');
+ pickupNode.innerHTML=renderToStaticMarkup(<PackageLabel {...common} recipient={{name:'Karla Ponce',phone:'6785437790',address:pickup}}/>);
+ expect(pickupNode.querySelector('.label-contact:last-of-type .label-address')?.textContent).toBe('Bodega Valle de Juárez');
+ expect(pickupNode.querySelector('.label-contact:last-of-type')?.textContent).toContain('Recibe:Karla Ponce6785437790Dirección / referenciaBodega Valle de Juárez');
+ const fullNode=document.createElement('div');
+ fullNode.innerHTML=renderToStaticMarkup(<PackageLabel {...common} recipient={{name:'Karla Ponce',phone:'6785437790',address:full}}/>);
+ const printed=fullNode.querySelector('.label-address')?.textContent;
+ expect(printed).toContain('Calle Principal 42');
+ expect(printed).toContain('C.P. 49540');
+ expect(printed).toContain('Portón azul frente a la plaza');
 });

@@ -1,6 +1,5 @@
 "use server";
 import {nextDocumentSequence} from "@/lib/db/document-sequence";
-import {hasAddressData} from "@/lib/schemas/optional-contact";
 import {truckLoad} from "@/lib/utils/truck-load";
 import {matchesWarehouseDestination} from "@/lib/utils/warehouse-destination";
 import { warehouseSupports } from "@/lib/config/warehouses";
@@ -209,7 +208,7 @@ export async function upsertCustomerRecipient(userId: string, input: unknown, re
   if (!user) return { ok: false as const, error: "No encontramos el cliente seleccionado." };
   const addressParsed = newAddress === undefined ? undefined : customerAddressSchema.safeParse(newAddress);
   if (addressParsed && !addressParsed.success) return {ok:false as const,error:addressParsed.error.issues[0]?.message??"Revisa la dirección."};
-  const pendingAddress = addressParsed?.success && hasAddressData(addressParsed.data) ? {id:nextId("addr",addresses.length),userId,...addressParsed.data} : undefined;
+  const pendingAddress = addressParsed?.success ? {id:nextId("addr",addresses.length),userId,...addressParsed.data} : undefined;
   const parsed = customerRecipientSchema.safeParse(pendingAddress && input && typeof input === "object" ? {...input,addressId:pendingAddress.id} : input);
   if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Revisa el destinatario." };
   if (!pendingAddress && parsed.data.addressId && !addresses.some((address) => address.id === parsed.data.addressId && address.userId === userId)) return { ok: false as const, error: "Selecciona una dirección del cliente." };

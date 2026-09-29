@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { mexicanAddressSchema, mexicanPhoneSchema, rfcSchema } from "@/lib/schemas/address";
+import { mexicanPhoneSchema, rfcSchema } from "@/lib/schemas/address";
 import {optionalEmailSchema,optionalAddressSchema} from "./optional-contact";
 
 export const customerProfileSchema = z.object({
@@ -13,7 +13,7 @@ export const customerProfileSchema = z.object({
 
 export const lockerCodeSchema = z.string().trim().toUpperCase().regex(/^AL-MX-\d{4}$/, "Usa el formato AL-MX-0000.");
 export const internalNoteSchema = z.object({ body: z.string().trim().min(5, "Escribe al menos 5 caracteres.").max(500, "La nota no puede exceder 500 caracteres.") });
-export const customerAddressSchema = mexicanAddressSchema.extend({ label: z.string().trim().min(2, "Escribe un nombre para identificar la dirección.") });
+export const customerAddressSchema = optionalAddressSchema.extend({ label: z.string().trim().min(2, "Escribe un nombre o referencia para identificar la entrega.") });
 export const customerRecipientSchema = z.object({
   name: z.string().trim().min(3, "Escribe el nombre completo."),
   phone: mexicanPhoneSchema,

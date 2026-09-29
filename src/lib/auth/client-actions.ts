@@ -84,14 +84,15 @@ export async function createClientShipment(input: unknown) {
   if (!recipient || !address) return { ok: false as const, error: "Selecciona un destinatario con dirección vigente." };
   if(conflictingDeliverySnapshots(selected))return {ok:false as const,error:"Estas piezas tienen datos de entrega distintos registrados en recepción. Crea envíos separados o solicita una corrección."};
   const receiptSnapshot=selected.find(b=>b.recipientSnapshot)?.recipientSnapshot;
-  const deliveryAddress=receiptSnapshot && mexicanAddressSchema.safeParse(receiptSnapshot.address).success ? receiptSnapshot.address : address;
+  const deliveryAddress=parsed.data.deliveryMethod==="sucursal" ? receiptSnapshot?.address??address : receiptSnapshot && mexicanAddressSchema.safeParse(receiptSnapshot.address).success ? receiptSnapshot.address : address;
   if(parsed.data.deliveryMethod === "domicilio" && !mexicanAddressSchema.safeParse(deliveryAddress).success)return {ok:false as const,error:"Completa la dirección del destinatario antes de solicitar entrega a domicilio."};
-  if(!deliveryAddress.municipality)return {ok:false as const,error:"Indica la ciudad del destinatario antes de solicitar el envío."};
+  const destinationCity=deliveryAddress.municipality || (parsed.data.deliveryMethod==="sucursal" ? parsed.data.destinationCity || deliveryAddress.references || (deliveryAddress.label==="Principal"?"":deliveryAddress.label) : "");
+  if(!destinationCity)return {ok:false as const,error:"Indica la ciudad o bodega de retiro antes de solicitar el envío."};
   const flow = await configService.getFlowConfig();
   if (parsed.data.deliveryMethod === "domicilio" && flow.deliveryMode === "sucursal") return { ok: false as const, error: "La entrega a domicilio no está habilitada en este momento." };
   if (parsed.data.deliveryMethod === "sucursal" && flow.deliveryMode === "domicilio") return { ok: false as const, error: "Por ahora solo operamos entrega a domicilio." };
   const at = new Date().toISOString();
-  const draft: Shipment = { id: nextId("ship", shipments.length), code: `SH-26${String(nextDocumentSequence("shipment")).padStart(4, "0")}`, userId: user.id, recipientId: recipient.id, boxIds: selected.map((box) => box.id), status: "pendiente", destinationCity: deliveryAddress.municipality, timeline: [{ from: null, to: "pendiente", actor: fullName(user), at, note: `Solicitud creada con ${selected.length} cajas. Entrega: ${parsed.data.deliveryMethod === "domicilio" ? "a domicilio" : "en sucursal"}.` }] };
+  const draft: Shipment = { id: nextId("ship", shipments.length), code: `SH-26${String(nextDocumentSequence("shipment")).padStart(4, "0")}`, userId: user.id, recipientId: recipient.id, boxIds: selected.map((box) => box.id), status: "pendiente", destinationCity, timeline: [{ from: null, to: "pendiente", actor: fullName(user), at, note: `Solicitud creada con ${selected.length} cajas. Entrega: ${parsed.data.deliveryMethod === "domicilio" ? "a domicilio" : "en sucursal"}.` }] };
   const confirmed = transitionShipment(draft, "confirmado", { actor: "Sistema A&L", at, note: "Cajas elegibles y destinatario validados." });
   if (!confirmed.ok) return confirmed;
   confirmed.value.deliveryMethod = parsed.data.deliveryMethod;

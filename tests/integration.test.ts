@@ -992,14 +992,21 @@ describe.sequential("Real MySQL authentication and operations", () => {
     const persisted=await getReceptionContacts(id);
     expect(persisted.recipients.find(r=>r.id===result.recipient.id)?.addressId).toBe(result.address?.id);
     expect(persisted.addresses.find(a=>a.id===result.address?.id)?.street).toBe("Destino nuevo");
+    const pickup=await upsertCustomerRecipient(id,{name:"María Retiro",phone:"5512345678",addressId:""},undefined,{label:"Bodega Valle de Juárez"});
+    expect(pickup.ok).toBe(true);if(!pickup.ok)throw new Error(pickup.error);
+    expect((await getReceptionContacts(id)).addresses.find(a=>a.id===pickup.address?.id)).toMatchObject({label:"Bodega Valle de Juárez",street:"",municipality:""});
+    const origin=(await getWarehouseAdministration()).warehouses.find(w=>w.kind==="origen")!;
+    const received=await receiveBox({customer:id,recipientId:pickup.recipient.id,originWarehouseId:origin.id,length:10,width:10,height:10,weightLb:10,billingMode:"manual",customPriceUsd:25,reject:false});
+    expect(received.ok).toBe(true);if(!received.ok)throw new Error(received.error);
+    expect(received.box.recipientSnapshot?.address.label).toBe("Bodega Valle de Juárez");
     const bad=await upsertCustomerRecipient(id,{name:"X",phone:"bad",addressId:""},undefined,newAddress);
-    expect(bad.ok).toBe(false);expect((await getReceptionContacts(id)).addresses).toHaveLength(initial.addresses.length+1);
+    expect(bad.ok).toBe(false);expect((await getReceptionContacts(id)).addresses).toHaveLength(initial.addresses.length+2);
     const other=(await getReceptionContacts(userId)).addresses[0];
     expect((await upsertCustomerRecipient(id,{name:"Juan Perez",phone:"5512345678",addressId:other.id})).ok).toBe(false);
     const edited=await upsertCustomerRecipient(id,{name:"Juan actualizado",phone:"5512345678",addressId:initial.addresses[0].id},result.recipient.id);
     expect(edited.ok).toBe(true);expect((await getReceptionContacts(id)).recipients[0].name).toBe("Juan actualizado");
     expect((await upsertCustomerRecipient(id,{name:"Persona válida",phone:"5512345678",addressId:""},"missing",newAddress)).ok).toBe(false);
-    expect((await getReceptionContacts(id)).addresses).toHaveLength(initial.addresses.length+1);
+    expect((await getReceptionContacts(id)).addresses).toHaveLength(initial.addresses.length+2);
   });
   it("creates multiple recipients and receives individually numbered packages atomically",async()=>{
     cookieJar.set("ayl_session",{value:adminSession});
