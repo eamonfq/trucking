@@ -3,6 +3,9 @@ import { beforeAll, afterAll, describe, expect, it, vi } from "vitest";
 import {saveAdministrativeStaff,getAdministrativeStaff,inviteAdministrativeStaff} from "@/lib/auth/staff-actions";
 import {requireAdminUser} from "@/lib/auth/actions";
 import {getDeletionDirectory,previewDeletion,deleteTestRecord} from "@/lib/auth/deletion-actions";
+import {correctInvoice} from "@/lib/auth/invoice-actions";
+import {previewCustomerArchive,archiveCustomerBoxes,restoreCustomerBoxes,getCustomerArchives} from "@/lib/auth/customer-archive-actions";
+import {invoiceCorrectionDraft} from "@/lib/utils/invoice-correction";
 import {createCustomerAsAdmin,updateCustomerProfile} from "@/lib/auth/admin-actions";
 import {GET as previewEmail} from "@/app/api/emails/preview/route";
 import {GET as invoicePdf} from "@/app/api/facturas/[id]/pdf/route";
@@ -33,7 +36,7 @@ vi.mock("next/headers", () => ({ headers: async () => new Headers(), cookies: as
 vi.mock("next/server", () => ({ after: () => {} }));
 vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
 vi.mock("next/navigation", () => ({ redirect: (path: string) => { throw new Error(`REDIRECT:${path}`); } }));
-import { withStore } from "@/lib/db/store";
+import { withStore,collection } from "@/lib/db/store";
 import { users, addresses, boxes, shipments, invoices, trucks, warehouses } from "@/lib/db/collections";
 import { runMutation } from "@/lib/db/mutation";
 import { invoiceTotal } from "@/lib/utils/invoices";
@@ -1384,6 +1387,96 @@ describe.sequential("Administrative staff permissions in MySQL",()=>{
   expect((await requireAdminUser()).id).toBe(current.id);
  });
 });
+describe.sequential("Full-admin invoice corrections and recoverable duplicate packages",()=>{
+ let customerId="",originId="",packageIds:string[]=[],invoiceId="",receptionCode="";
+ it("creates an isolated four-package reception for correction tests",async()=>{
+  cookieJar.set("ayl_session",{value:adminSession});
+  const customer=await createCustomerAsAdmin({firstName:"Corrección",paternalLastName:"Duplicados",phone:"5512345678"});
+  if(!customer.ok)throw new Error(customer.error);customerId=customer.user.id;
+  originId=await withStore(async()=>warehouses.find(w=>w.active&&(w.kind==="origen"||w.kind==="ambos"))!.id);
+  const item={customer:customerId,originWarehouseId:originId,billingMode:"manual",customPriceUsd:80,weightLb:10,invoiceNow:true};
+  const received=await receivePackageGroup([item,item,item,item],new FormData(),{method:"efectivo",warehouseId:originId});
+  if(!received.ok)throw new Error(received.error);
+  packageIds=received.results.map(r=>r.box.id);invoiceId=received.results[0].invoice!.id;receptionCode=received.results[0].box.receptionGroup!.code!;
+  expect(received.total).toBe(320);expect(await getCustomerArchives(customerId)).toEqual([]);
+  // Test-only activation so the client inventory can be checked independently of invitation delivery.
+  await root.execute("UPDATE accounts SET verified_at=UTC_TIMESTAMP(3) WHERE user_id=?",[customerId]);
+ });
+ it("edits paid items and payment method atomically, preserving identifiers and an audit snapshot",async()=>{
+  const before=await withStore(async()=>structuredClone(invoices.find(i=>i.id===invoiceId)!));
+  const values=invoiceCorrectionDraft(before);values.lines[0]={...values.lines[0],categoryName:"Servicio corregido",description:"Carga descrita",quantity:2,unitPriceUsd:50};
+  values.payments[0]={...values.payments[0],amountUsd:100,method:"cheque",externalReference:"CHEQUE-QA"};
+  const result=await correctInvoice({id:invoiceId,expected:recordRevision(before),reason:"Ajuste documental autorizado",values});
+  expect(result.ok).toBe(true);if(!result.ok)throw new Error(result.error);
+  expect(result.invoice).toMatchObject({id:before.id,number:before.number,userId:customerId,boxIds:before.boxIds,status:"pagada",collectionMethod:"cheque"});
+  expect(invoiceTotal(result.invoice)).toBe(100);
+  expect(result.invoice.payments?.[0]).toMatchObject({folio:before.payments![0].folio,actorId:before.payments![0].actorId,method:"cheque",amountUsd:100,externalReference:"CHEQUE-QA"});
+  expect(result.invoice.paymentReport?.amountUsd).toBe(100);
+  expect(await withStore(async()=>collection<{id:string;kind:string;entityId:string;reason:string}>("operationalEdits").some(e=>e.kind==="invoice"&&e.entityId===invoiceId))).toBe(true);
+  const persisted=await withStore(async()=>structuredClone(invoices.find(i=>i.id===invoiceId)!));
+  expect(recordRevision(persisted)).toBe(recordRevision(result.invoice));
+  expect((await correctInvoice({id:invoiceId,expected:recordRevision(before),reason:"Intento de edición desactualizado",values})).ok).toBe(false);
+  const invalid=invoiceCorrectionDraft(persisted);invalid.lines[0].unitPriceUsd=70;
+  expect((await correctInvoice({id:invoiceId,expected:recordRevision(persisted),reason:"Importes inconsistentes",values:invalid})).ok).toBe(false);
+  expect(await withStore(async()=>recordRevision(invoices.find(i=>i.id===invoiceId)))).toBe(recordRevision(persisted));
+ });
+ it("protects Clover provider confirmation while allowing same-total text corrections",async()=>{
+  const cloverId=await withStore(async()=>{const invoice=invoices.find(i=>i.boxIds?.includes(packageIds[1]))!;invoice.cloverPaymentId="fixture-provider-charge";invoice.collectionMethod="clover";invoice.payments![0].method="clover";delete invoice.payments![0].warehouseId;delete invoice.payments![0].warehouseName;return invoice.id;},true);
+  const original=await withStore(async()=>structuredClone(invoices.find(i=>i.id===cloverId)!));
+  const values=invoiceCorrectionDraft(original);values.lines[0].description="Descripción corregida sin nuevo cargo";
+  const result=await correctInvoice({id:cloverId,expected:recordRevision(original),reason:"Precisar descripción",values});expect(result.ok).toBe(true);if(!result.ok)throw new Error(result.error);
+  expect(result.invoice.payments).toEqual(original.payments);expect(result.invoice.paymentReport).toEqual(original.paymentReport);
+  values.lines[0].unitPriceUsd=90;
+  expect((await correctInvoice({id:cloverId,expected:recordRevision(result.invoice),reason:"Cambio de cargo bloqueado",values})).ok).toBe(false);
+ });
+ it("removes one duplicate from the dossier and client inventory without changing invoices or payment records",async()=>{
+  const before=await withStore(async()=>recordRevision(invoices.filter(i=>i.userId===customerId)));
+  const preview=await previewCustomerArchive({id:packageIds[0],scope:"piece"});if(!preview.ok)throw new Error(preview.error);
+  expect(preview.count).toBe(1);expect(preview.paidInvoicesKept).toBe(1);
+  expect((await archiveCustomerBoxes({id:packageIds[0],scope:"piece",revision:preview.revision,reason:"Caja asignada dos veces",confirmation:"incorrecta"})).ok).toBe(false);
+  const removed=await archiveCustomerBoxes({id:packageIds[0],scope:"piece",revision:preview.revision,reason:"Caja asignada dos veces",confirmation:"RETIRAR"});if(!removed.ok)throw new Error(removed.error);
+  expect(await withStore(async()=>recordRevision(invoices.filter(i=>i.userId===customerId)))).toBe(before);
+  const active=await withStore(async()=>boxes.filter(b=>b.userId===customerId));expect(active).toHaveLength(3);
+  expect(active.map(b=>b.receptionGroup!.index).sort()).toEqual([1,2,3]);expect(active.every(b=>b.receptionGroup!.total===3)).toBe(true);
+  cookieJar.set("ayl_session",{value:await createSessionToken(customerId,"cliente")});
+  expect(await logisticsService.getBoxes()).toHaveLength(3);
+  await expect(getCustomerArchives(customerId)).rejects.toThrow("REDIRECT:");
+  cookieJar.set("ayl_session",{value:adminSession});
+  expect((await getCustomerArchives(customerId))[0]).toMatchObject({id:removed.archiveId,count:1});
+  expect((await restoreCustomerBoxes(removed.archiveId)).ok).toBe(true);
+  expect((await restoreCustomerBoxes(removed.archiveId)).ok).toBe(false);
+  expect(await withStore(async()=>boxes.filter(b=>b.userId===customerId).map(b=>b.id).sort())).toEqual([...packageIds].sort());
+ });
+ it("removes and restores a complete reception and never reuses archived codes",async()=>{
+  cookieJar.set("ayl_session",{value:adminSession});
+  const before=await withStore(async()=>recordRevision(invoices.filter(i=>i.userId===customerId)));
+  const preview=await previewCustomerArchive({id:packageIds[0],scope:"reception"});if(!preview.ok)throw new Error(preview.error);expect(preview.count).toBe(4);
+  const removed=await archiveCustomerBoxes({id:packageIds[0],scope:"reception",revision:preview.revision,reason:"Recepción duplicada completa",confirmation:"RETIRAR"});if(!removed.ok)throw new Error(removed.error);
+  expect(await withStore(async()=>boxes.filter(b=>b.userId===customerId))).toEqual([]);
+  expect(await withStore(async()=>recordRevision(invoices.filter(i=>i.userId===customerId)))).toBe(before);
+  const next=await receivePackageGroup([{customer:customerId,originWarehouseId:originId,billingMode:"peso-real",weightLb:1}],new FormData());if(!next.ok)throw new Error(next.error);
+  expect(next.results[0].box.receptionGroup!.code).not.toBe(receptionCode);
+  expect((await restoreCustomerBoxes(removed.archiveId)).ok).toBe(true);
+  expect(await getCustomerArchives(customerId)).toEqual([]);
+ });
+ it("rejects stale previews, moved packages and limited administrators",async()=>{
+  cookieJar.set("ayl_session",{value:adminSession});
+  const preview=await previewCustomerArchive({id:packageIds[0],scope:"piece"});if(!preview.ok)throw new Error(preview.error);
+  await withStore(async()=>{boxes.find(b=>b.id===packageIds[0])!.weightLb=11;},true);
+  expect((await archiveCustomerBoxes({id:packageIds[0],scope:"piece",revision:preview.revision,reason:"Vista previa vieja",confirmation:"RETIRAR"})).ok).toBe(false);
+  await withStore(async()=>{trucks[0].boxIds.push(packageIds[0]);},true);
+  expect((await previewCustomerArchive({id:packageIds[0],scope:"piece"})).ok).toBe(false);
+  await withStore(async()=>{trucks[0].boxIds=trucks[0].boxIds.filter(id=>id!==packageIds[0]);},true);
+  const staff=(await getAdministrativeStaff()).find(u=>u.email==="rbac-reception@example.invalid")!;
+  cookieJar.set("ayl_session",{value:await createSessionToken(staff.id,"admin")});
+  await expect(previewCustomerArchive({id:packageIds[0],scope:"piece"})).rejects.toThrow("REDIRECT:");
+  await expect(archiveCustomerBoxes({})).rejects.toThrow("REDIRECT:");
+  await expect(restoreCustomerBoxes("any")).rejects.toThrow("REDIRECT:");
+  await expect(correctInvoice({})).rejects.toThrow("REDIRECT:");
+  cookieJar.set("ayl_session",{value:adminSession});
+ });
+});
+
 describe.sequential("Optional customer contact and full-admin test cleanup",()=>{
  it("receives 13 jointly weighed packages with a custom rate and cash plus Zelle exactly once",async()=>{
   cookieJar.set('ayl_session',{value:adminSession});
