@@ -919,7 +919,8 @@ describe.sequential("Real MySQL authentication and operations", () => {
     const results=await Promise.all([
       receiveBoxWithPhoto(input,new FormData(),{method:"efectivo"}),
       receiveBoxWithPhoto(input,new FormData(),{method:"transferencia",amount:125,reference:"BANK-EXTERNAL"}),
-      receiveBoxWithPhoto(input,new FormData(),{method:"deposito",amount:125})
+      receiveBoxWithPhoto(input,new FormData(),{method:"deposito",amount:125}),
+      receiveBoxWithPhoto(input,new FormData(),{method:"cheque",amount:125,reference:"CH-0042"})
     ]);
     const folios:string[]=[];
     for(const result of results){
@@ -928,10 +929,38 @@ describe.sequential("Real MySQL authentication and operations", () => {
       expect(payment).toMatchObject({status:"confirmado",amountUsd:125,warehouseId:"qa-location",customerId:operationClient,actorId:userId,confirmedBy:userId,boxIds:[result.box.id]});
       expect(payment.recordedAt).toBeTruthy();expect(payment.folio).toMatch(/^PAG-\d{4}-\d{6}$/);folios.push(payment.folio);
     }
-    expect(new Set(folios).size).toBe(3);
+    expect(new Set(folios).size).toBe(4);
     if(results[0].ok)expect(results[0].invoice?.payments?.[0].externalReference).toBeUndefined();
     if(results[1].ok)expect(results[1].invoice?.payments?.[0].externalReference).toBe("BANK-EXTERNAL");
+    if(results[3].ok)expect(results[3].invoice?.payments?.[0]).toMatchObject({method:"cheque",externalReference:"CH-0042"});
     expect((await receiveBoxWithPhoto(input,new FormData(),{method:"deposito",amount:1})).ok).toBe(false);
+  });
+
+  it("validates cheque totals atomically, supports split collection and keeps client reports pending review",async()=>{
+    cookieJar.set("ayl_session",{value:adminSession});
+    const item={customer:operationClient,length:10,width:16,height:12,weightLb:20,reject:false,billingMode:"manual",customPriceUsd:125};
+    const before=await withStore(async()=>boxes.length);
+    expect((await receivePackageGroup([item,item],new FormData(),{method:"cheque",amount:125,warehouseId:"qa-location"})).ok).toBe(false);
+    expect(await withStore(async()=>boxes.length)).toBe(before);
+    const group=await receivePackageGroup([item,item],new FormData(),{method:"cheque",amount:250,warehouseId:"qa-location"});
+    expect(group.ok).toBe(true);if(!group.ok)throw new Error(group.error);
+    for(const row of group.results){expect(row.invoice?.collectionMethod).toBe("cheque");expect(row.invoice?.payments?.at(-1)).toMatchObject({method:"cheque",status:"confirmado",amountUsd:125});}
+    const pending=await receiveBoxWithPhoto(item,new FormData(),{method:"destino"});
+    if(!pending.ok||!pending.invoice)throw new Error("pending cheque invoice");
+    const mixed=await collectDestinationPayment(pending.invoice.id,{method:"mixto",parts:[{method:"efectivo",amount:50},{method:"cheque",amount:75,reference:"CH-MIXED"}]},new FormData());
+    expect(mixed.ok).toBe(true);if(!mixed.ok)throw new Error(mixed.error);
+    expect(mixed.invoice.payments?.find(p=>p.method==="cheque")).toMatchObject({status:"confirmado",amountUsd:75,externalReference:"CH-MIXED"});
+    const reportable=await receiveBoxWithPhoto(item,new FormData(),{method:"destino"});
+    if(!reportable.ok||!reportable.invoice)throw new Error("client cheque invoice");
+    cookieJar.set("ayl_session",{value:clientSession});
+    const reported=await reportInvoicePayment(reportable.invoice.id,{amount:125,method:"Cheque",reference:"CH-CLIENT"});
+    expect(reported.ok).toBe(true);if(!reported.ok)throw new Error(reported.error);
+    expect(reported.invoice.status).toBe("pago-reportado");
+    expect(reported.invoice.payments?.at(-1)).toMatchObject({method:"cheque",status:"pendiente",externalReference:"CH-CLIENT"});
+    cookieJar.set("ayl_session",{value:adminSession});
+    const approved=await approvePayment(reported.invoice.id,"Cheque confirmado por operaciones",reported.invoice.paymentReport!.reportedAt);
+    expect(approved.ok).toBe(true);if(!approved.ok)throw new Error(approved.error);
+    expect(approved.invoice.payments?.at(-1)).toMatchObject({method:"cheque",status:"confirmado"});
   });
 
   it("configures new destinations and preserves routes after removing them from new travel options", async () => {
@@ -1102,18 +1131,29 @@ describe.sequential("Real MySQL authentication and operations", () => {
   it("persists catalog fixed prices per box independently of volume and weight rates",async()=>{
     cookieJar.set("ayl_session",{value:adminSession});
     const origin=(await getWarehouseAdministration()).warehouses.find(w=>w.kind==="origen")!;
-    const category=(await configService.getRateTable())[0];
-    const base={customer:operationClient,originWarehouseId:origin.id,billingMode:"fijo",...category.dimensions,overrideCategory:category.id,overrideReason:"Selección de precio fijo por caja del catálogo.",contentsNote:"  Herramientas y ropa  ",reject:false};
-    const result=await receivePackageGroup([{...base,weightLb:1},{...base,weightLb:2}],new FormData(),{method:"destino",warehouseId:"qa-location"});
+    const rates=await configService.getRateTable();
+    const categories=[rates[0],rates[0],rates[1],rates[2]];
+    const base={customer:operationClient,originWarehouseId:origin.id,billingMode:"fijo",overrideReason:"Selección de precio fijo por caja del catálogo.",contentsNote:"  Herramientas y ropa  ",reject:false};
+    const items=categories.map((category,index)=>({...base,...category.dimensions,overrideCategory:category.id,weightLb:index+1}));
+    const result=await receivePackageGroup(items,new FormData(),{method:"destino",warehouseId:"qa-location"});
     expect(result.ok).toBe(true);if(!result.ok)throw new Error(result.error);
-    expect(result.total).toBe(category.priceUsd*2);
-    for(const item of result.results){
+    expect(result.total).toBe(categories.reduce((sum,category)=>sum+category.priceUsd,0));
+    expect(result.results).toHaveLength(4);
+    const groupCode=result.results[0].box.receptionGroup!.code;
+    for(const [index,item] of result.results.entries()){
+      const category=categories[index];
       const saved=await logisticsService.getBoxById(item.box.id);
       expect(saved?.billing).toMatchObject({mode:"fijo",amountUsd:category.priceUsd});
       expect(saved?.categoryId).toBe(category.id);
       expect(saved?.dimensions).toEqual(category.dimensions);
+      expect(saved?.weightLb).toBe(index+1);
+      expect(saved?.receptionGroup).toMatchObject({code:groupCode,index:index+1,total:4});
       expect(saved?.contentsNote).toBe("Herramientas y ropa");
     }
+    const before=(await logisticsService.getBoxes()).length;
+    const invalid=await receivePackageGroup([items[0],{...items[1],weightLb:rates[0].maxWeightLb+1}],new FormData(),{method:"destino",warehouseId:"qa-location"});
+    expect(invalid.ok).toBe(false);
+    expect((await logisticsService.getBoxes()).length).toBe(before);
   });
   it("persists independent weight, volume and manual receipts without inventing dimensions",async()=>{
     cookieJar.set("ayl_session",{value:adminSession});

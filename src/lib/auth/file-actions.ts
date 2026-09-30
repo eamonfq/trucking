@@ -66,7 +66,7 @@ export async function receivePackageGroup(input:unknown,data:FormData,paymentInp
     const total=results.reduce((sum,r)=>sum+(r.invoice?Math.round(invoiceTotal(r.invoice)*100):0),0)/100;
     if(payment?.success){
       if(results.some(r=>!r.invoice||r.box.status==="rechazada"))return {ok:false as const,error:"No se puede cobrar un grupo con piezas rechazadas."};
-      if(["tarjeta","transferencia","deposito","zelle"].includes(payment.data.method)&&Math.abs((payment.data.amount??0)-total)>0.001)return {ok:false as const,error:`El monto debe cubrir el total del grupo: USD ${total.toFixed(2)}.`};
+      if(["tarjeta","transferencia","deposito","zelle","cheque"].includes(payment.data.method)&&Math.abs((payment.data.amount??0)-total)>0.001)return {ok:false as const,error:`El monto debe cubrir el total del grupo: USD ${total.toFixed(2)}.`};
       if(payment.data.method==="mixto"){const mixed=await recordMixedPayments(results.map(r=>r.invoice!),payment.data);if(!mixed.ok)return mixed;}
       else for(const result of results){const saved=await recordWarehousePayment(result.invoice!.id,{...payment.data,amount:invoiceTotal(result.invoice!)},null);if(!saved.ok)return saved;result.invoice=saved.invoice;}
     }
@@ -83,7 +83,7 @@ export async function completeReceptionPayment(requestId:string,input:unknown){
   const parsed=receptionPaymentSchema.safeParse(input);if(!parsed.success)return {ok:false as const,error:'Revisa el método, monto y ubicación.'};
   const result=savedReception(request),payment=parsed.data;
   if(result.results.some(r=>!r.invoice||r.box.status==='rechazada'))return {ok:false as const,error:'La recepción no admite cobros.'};
-  if(['tarjeta','transferencia','deposito','zelle'].includes(payment.method)&&Math.abs((payment.amount??0)-result.total)>0.001)return {ok:false as const,error:'El monto debe cubrir el total exacto de la recepción.'};
+  if(['tarjeta','transferencia','deposito','zelle','cheque'].includes(payment.method)&&Math.abs((payment.amount??0)-result.total)>0.001)return {ok:false as const,error:'El monto debe cubrir el total exacto de la recepción.'};
   if(result.results.every(r=>r.invoice?.collectionMethod===payment.method&&(r.invoice.status==='pagada'||(payment.method==='destino'&&r.invoice.status==='pendiente-pago-destino'))))return result;
   if(result.results.some(r=>r.invoice?.cloverPaymentId))return {ok:false as const,error:'Clover tiene un cargo en curso o confirmado. Verifica su estado antes de usar otro método.'};
   if(payment.method==="mixto"){const mixed=await recordMixedPayments(result.results.map(r=>r.invoice!),payment);if(!mixed.ok)return mixed;}
@@ -185,7 +185,7 @@ async function recordWarehousePayment(invoiceId: string, payment: z.output<typeo
   const invoice = invoices.find(item => item.id === invoiceId);
   if(payment.method==="mixto"&&invoice){const mixed=await recordMixedPayments([invoice],payment);return mixed.ok?{ok:true as const,invoice}:mixed;}
   if (!invoice || !["emitida", "pendiente-pago-destino", "vencida"].includes(invoice.status)) return {ok:false as const,error:"La factura ya cambió. Actualiza antes de registrar el cobro."};
-  if (["tarjeta","transferencia","deposito","zelle"].includes(payment.method) && !matchesInvoiceTotal(invoice, payment.amount ?? 0)) return {ok:false as const,error:"El monto recibido debe coincidir con el total exacto de la factura."};
+  if (["tarjeta","transferencia","deposito","zelle","cheque"].includes(payment.method) && !matchesInvoiceTotal(invoice, payment.amount ?? 0)) return {ok:false as const,error:"El monto recibido debe coincidir con el total exacto de la factura."};
   if(!paymentLocation(payment.warehouseId))return {ok:false as const,error:"Selecciona una ubicación activa para el cobro."};
   const actor = await requireAdminUser(["recepcion","facturas"]);
   const at = new Date().toISOString();

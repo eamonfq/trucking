@@ -167,8 +167,8 @@ export type Invoice = {
   receptionActorId?: string;
   cloverPaymentId?: string;
   payments?: PaymentRecord[];
-  collectionReferences?: Array<{reference:string;method:"efectivo"|"destino"|"tarjeta"|"transferencia"|"deposito"|"zelle"|"mixto"|"clover";at:string}>;
-  collectionMethod?: "efectivo" | "destino" | "tarjeta" | "transferencia" | "deposito" | "zelle" | "mixto" | "clover";
+  collectionReferences?: Array<{reference:string;method:"efectivo"|"destino"|"tarjeta"|"transferencia"|"deposito"|"zelle"|"cheque"|"mixto"|"clover";at:string}>;
+  collectionMethod?: "efectivo" | "destino" | "tarjeta" | "transferencia" | "deposito" | "zelle" | "cheque" | "mixto" | "clover";
   excessFeeUsd?: number;
   id: string;
   number: string;

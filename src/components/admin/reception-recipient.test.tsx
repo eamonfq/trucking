@@ -35,10 +35,10 @@ it('charges fixed catalog prices for multiple boxes and clears the selection whe
  expect(cards.textContent).toContain('$80.00');
  expect(cards.textContent).toContain('$110.00');
  expect(cards.textContent).not.toContain('$36.48');
- await act(async()=>cards.querySelector('button')!.click());
+ await act(async()=>cards.querySelector<HTMLButtonElement>('[aria-label="Añadir caja Small"]')!.click());
  await fill('weightLb','40');
  expect(node.querySelector('[aria-label="Total de recepción"]')?.textContent).toContain('$80.00');
- await act(async()=>node.querySelector<HTMLButtonElement>('[aria-label="Agregar un paquete"]')!.click());
+ await act(async()=>node.querySelector<HTMLButtonElement>('[aria-label="Añadir caja Small"]')!.click());
  const weight=node.querySelector<HTMLInputElement>('[aria-label="Paquete 2 · Peso (lb)"]')!;
  await act(async()=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(weight,'45');weight.dispatchEvent(new Event('input',{bubbles:true}));});
  expect(node.querySelector('[aria-label="Total de recepción"]')?.textContent).toContain('$160.00');
@@ -51,14 +51,52 @@ it('charges fixed catalog prices for multiple boxes and clears the selection whe
  expect(node.querySelector('[aria-label="Precios fijos por caja"]')).toBeNull();
  expect(node.querySelector('[aria-label="Total de recepción"]')?.textContent).toContain('$72.96');
 });
+it('combines two Small, one Medium and one Large with independent weights and a live fixed total',async()=>{
+ vi.mocked(getReceptionContacts).mockResolvedValue({recipients:[person],addresses:[addr]});
+ vi.mocked(receivePackageGroup).mockResolvedValue({ok:false,error:'Captured'});
+ const {node}=mount(<ReceptionForm users={[]} defaultCustomerId="u" rates={[...BOX_CATEGORIES]} origins={[{id:'origin',name:'Origen'}]} excessPolicy="recargo"/>);await act(async()=>{});
+ await act(async()=>{const select=node.querySelector<HTMLSelectElement>('[name="billingMode"]')!;select.value='fijo';select.dispatchEvent(new Event('change',{bubbles:true}));});
+ for(const size of ['Small','Small','Medium','Large'])await act(async()=>node.querySelector<HTMLButtonElement>(`[aria-label="Añadir caja ${size}"]`)!.click());
+ expect(node.querySelector('[aria-label="Composición de cajas"]')?.textContent).toContain('2 × Small');
+ expect(node.querySelector('[aria-label="Total de recepción"]')?.textContent).toContain('$450.00');
+ expect(node.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true);
+ expect(Array.from(node.querySelectorAll<HTMLInputElement>('input[name^="catalogWeight"]')).every(input=>input.value==='')).toBe(true);
+ for(const [index,weight] of [20,25,40,60].entries())await fill(index===0?'weightLb':`catalogWeight${index+1}`,String(weight));
+ const third=node.querySelector<HTMLSelectElement>('[aria-label="Paquete 3 · Caja del catálogo"]')!;
+ await act(async()=>{third.value='large';third.dispatchEvent(new Event('change',{bubbles:true}));});
+ expect(node.querySelector('[aria-label="Total de recepción"]')?.textContent).toContain('$520.00');
+ expect(node.querySelector<HTMLInputElement>('[name="catalogWeight3"]')?.value).toBe('40');
+ await act(async()=>{third.value='medium';third.dispatchEvent(new Event('change',{bubbles:true}));});
+ expect(node.querySelector('[aria-label="Total de recepción"]')?.textContent).toContain('4 de 4 cajas con peso validado');
+ expect(node.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
+ await act(async()=>node.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ const batch=vi.mocked(receivePackageGroup).mock.calls[0][0] as Array<Record<string,unknown>>;
+ expect(batch).toHaveLength(4);
+ expect(batch.map(item=>item.overrideCategory)).toEqual(['small','small','medium','large']);
+ expect(batch.map(item=>item.weightLb)).toEqual([20,25,40,60]);
+ expect(batch.map(item=>[item.length,item.width,item.height])).toEqual([[10,16,12],[10,16,12],[16,20,15],[16,26,15]]);
+ expect(batch.every(item=>item.billingMode==='fijo')).toBe(true);
+ // Switching away and back must preserve the mixed catalog without stale form values.
+ const method=node.querySelector<HTMLSelectElement>('[name="billingMode"]')!;
+ await act(async()=>{method.value='volumen';method.dispatchEvent(new Event('change',{bubbles:true}));});
+ await act(async()=>{method.value='fijo';method.dispatchEvent(new Event('change',{bubbles:true}));});
+ expect(node.querySelector('[aria-label="Total de recepción"]')?.textContent).toContain('$450.00');
+ expect(node.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
+ vi.mocked(receivePackageGroup).mockClear();
+ await act(async()=>node.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ expect(receivePackageGroup).toHaveBeenCalledTimes(1);
+});
 it('does not silently upgrade a selected fixed box when it exceeds the catalog limit',async()=>{
  vi.mocked(getReceptionContacts).mockResolvedValue({recipients:[person],addresses:[addr]});
  const {node}=mount(<ReceptionForm users={[]} defaultCustomerId="u" rates={[...BOX_CATEGORIES]} origins={[{id:'origin',name:'Origen'}]} excessPolicy="recargo"/>);await act(async()=>{});
  await act(async()=>{const select=node.querySelector<HTMLSelectElement>('[name="billingMode"]')!;select.value='fijo';select.dispatchEvent(new Event('change',{bubbles:true}));});
- await act(async()=>node.querySelector<HTMLButtonElement>('[aria-label="Precios fijos por caja"] button')!.click());
+ await act(async()=>node.querySelector<HTMLButtonElement>('[aria-label="Añadir caja Small"]')!.click());
  await fill('weightLb','55');
- expect(node.textContent).toContain('La caja elegida no admite este peso');
+ expect(node.textContent).toContain('la caja elegida no admite este peso');
  expect(node.querySelector('[aria-label="Total de recepción"]')?.textContent).toContain('0 de 1');
+ expect(node.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true);
+ await act(async()=>node.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ expect(receivePackageGroup).not.toHaveBeenCalled();
 });
 it('captures one group weight and a variable rate with cash and Zelle without thirteen weight inputs',async()=>{
  vi.mocked(getReceptionContacts).mockResolvedValue({recipients:[person],addresses:[addr]});
@@ -77,6 +115,18 @@ it('captures one group weight and a variable rate with cash and Zelle without th
  await act(async()=>Array.from(node.querySelectorAll('button')).filter(b=>b.textContent==='Completar restante')[1].click());
  await act(async()=>node.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
  const args=vi.mocked(receivePackageGroup).mock.calls[0];expect(args[0]).toHaveLength(13);expect((args[0] as Array<{contentsNote?:string}>).every(item=>item.contentsNote==='13 cajas de ropa y artículos personales')).toBe(true);expect(args[4]).toEqual({totalWeightLb:726});expect(args[2]).toMatchObject({method:'mixto',parts:[{method:'efectivo',amount:'1000'},{method:'zelle',amount:'1541.00'}]});
+});
+it('submits a cheque with its amount and optional number from reception',async()=>{
+ vi.mocked(getReceptionContacts).mockResolvedValue({recipients:[person],addresses:[addr]});
+ vi.mocked(receivePackageGroup).mockResolvedValue({ok:false,error:'Captured'});
+ const {node}=mount(<ReceptionForm users={[]} defaultCustomerId="u" rates={[]} origins={[{id:'origin',name:'Origen'}]} locations={[{id:'origin',name:'Origen'}]} excessPolicy="recargo"/>);await act(async()=>{});
+ await fill('weightLb','10');
+ await act(async()=>node.querySelector<HTMLInputElement>('input[value="cheque"]')!.click());
+ await fill('cardAmount','32');await fill('paymentReference','CH-0042');
+ expect(node.textContent).toContain('Número de cheque / referencia (opcional)');
+ expect(node.querySelector<HTMLInputElement>('[name="paymentReference"]')?.required).toBe(false);
+ await act(async()=>node.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ expect(vi.mocked(receivePackageGroup).mock.calls[0][2]).toMatchObject({method:'cheque',amount:'32',reference:'CH-0042',warehouseId:'origin'});
 });
 it('shows secure fields before saving and changes a declined card to cash without creating more packages',async()=>{
  vi.mocked(cloverAvailability).mockResolvedValue({enabled:true,environment:'sandbox',issues:[]});
