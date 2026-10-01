@@ -16,8 +16,8 @@ function selection(id:string,scope:"piece"|"reception"){
  const root=boxes.find(b=>b.id===id);if(!root)throw new Error("La caja ya no está en el inventario activo.");
  const selected=scope==="reception"&&root.receptionGroup?boxes.filter(b=>b.receptionGroup?.id===root.receptionGroup!.id):[root];
  if(selected.some(b=>b.userId!==root.userId))throw new Error("El grupo incluye a otro cliente. Revisa sus vínculos.");
- if(selected.some(b=>b.truckId||b.shipmentId||shipments.some(s=>s.boxIds.includes(b.id))||trucks.some(t=>t.boxIds.includes(b.id))))throw new Error("Primero retira la asignación al envío o camión. No se alteran movimientos logísticos desde esta corrección.");
- if(selected.some(b=>!["pre-alertada","en-bodega","rechazada","excede-categoria"].includes(b.status)))throw new Error("Solo se retiran duplicados antes de su despacho.");
+ if(selected.some(b=>b.truckId||b.shipmentId||shipments.some(s=>s.boxIds.includes(b.id))||trucks.some(t=>t.boxIds.includes(b.id))))throw new Error("Primero retira la asignación al envío o camión. El retiro no modifica movimientos logísticos.");
+ if(selected.some(b=>!["pre-alertada","en-bodega","rechazada","excede-categoria"].includes(b.status)))throw new Error("Solo se pueden retirar cajas o recepciones antes de su despacho.");
  if(scope==="piece"&&root.receptionGroup?.total!==1&&(root.billing?.groupWeight||root.receptionGroup?.groupWeight))throw new Error("Esta caja usa un peso conjunto. Retira la recepción completa, no una pieza con peso desconocido.");
  const ids=new Set(selected.map(b=>b.id)),linked=invoices.filter(i=>i.boxIds?.some(boxId=>ids.has(boxId))),peers=root.receptionGroup?boxes.filter(b=>b.receptionGroup?.id===root.receptionGroup!.id):selected;
  if(linked.some(i=>i.cloverPaymentId&&i.status!=="pagada"))throw new Error("Hay un cobro Clover en curso o por conciliar. Verifica su resultado antes de retirar estas cajas.");
@@ -26,7 +26,7 @@ function selection(id:string,scope:"piece"|"reception"){
 export async function previewCustomerArchive(input:unknown){
  await requireAdminUser();
  const parsed=targetSchema.safeParse(input);if(!parsed.success)return {ok:false as const,error:"Selecciona una caja o recepción."};
- return withStore(async()=>{try{const plan=selection(parsed.data.id,parsed.data.scope);return {ok:true as const,reference:plan.reference,revision:plan.revision,count:plan.selected.length,invoicesKept:plan.linked.length,paidInvoicesKept:plan.linked.filter(i=>i.status==="pagada").length};}catch(error){return {ok:false as const,error:error instanceof Error?error.message:"No se pudo preparar la corrección."};}});
+ return withStore(async()=>{try{const plan=selection(parsed.data.id,parsed.data.scope);return {ok:true as const,reference:plan.reference,revision:plan.revision,count:plan.selected.length,invoicesKept:plan.linked.length,paidInvoicesKept:plan.linked.filter(i=>i.status==="pagada").length};}catch(error){return {ok:false as const,error:error instanceof Error?error.message:"No se pudo preparar el retiro."};}});
 }
 export async function archiveCustomerBoxes(input:unknown){
  return runMutation("admin",async()=>{
@@ -42,8 +42,8 @@ export async function archiveCustomerBoxes(input:unknown){
   // Reversible removal of packages only. Financial records, photos and external payments remain intact.
   for(let index=boxes.length-1;index>=0;index--)if(ids.has(boxes[index].id))boxes.splice(index,1);
   const remaining=plan.peers.filter(b=>!ids.has(b.id)).sort((a,b)=>(a.receptionGroup?.index??0)-(b.receptionGroup?.index??0));
-  for(const [index,box] of remaining.entries())if(box.receptionGroup){box.receptionGroup.index=index+1;box.receptionGroup.total=remaining.length;box.timeline.push({from:box.status,to:box.status,actor:actor.id,at:entry.at,note:`Duplicado retirado ${entry.reference}: ${entry.reason}. Reimprimir etiquetas.`});}
-  users.find(u=>u.id===entry.userId)?.activity.unshift({id:crypto.randomUUID(),type:"correccion",description:`${entry.boxes.length} caja(s) retirada(s) del inventario por duplicado; restaurables. Facturas y pagos conservados. ${entry.reason}`,actor:`${actor.firstName} ${actor.paternalLastName}`,at:entry.at});
+  for(const [index,box] of remaining.entries())if(box.receptionGroup){box.receptionGroup.index=index+1;box.receptionGroup.total=remaining.length;box.timeline.push({from:box.status,to:box.status,actor:actor.id,at:entry.at,note:`Retiro del inventario ${entry.reference}: ${entry.reason}. Reimprimir etiquetas.`});}
+  users.find(u=>u.id===entry.userId)?.activity.unshift({id:crypto.randomUUID(),type:"correccion",description:`${entry.boxes.length} caja(s) retirada(s) del inventario; restaurables. Facturas y pagos conservados. ${entry.reason}`,actor:`${actor.firstName} ${actor.paternalLastName}`,at:entry.at});
   await audit(actor.id,`customer-boxes.archived:${entry.id}`);
   return {ok:true as const,archiveId:entry.id};
  });

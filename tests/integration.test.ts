@@ -1429,12 +1429,15 @@ describe.sequential("Full-admin invoice corrections and recoverable duplicate pa
   values.lines[0].unitPriceUsd=90;
   expect((await correctInvoice({id:cloverId,expected:recordRevision(result.invoice),reason:"Cambio de cargo bloqueado",values})).ok).toBe(false);
  });
- it("removes one duplicate from the dossier and client inventory without changing invoices or payment records",async()=>{
+ it("removes a package at the customer request without assuming a duplicate or changing payments",async()=>{
   const before=await withStore(async()=>recordRevision(invoices.filter(i=>i.userId===customerId)));
   const preview=await previewCustomerArchive({id:packageIds[0],scope:"piece"});if(!preview.ok)throw new Error(preview.error);
   expect(preview.count).toBe(1);expect(preview.paidInvoicesKept).toBe(1);
   expect((await archiveCustomerBoxes({id:packageIds[0],scope:"piece",revision:preview.revision,reason:"Caja asignada dos veces",confirmation:"incorrecta"})).ok).toBe(false);
-  const removed=await archiveCustomerBoxes({id:packageIds[0],scope:"piece",revision:preview.revision,reason:"Caja asignada dos veces",confirmation:"RETIRAR"});if(!removed.ok)throw new Error(removed.error);
+  const removed=await archiveCustomerBoxes({id:packageIds[0],scope:"piece",revision:preview.revision,reason:"Cancelación a solicitud del cliente",confirmation:"RETIRAR"});if(!removed.ok)throw new Error(removed.error);
+  const activity=await withStore(async()=>users.find(u=>u.id===customerId)!.activity[0].description);
+  expect(activity).toContain("Cancelación a solicitud del cliente");expect(activity).not.toMatch(/duplicad/i);
+  expect(await withStore(async()=>boxes.find(b=>b.id===packageIds[1])!.timeline.at(-1)?.note)).not.toMatch(/duplicad/i);
   expect(await withStore(async()=>recordRevision(invoices.filter(i=>i.userId===customerId)))).toBe(before);
   const active=await withStore(async()=>boxes.filter(b=>b.userId===customerId));expect(active).toHaveLength(3);
   expect(active.map(b=>b.receptionGroup!.index).sort()).toEqual([1,2,3]);expect(active.every(b=>b.receptionGroup!.total===3)).toBe(true);

@@ -16,10 +16,13 @@ const preview={ok:true as const,count:4,reference:"BX-1",revision:"a".repeat(64)
 it("requires a preview, reason and confirmation before removing the complete reception",async()=>{
  vi.mocked(previewCustomerArchive).mockResolvedValue(preview);vi.mocked(archiveCustomerBoxes).mockResolvedValue({ok:true,archiveId:"archive"});
  const {dialog,close}=mount();expect(archiveCustomerBoxes).not.toHaveBeenCalled();
+ expect(dialog.querySelector("h2")?.textContent).toBe("Retirar caja o recepción");
  await act(async()=>button(dialog,"Revisar impacto").click());expect(previewCustomerArchive).toHaveBeenCalledWith({id:"box",scope:"reception"});expect(dialog.textContent).toContain("4 factura(s) se conservan");
+ expect(dialog.textContent).not.toMatch(/duplicad/i);
+ expect(dialog.querySelector('input[placeholder]')?.getAttribute("placeholder")).toContain("cancelación del cliente");
  const remove=button(dialog,"Retirar del inventario");expect(remove.disabled).toBe(true);
- act(()=>{fill(dialog,"Motivo del retiro","Recepción duplicada");fill(dialog,"Escribe RETIRAR para confirmar","RETIRAR");});expect(remove.disabled).toBe(false);
- await act(async()=>remove.click());expect(archiveCustomerBoxes).toHaveBeenCalledWith({id:"box",scope:"reception",revision:preview.revision,reason:"Recepción duplicada",confirmation:"RETIRAR"});expect(close).toHaveBeenCalledOnce();expect(refresh).toHaveBeenCalledOnce();
+ act(()=>{fill(dialog,"Motivo del retiro","Cancelación a solicitud del cliente");fill(dialog,"Escribe RETIRAR para confirmar","RETIRAR");});expect(remove.disabled).toBe(false);
+ await act(async()=>remove.click());expect(archiveCustomerBoxes).toHaveBeenCalledWith({id:"box",scope:"reception",revision:preview.revision,reason:"Cancelación a solicitud del cliente",confirmation:"RETIRAR"});expect(close).toHaveBeenCalledOnce();expect(refresh).toHaveBeenCalledOnce();
 });
 it("clears the preview and confirmation when changing from reception to one package",async()=>{
  vi.mocked(previewCustomerArchive).mockResolvedValue(preview);
