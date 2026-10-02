@@ -21,6 +21,11 @@ it("requires a preview, reason and confirmation before removing the complete rec
  expect(dialog.textContent).not.toMatch(/duplicad/i);
  expect(dialog.querySelector('input[placeholder]')?.getAttribute("placeholder")).toContain("cancelación del cliente");
  const remove=button(dialog,"Retirar del inventario");expect(remove.disabled).toBe(true);
+ const body=dialog.querySelector('[data-dialog-body]')!,footer=dialog.querySelector('[data-dialog-footer]')!;
+ expect(body.classList.contains("overflow-y-auto")).toBe(true);
+ expect(dialog.className).toContain("max-h-[calc(100dvh-2rem)]");
+ expect(footer.contains(remove)).toBe(true);expect(body.contains(remove)).toBe(false);
+ expect(body.contains(dialog.querySelector('input[placeholder]'))).toBe(true);
  act(()=>{fill(dialog,"Motivo del retiro","Cancelación a solicitud del cliente");fill(dialog,"Escribe RETIRAR para confirmar","RETIRAR");});expect(remove.disabled).toBe(false);
  await act(async()=>remove.click());expect(archiveCustomerBoxes).toHaveBeenCalledWith({id:"box",scope:"reception",revision:preview.revision,reason:"Cancelación a solicitud del cliente",confirmation:"RETIRAR"});expect(close).toHaveBeenCalledOnce();expect(refresh).toHaveBeenCalledOnce();
 });

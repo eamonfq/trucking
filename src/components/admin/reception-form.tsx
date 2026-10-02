@@ -144,9 +144,9 @@ export function ReceptionForm({ users, prealerts = [], excessPolicy, excessFeeUs
       setPaymentReview(true);setPaymentNotice("El resultado del cargo está en verificación. No cambies de método hasta confirmarlo.");
     }catch{setPaymentNotice("No se confirmó la operación. Consulta las facturas antes de volver a cobrar.");}
     finally{submitLock.current=false;}
-  })(event)} className={`${styles.pos} grid items-start gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(300px,1fr)]`}>
+  })(event)} className={`${styles.pos} grid items-start gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(300px,1fr)]`}>
     <fieldset disabled={isSubmitting||Boolean(pendingReceipt)||receiptUncertain} className="grid min-w-0 gap-4">
-      <section className="grid gap-3 rounded-2xl border border-stone-200 bg-white p-4">
+      <section className="@container grid min-w-0 gap-3 rounded-2xl border border-stone-200 bg-white p-4">
         <Select label="Almacén de origen · recepción" required value={values.originWarehouseId??""} options={[{value:"",label:"Selecciona dónde recibes el paquete"},...origins.map(w=>({value:w.id,label:w.name}))]} onChange={e=>{setValue("originWarehouseId",e.target.value);setPayment(p=>({...p,warehouseId:e.target.value}));}}/>{!origins.length&&<p className="text-sm text-orange-700">Configura primero un almacén de origen activo en Administración → Almacenes.</p>}<div className="flex items-start justify-between gap-3"><StepHeading number="01" title="Cliente y prealerta" description="Cliente y contacto de entrega."/><CustomerQuickCreate compact onCreated={user=>{setCustomers(current=>[...current.filter(item=>item.id!==user.id),user]);setValue("prealertId","");setValue("customer",user.id,{shouldValidate:true});setValue("recipientId","");}}/></div>
         <div className="min-w-0">
           <CustomerSearch users={customers} value={values.customer} error={errors.customer?.message} onChange={id=>{setValue("customer",id,{shouldValidate:true});setValue("prealertId","");setValue("recipientId","");}}/>
@@ -161,7 +161,7 @@ export function ReceptionForm({ users, prealerts = [], excessPolicy, excessFeeUs
           finally{setSelectingPrealert(false);}
         }}/>
       </section>
-      <section className="grid gap-3 rounded-2xl border border-stone-200 bg-white p-4">
+      <section className="@container grid min-w-0 gap-3 rounded-2xl border border-stone-200 bg-white p-4">
         <StepHeading number="02" title="Paquetes y cobro" description="Selecciona cómo se cobrará esta recepción."/>
         <Select label="Método de cobro" options={[{value:"fijo",label:"Precio fijo por caja · catálogo"},{value:"peso-real",label:"Peso · solo libras reales"},{value:"volumen",label:"Volumen · según las medidas"},{value:"manual",label:"Carga especial · precio acordado"},{value:"peso-personalizado",label:"Carga especial · tarifa por libra"}]} {...register("billingMode",{onChange:event=>{setValue("overrideCategory","");setValue("overrideReason","");if(event.target.value==="fijo")updateCatalog(catalogPieces);else if(mode==="fijo")setShared(current=>({...current,dimensions:false,weight:false}));}})}/>
         {mode!=="fijo"&&<div className="py-2"><PackageQuantity value={quantity} onChange={n=>{setQuantity(n);setPieces(current=>Array.from({length:n-1},(_,i)=>current[i]??{...dims,weightLb:0,customPriceUsd:0}));}}/></div>}
@@ -170,7 +170,7 @@ export function ReceptionForm({ users, prealerts = [], excessPolicy, excessFeeUs
         {mode==="peso-personalizado"&&<Input label="Tarifa acordada por libra (USD)" type="number" required min="0.01" step="0.01" error={errors.customRatePerLbUsd?.message} {...register("customRatePerLbUsd",{shouldUnregister:true,setValueAs:v=>v===""?undefined:Number(v)})}/>}
         {quantity>1&&!globalWeight&&mode!=="fijo"&&<div className="grid gap-3 border-y border-stone-100 py-3"><p className="text-xs font-semibold text-navy-600">Confirma qué se repite en las {quantity} piezas</p><div className="flex flex-wrap gap-x-5 gap-y-3">{mode==="volumen"&&<Checkbox label="Mismas dimensiones" checked={shared.dimensions} onChange={e=>setShared(v=>({...v,dimensions:e.target.checked}))}/>}<Checkbox label="Confirmo el mismo peso real" checked={shared.weight} onChange={e=>setShared(v=>({...v,weight:e.target.checked}))}/>{mode==="manual"&&<Checkbox label="Misma cotización por pieza" checked={shared.price} onChange={e=>setShared(v=>({...v,price:e.target.checked}))}/>}</div><p className="text-xs leading-5 text-navy-500">{shared.weight?"Se usará el peso real del paquete 1 para todas las piezas.":"Pesa cada caja e indica su peso en la tabla, aunque tenga las mismas medidas."} Una etiqueta por pieza; la prealerta aplica solo a la primera.</p></div>}
         {mode==="fijo"&&<FixedBoxCatalog rates={rates} pieces={catalogPieces} page={piecePage} onPageChange={setPiecePage} onChange={updateCatalog}/>}
-        {mode!=="fijo"&&<><div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {mode!=="fijo"&&<><div className="grid grid-cols-2 gap-3 @min-[480px]:grid-cols-4">
           {mode==="volumen"&&<><Input label="Largo (in)" type="number" inputMode="decimal" min="0.1" step="0.1" placeholder="0.0" error={errors.length?.message} {...register("length",{shouldUnregister:true})}/>
           <Input label="Ancho (in)" type="number" inputMode="decimal" min="0.1" step="0.1" placeholder="0.0" error={errors.width?.message} {...register("width",{shouldUnregister:true})}/>
           <Input label="Alto (in)" type="number" inputMode="decimal" min="0.1" step="0.1" placeholder="0.0" error={errors.height?.message} {...register("height",{shouldUnregister:true})}/></>}
@@ -188,7 +188,7 @@ export function ReceptionForm({ users, prealerts = [], excessPolicy, excessFeeUs
         <div className={`rounded-xl border p-4 ${values.reject?"border-red-200 bg-red-50":"border-stone-200"}`}><Checkbox label="Rechazar este paquete" {...register("reject")}/>{values.reject&&<div className="mt-4"><Textarea label="Motivo del rechazo" error={errors.rejectionReason?.message} {...register("rejectionReason")}/></div>}</div>
       </section>
     </fieldset>
-    <aside className="lg:sticky lg:top-4 grid min-w-0 gap-4 rounded-2xl border border-stone-200 bg-white p-4">
+    <aside className="xl:sticky xl:top-4 grid min-w-0 gap-4 rounded-2xl border border-stone-200 bg-white p-4">
       <p className="text-lg font-bold">{mode==="fijo"?catalogPieces.length:quantity} paquete(s) · {formatUsd(pendingReceipt?.total??total)}</p><StepHeading number="03" title={values.reject?"Confirmar rechazo":"Forma de pago"} description={values.reject?"No se registrará un cobro para este paquete.":"Selecciona método y ubicación. El folio se genera al guardar."}/>
       {!values.reject&&<fieldset disabled={isSubmitting||paymentReview||receiptUncertain}><PaymentCapture allowSplit locations={locations} value={payment} onChange={setPayment} total={pendingReceipt?.total??total}/></fieldset>}
       {paymentNotice&&<p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm leading-5 text-amber-900">{paymentNotice}</p>}

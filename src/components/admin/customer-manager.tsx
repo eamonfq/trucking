@@ -84,7 +84,7 @@ export function CustomerManager({ initialUsers, initialAddresses, boxes, shipmen
         setSearch(""); setAccountStatus("all"); setCity("all");
         setOpen(false);
         showToast({ title: "Cliente registrado", description: `${result.user.lockerCode} fue asignado. ${result.user.email?"La invitación quedó en cola de correo.":"Sin correo: no se envió invitación."}` });
-      })} className="grid max-h-[68vh] gap-4 overflow-y-auto px-1">
+      })} className="grid min-w-0 gap-4">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><Input label="Nombre" error={errors.firstName?.message} {...register("firstName")} /><Input label="Apellido paterno" error={errors.paternalLastName?.message} {...register("paternalLastName")} /><Input label="Apellido materno" error={errors.maternalLastName?.message} {...register("maternalLastName")} /></div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><Input label="Correo (opcional)" type="email" error={errors.email?.message} {...register("email")} /><Input label="Teléfono" inputMode="tel" error={errors.phone?.message} {...register("phone")} /><Input label="RFC opcional" className="uppercase" error={errors.rfc?.message} {...register("rfc")} /></div>
         <p className="rounded-xl bg-cream-100 p-4 text-sm leading-7 text-ink-700">Si indicas un correo enviaremos una invitación. Sin correo, puedes registrar y atender al cliente; su acceso al portal queda pendiente.</p>

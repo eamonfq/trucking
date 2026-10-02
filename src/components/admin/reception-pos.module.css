@@ -18,6 +18,6 @@
 .pos .pieces input { width:100%; min-width:44px; max-width:94px; min-height:36px; border:1px solid #e7e5e4; border-radius:7px; padding:6px 8px; background:#fff; outline:none; font-variant-numeric:tabular-nums; }
 .pieces input:focus { border-color:#c94e13; box-shadow:0 0 0 2px #c94e1310; }
 .pieces input::-webkit-inner-spin-button { appearance:none; }
-@media (min-width: 1024px) {
+@media (min-width: 1280px) {
   .pos > aside { position: sticky; top: 16px; }
 }

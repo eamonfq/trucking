@@ -55,7 +55,7 @@ export function AddressManager({ initialItems }: { initialItems: Address[] }) {
     <div className="flex flex-wrap items-center justify-between gap-3"><Link href="/cliente/destinatarios" className="text-sm font-bold underline">Ver quién recibe en cada dirección</Link><Button onClick={() => begin()}><Plus className="size-4" />Agregar dirección</Button></div>
     <div className="mt-5">{directory.controls}{items.length ? <div className="grid gap-4 md:grid-cols-2">{directory.visible.map((item) => <ManagerCard key={item.id} label={item.label} detail={formatDeliveryAddress(item)} onEdit={() => begin(item)} onDelete={() => setRemoving(item)} />)}</div> : <EmptyState title="Todavía no tienes direcciones" description="Registra el domicilio en México donde quieres recibir tus cajas." action={<Button onClick={() => begin()}><Plus className="size-4" />Agregar dirección</Button>} />}</div>
     <Dialog open={Boolean(editing)} onClose={() => setEditing(null)} size="large" title={editing === "new" ? "Nueva dirección" : "Editar dirección"} description="Para retiro en bodega basta un nombre o referencia. Completa el domicilio si deseas entrega en casa.">
-      <form onSubmit={save} className="grid max-h-[65vh] gap-4 overflow-y-auto px-1">
+      <form onSubmit={save} className="grid min-w-0 gap-4">
         <Input label="Nombre de bodega o referencia" placeholder="Ej. Bodega Valle de Juárez" error={errors.label?.message} {...register("label")} />
         <div className="grid gap-4 sm:grid-cols-2">
           <Input label="Calle" error={errors.street?.message} {...register("street")} />

@@ -117,6 +117,7 @@ html { scroll-behavior: smooth; }
 body { margin: 0; background: var(--color-cream-50); color: var(--color-navy-900); }
 .text-white\/45 { color: rgb(255 255 255 / 0.65); }
 button, input, select, textarea { font: inherit; }
+fieldset { min-inline-size: 0; }
 button, a { -webkit-tap-highlight-color: transparent; }
 ::selection { background: var(--color-brand-500); color: #fff; }
 
@@ -124,6 +125,22 @@ button, a { -webkit-tap-highlight-color: transparent; }
   outline: 3px solid var(--color-brand-600);
   outline-offset: 3px;
 }
+
+/* Keep focus inside controls: scroll panes and rounded cards clip outer rings. */
+:is(button, input, select, textarea, summary, [role="tab"], a[class]):focus-visible {
+  outline: 2px solid var(--color-brand-600);
+  outline-offset: -3px;
+}
+
+:is(input, select, textarea) {
+  min-width: 0;
+  max-width: 100%;
+  scroll-margin-block: 1rem;
+}
+
+:is(button, a, summary) { scroll-margin-block: 0.5rem; }
+
+[aria-invalid="true"]:focus-visible { outline-color: var(--color-danger); }
 
 /* Trama diagonal para datos pendientes de confirmar con el cliente. */
 .pending-data {

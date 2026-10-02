@@ -104,7 +104,7 @@ it('captures one group weight and a variable rate with cash and Zelle without th
  const {node}=mount(<ReceptionForm users={[]} defaultCustomerId="u" rates={[]} origins={[{id:'origin',name:'Origen'}]} locations={[{id:'origin',name:'Origen'}]} excessPolicy="recargo"/>);await act(async()=>{});
  await act(async()=>{const select=node.querySelector<HTMLSelectElement>('[name="billingMode"]')!;select.value='peso-personalizado';select.dispatchEvent(new Event('change',{bubbles:true}));});
  await act(async()=>{const input=node.querySelector<HTMLInputElement>('[aria-label="Cantidad de paquetes"]')!;Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(input,'13');input.dispatchEvent(new Event('input',{bubbles:true}));});
- await act(async()=>{const select=Array.from(node.querySelectorAll('select')).find(s=>s.closest('label')?.textContent?.includes('Cómo se pesaron'))!;select.value='grupo';select.dispatchEvent(new Event('change',{bubbles:true}));});
+ await act(async()=>{const label=Array.from(node.querySelectorAll('label')).find(l=>l.textContent==='Cómo se pesaron los paquetes')!;const select=document.getElementById(label.htmlFor) as HTMLSelectElement;select.value='grupo';select.dispatchEvent(new Event('change',{bubbles:true}));});
  await fill('weightLb','726');await fill('customRatePerLbUsd','3.50');
  await act(async()=>{const note=node.querySelector<HTMLTextAreaElement>('[name="contentsNote"]')!;Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(note,'13 cajas de ropa y artículos personales');note.dispatchEvent(new Event('input',{bubbles:true}));});
  expect(node.querySelector('[aria-label="Paquete 2 · Peso (lb)"]')).toBeNull();

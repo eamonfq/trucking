@@ -62,7 +62,7 @@ export function CustomerQuickCreate({ onCreated, compact=false }: { compact?:boo
               <Button type="button" onClick={close}>Continuar con la recepción</Button>
             </div>
           </div>
-        : <form onSubmit={(event) => { event.stopPropagation(); void submit(event); }} className="grid max-h-[65vh] gap-4 overflow-y-auto px-1">
+        : <form onSubmit={(event) => { event.stopPropagation(); void submit(event); }} className="grid min-w-0 gap-4">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <Input label="Nombre(s)" error={errors.firstName?.message} {...register("firstName")} />
               <Input label="Apellido paterno" error={errors.paternalLastName?.message} {...register("paternalLastName")} />

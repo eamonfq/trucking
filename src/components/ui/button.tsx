@@ -20,7 +20,7 @@ export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 export function Button({ className, variant = "primary", loading = false, disabled, children, ...props }: ButtonProps) {
   return (
     <button
-      className={cn("inline-flex min-h-12 items-center justify-center gap-2 rounded-md px-5.5 text-sm font-semibold transition duration-200 ease-premium disabled:cursor-not-allowed", variants[variant], className)}
+      className={cn("inline-flex min-h-12 min-w-0 max-w-full items-center justify-center gap-2 rounded-md px-5.5 py-2.5 text-center text-sm font-semibold transition duration-200 ease-premium disabled:cursor-not-allowed [&>svg]:shrink-0", variants[variant], variant !== "primary" && "disabled:opacity-45", className)}
       disabled={disabled || loading}
       aria-busy={loading}
       {...props}

@@ -9,6 +9,6 @@
   border-radius: 10px;
   background: #fff;
 }
-.field:focus-within { border-color: #c84c08; box-shadow: 0 0 0 2px #ffedd5; }
+.field:focus-within { border-color: #c84c08; box-shadow: inset 0 0 0 1px #c84c08; }
 /* Center the secure viewport itself, including Clover's card-brand icon. */
 .field iframe { display: block !important; width: 100% !important; height: 32px !important; min-height: 0 !important; border: 0 !important; }

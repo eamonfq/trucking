@@ -2,6 +2,7 @@
 import type { ReactNode } from "react";
 import { NavigationPending } from "@/components/ui/navigation-pending";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { PencilLine, Boxes, ClipboardCheck, FileText, Gauge, Mail, Menu, Settings, Truck, UsersRound, ListTodo, MessageSquare, PackageCheck } from "lucide-react";
 import { Sidebar } from "@/components/ui/sidebar";
 import { BrandLogo } from "@/components/marketing/brand-logo";
@@ -31,6 +32,8 @@ const navigation = [
 
 export function AdminShell({ children, user }: { children: ReactNode; user: AdminPrincipal }) {
   const items=navigation.filter(item=>canAdminPath(user,item.href));
+  const pathname=usePathname();
+  const activeHref=items.filter(item=>pathname===item.href||pathname.startsWith(`${item.href}/`)).sort((a,b)=>b.href.length-a.href.length)[0]?.href;
   return (
     <AdminAccessProvider user={user}><main className="min-h-screen bg-navy-950 p-3 sm:p-5">
       <div className="mx-auto grid max-w-[1700px] gap-5 lg:grid-cols-[18rem_1fr]">
@@ -55,10 +58,10 @@ export function AdminShell({ children, user }: { children: ReactNode; user: Admi
               <summary className="flex cursor-pointer list-none items-center gap-2 rounded-full border border-stone-200 bg-white px-4 py-2 text-sm font-bold shadow-sm">
                 <Menu className="size-4" /> Menú
               </summary>
-              <nav className="absolute right-0 z-30 mt-2 w-56 rounded-2xl border border-stone-200 bg-white p-2 shadow-xl">
+              <nav className="fixed right-6 top-24 z-30 max-h-[calc(100dvh-7.5rem)] w-64 max-w-[calc(100vw-3rem)] overflow-y-auto overscroll-contain rounded-2xl border border-stone-200 bg-white p-2 shadow-xl">
                 {items.map((item) => (
-                  <Link key={item.href} href={item.href} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-navy-800 hover:bg-orange-50">
-                    <item.icon className="size-4 text-orange-500" />
+                  <Link key={item.href} href={item.href} aria-current={item.href===activeHref?"page":undefined} className={`flex min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold ${item.href===activeHref?"bg-orange-50 text-orange-800":"text-navy-800 hover:bg-orange-50"}`}>
+                    <item.icon className="size-4 shrink-0 text-orange-500" />
                     {item.label}<NavigationPending/>
                   </Link>
                 ))}
