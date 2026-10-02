@@ -13,7 +13,7 @@ import { prealertSchema } from "@/lib/schemas/logistics";
 import { configService } from "@/lib/services/config";
 import { sendEmail, siteUrl } from "@/lib/services/email";
 import { transitionBox, transitionShipment } from "@/lib/domain/state-machine";
-import { assignBoxToTruck } from "./admin-actions";
+import { assignBoxToTruck, transitionTruckState } from "./admin-actions";
 import type { Box, WarehouseGrant } from "@/lib/types";
 
 async function notifyClient(userId: string, title: string, body: string) {
@@ -143,6 +143,35 @@ export async function scanLoad(truckId:string,code:string,warehouseId:string) {
     const result=await assignBoxToTruck(truckId,box.id,{code:code.trim().toUpperCase(),warehouseId});
     if(result.ok)await notifyClient(box.userId,"Paquete cargado",`${box.code} fue escaneado al ingresar al camión ${result.truck.code}. Destino: ${warehouses.find(w=>w.id===warehouseId)?.name}.`);
     return result;
+  });
+}
+
+/** Manual warehouse selection uses the scan validations in one transaction, without pretending it was scanned. */
+export async function loadSelectedPackages(truckId:string,boxIds:string[],warehouseId:string) {
+  return runMutation("admin:camiones",async()=>{
+    const parsed=z.array(z.string().min(1)).min(1).max(500).safeParse(boxIds);
+    if(!parsed.success)return {ok:false as const,error:"Selecciona entre 1 y 500 paquetes disponibles."};
+    const truck=trucks.find(t=>t.id===truckId);
+    if(!truck||!["planificado","cargando"].includes(truck.status))return {ok:false as const,error:"Selecciona un camión disponible, sin despachar."};
+    if(!truck.stops?.some(stop=>stop.warehouseId===warehouseId))return {ok:false as const,error:"Selecciona un destino guardado en la ruta del camión."};
+    if(truck.status==="planificado"){
+      const started=await transitionTruckState(truckId);
+      if(!started.ok)return {ok:false as const,error:started.error};
+    }
+    const assigned:Box[]=[];
+    for(const boxId of new Set(parsed.data)){
+      const box=boxes.find(item=>item.id===boxId);
+      if(!box)return {ok:false as const,error:"Un paquete seleccionado ya no existe. Actualiza Bodega."};
+      const result=await assignBoxToTruck(truckId,boxId,{code:box.code,warehouseId,method:"manual"});
+      if(!result.ok)return {ok:false as const,error:`${box.code}: ${result.error} No se cargó ninguna caja de la selección.`};
+      assigned.push(structuredClone(result.box));
+    }
+    // One notification per client, not one email per piece.
+    for(const userId of new Set(assigned.map(box=>box.userId))){
+      const count=assigned.filter(box=>box.userId===userId).length;
+      await notifyClient(userId,"Carga registrada",`${count} paquete(s) fueron cargados al camión ${truck.code}. Destino: ${warehouses.find(w=>w.id===warehouseId)?.name}.`);
+    }
+    return {ok:true as const,assigned,truck:structuredClone(trucks.find(t=>t.id===truckId)!),count:assigned.length};
   });
 }
 

@@ -474,7 +474,7 @@ export async function updateTruck(truckId: string, input: unknown) {
   });
 }
 
-export async function assignBoxToTruck(truckId: string, boxId: string, scan?: { code: string; warehouseId: string }) {
+export async function assignBoxToTruck(truckId: string, boxId: string, scan?: { code: string; warehouseId: string; method?: "manual" | "scanner" }) {
   return runMutation("admin:camiones", async () => {
   await simulateLatency();
   const truck = trucks.find((item) => item.id === truckId);
@@ -500,12 +500,12 @@ export async function assignBoxToTruck(truckId: string, boxId: string, scan?: { 
   const loaded=boxes.filter(b=>truck.boxIds.includes(b.id));
   if(truck.maxWeightLb!==undefined&&truckLoad([...loaded,box]).weightLb>truck.maxWeightLb)return {ok:false as const,error:`La carga superaría el límite de peso real de ${truck.maxWeightLb} lb.`};
   if (truck.status === "cargando") {
-    const transition = transitionBox(box, "cargada-en-camion", { actor: "Operaciones A&L", note: `Asignada a ${truck.code}.` });
+    const transition = transitionBox(box, "cargada-en-camion", { actor: "Operaciones A&L", note: scan?.method === "manual" ? `Cargada a ${truck.code} por selección manual desde Bodega.` : `Asignada a ${truck.code}.` });
     if (!transition.ok) return transition;
     Object.assign(box, transition.value);
   }
   box.truckId = truck.id;
-  if (scan) { box.destinationWarehouseId = scan.warehouseId; box.loadScan={at:new Date().toISOString(),actorId:(await requireAdminUser(["camiones"])).id,truckId:truck.id}; }
+  if (scan) { box.destinationWarehouseId = scan.warehouseId; box.loadScan={at:new Date().toISOString(),actorId:(await requireAdminUser(["camiones"])).id,truckId:truck.id,method:scan.method ?? "scanner"}; }
   if (shipment) shipment.truckId = truck.id;
   truck.boxIds = [...truck.boxIds, box.id];
   return { ok: true as const, truck, box };

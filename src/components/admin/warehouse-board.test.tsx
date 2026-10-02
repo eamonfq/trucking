@@ -3,12 +3,12 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { WarehouseBoard } from "./warehouse-board";
 import { AdminAccessProvider } from "./admin-access";
-import { scanLoad } from "@/lib/auth/warehouse-actions";
+import { scanLoad, loadSelectedPackages } from "@/lib/auth/warehouse-actions";
 import { transitionTruckState } from "@/lib/auth/admin-actions";
 import type { Box, Truck, Warehouse } from "@/lib/types";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
-vi.mock("@/lib/auth/warehouse-actions", () => ({ scanLoad: vi.fn() }));
+vi.mock("@/lib/auth/warehouse-actions", () => ({ scanLoad: vi.fn(), loadSelectedPackages: vi.fn() }));
 vi.mock("@/lib/auth/admin-actions", () => ({ transitionTruckState: vi.fn() }));
 vi.mock("./camera-barcode-reader", () => ({ CameraBarcodeReader: () => null }));
 vi.stubGlobal("React", React);
@@ -38,17 +38,26 @@ it("opens loading directly in Bodega without requiring a selection", () => {
   expect(scanLoad).not.toHaveBeenCalled();
   click("Volver a bodega"); expect(document.querySelector('[role="dialog"]')).toBeNull();
 });
-it("turns selection into a worklist and removes only successfully loaded boxes", async () => {
+it("loads the selected boxes directly without opening the scanner", async () => {
   const { node } = mount(); act(() => node.querySelector<HTMLInputElement>('[aria-label="Seleccionar todas las cajas disponibles"]')!.click());
-  click("Cargar 2 paquetes"); expect(document.querySelector("summary")?.textContent).toContain("0/2 cargados");
-  vi.mocked(scanLoad).mockResolvedValue({ ok: true, truck: { ...truck, boxIds: ["old", "b"] }, box: { ...box, status: "cargada-en-camion", truckId: "t" } });
-  await scan(" bx-001 ");
-  expect(scanLoad).toHaveBeenCalledWith("t", "BX-001", "w");
+  vi.mocked(loadSelectedPackages).mockResolvedValue({ ok: true, count: 2, truck: { ...truck, boxIds: ["old", "b", "b2"] }, assigned: props.initialBoxes.map(box=>({...box,status:"cargada-en-camion",truckId:"t"})) });
+  await act(async()=>click("Cargar 2 paquetes"));
+  expect(loadSelectedPackages).toHaveBeenCalledWith("t", ["b","b2"], "w");
+  expect(scanLoad).not.toHaveBeenCalled();
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
   expect(node.querySelector('[aria-label="Seleccionar BX-001"]')).toBeNull();
-  expect(node.querySelector('[aria-label="Seleccionar BX-002"]')).toBeTruthy();
-  expect(document.querySelector("summary")?.textContent).toContain("1/2 cargados");
-  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("75 lb");
-  click("Volver a bodega"); expect(node.textContent).toContain("1 seleccionadas");
+  expect(node.querySelector('[aria-label="Seleccionar BX-002"]')).toBeNull();
+  expect(node.textContent).toContain("100 lb");
+  expect(node.textContent).toContain("0 seleccionadas");
+  expect(node.querySelector('[role="status"]')?.textContent).toContain("2 paquete(s) cargados");
+});
+it("preserves selection on a failed direct load",async()=>{
+  const {node}=mount();act(()=>node.querySelector<HTMLInputElement>('[aria-label="Seleccionar BX-001"]')!.click());
+  vi.mocked(loadSelectedPackages).mockResolvedValue({ok:false,error:"La carga superaría el límite de peso real."});
+  await act(async()=>click("Cargar 1 paquete"));
+  expect(node.querySelector('[role="alert"]')?.textContent).toContain("peso real");
+  expect(node.querySelector<HTMLInputElement>('[aria-label="Seleccionar BX-001"]')?.checked).toBe(true);
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
 });
 it("keeps a rejected package in inventory with its server validation visible", async () => {
   const { node } = mount(); click("Escanear carga");

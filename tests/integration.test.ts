@@ -67,7 +67,7 @@ import {deleteCustomerRecipient,upsertCustomerRecipient} from "@/lib/auth/admin-
 import {getReceptionContacts} from "@/lib/auth/reception-contacts";
 import { POST as webhook } from "@/app/api/webhooks/resend/route";
 
-import { saveWarehouse, saveWarehouseOperator, getWarehouseAdministration, getDestinationDesk, saveTruckStops, scanLoad, scanUnload, saveAdminPrealert, selectPrealertAtWarehouse } from "@/lib/auth/warehouse-actions";
+import { saveWarehouse, saveWarehouseOperator, getWarehouseAdministration, getDestinationDesk, saveTruckStops, scanLoad, scanUnload, saveAdminPrealert, selectPrealertAtWarehouse, loadSelectedPackages } from "@/lib/auth/warehouse-actions";
 // Existing scenarios exercise historical single-stop trips. New-route tests use createNewTruck directly.
 async function createTruck(input: Parameters<typeof createNewTruck>[0]) {
   const result=await createNewTruck(input);
@@ -1210,6 +1210,41 @@ describe.sequential("Real MySQL authentication and operations", () => {
       expect(sent.attachments).toHaveLength(1);expect(sent.attachments[0]).toEqual(image);expect(sent.html).toContain('src="cid:reception-photo"');
       const [status]=await root.query<mysql.RowDataPacket[]>('SELECT status FROM email_outbox WHERE id=?',[added[0].id]);expect(status[0].status).toBe('sent');
     }finally{process.env.PHOTO_STORAGE='mysql';process.env.R2_PRIVATE_CONFIRMED='false';process.env.EMAIL_DELIVERY=previousMode;}
+  });
+  it("loads warehouse selections atomically, records manual loading and allows dispatch without rescanning",async()=>{
+    cookieJar.set("ayl_session",{value:adminSession});
+    const locations=(await getWarehouseAdministration()).warehouses;
+    const origin=locations.find(w=>w.kind==="origen")!,destination=locations.find(w=>w.active&&(w.kind??"destino")==="destino")!;
+    const trip=await createNewTruck({plate:"MNL-2099",driverId:(await logisticsService.getDrivers())[0].id,departureDate:"2099-01-01",destinationCity:destination.city,maxWeightLb:30});
+    if(!trip.ok)throw new Error(trip.error);
+    const input={customer:operationClient,originWarehouseId:origin.id,length:10,width:10,height:10,weightLb:20,billingMode:"peso",reject:false};
+    const a=await receiveBox(input),b=await receiveBox(input);if(!a.ok||!b.ok)throw new Error("manual receipts");
+    expect((await saveTruckStops(trip.truck.id,[{warehouseId:destination.id,arrivalDate:"2099-01-02"}],origin.id)).ok).toBe(true);
+    const [before]=await root.query<mysql.RowDataPacket[]>("SELECT COUNT(*) AS n FROM email_outbox");
+    expect((await loadSelectedPackages(trip.truck.id,[],destination.id)).ok).toBe(false);
+    expect((await loadSelectedPackages(trip.truck.id,[a.box.id],"wrong-destination")).ok).toBe(false);
+    const over=await loadSelectedPackages(trip.truck.id,[a.box.id,b.box.id],destination.id);
+    expect(over.ok).toBe(false);if(!over.ok)expect(over.error).toContain("peso real");
+    expect((await logisticsService.getTruckById(trip.truck.id))?.status).toBe("planificado");
+    expect((await logisticsService.getTruckById(trip.truck.id))?.boxIds).toEqual([]);
+    expect((await logisticsService.getBoxById(a.box.id))?.status).toBe("en-bodega");
+    await withStore(async()=>{trucks.find(t=>t.id===trip.truck.id)!.maxWeightLb=50;boxes.find(box=>box.id===b.box.id)!.originWarehouseId="other-origin";},true);
+    expect((await loadSelectedPackages(trip.truck.id,[a.box.id,b.box.id],destination.id)).ok).toBe(false);
+    expect((await logisticsService.getBoxById(a.box.id))?.truckId).toBeUndefined();
+    await withStore(async()=>{boxes.find(box=>box.id===b.box.id)!.originWarehouseId=origin.id;},true);
+    const [failed]=await root.query<mysql.RowDataPacket[]>("SELECT COUNT(*) AS n FROM email_outbox");expect(failed[0].n).toBe(before[0].n);
+    const loaded=await loadSelectedPackages(trip.truck.id,[a.box.id,a.box.id,b.box.id],destination.id);
+    expect(loaded.ok).toBe(true);if(!loaded.ok)throw new Error(loaded.error);
+    expect(loaded.count).toBe(2);expect(loaded.truck.status).toBe("cargando");
+    expect(loaded.truck.boxIds).toEqual([a.box.id,b.box.id]);
+    for(const box of loaded.assigned){expect(box.loadScan?.method).toBe("manual");expect(box.destinationWarehouseId).toBe(destination.id);expect(box.status).toBe("cargada-en-camion");}
+    const [after]=await root.query<mysql.RowDataPacket[]>("SELECT COUNT(*) AS n FROM email_outbox");expect(Number(after[0].n)-Number(before[0].n)).toBe(1);
+    expect((await loadSelectedPackages(trip.truck.id,[a.box.id],destination.id)).ok).toBe(false);
+    expect((await transitionTruckState(trip.truck.id)).ok).toBe(true);
+    expect((await loadSelectedPackages(trip.truck.id,[a.box.id],destination.id)).ok).toBe(false);
+    cookieJar.set("ayl_session",{value:clientSession});
+    await expect(loadSelectedPackages(trip.truck.id,[a.box.id],destination.id)).rejects.toThrow();
+    cookieJar.set("ayl_session",{value:adminSession});
   });
   it("loads without category quotas and enforces an optional real-weight limit",async()=>{
     cookieJar.set("ayl_session",{value:adminSession});

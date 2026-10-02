@@ -88,7 +88,7 @@ export type Box = {
   billing?: import("./utils/billing").BillingSnapshot;
   customPriceUsd?: number;
   destinationWarehouseId?: string;
-  loadScan?: { at: string; actorId: string; truckId: string };
+  loadScan?: { at: string; actorId: string; truckId: string; method?: "manual" | "scanner" };
   unloadScan?: { at: string; actorId: string; warehouseId: string };
   prealertDetails?: { store: string; description: string; declaredValue: number };
   prealertSelection?: { actorId: string; at: string };
