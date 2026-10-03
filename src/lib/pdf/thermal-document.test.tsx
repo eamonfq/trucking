@@ -10,8 +10,16 @@ import {prepareReceptionConcepts} from '@/lib/utils/reception-concepts';
 import {calculateBilling,DEFAULT_WEIGHT_PRICING} from '@/lib/utils/billing';
 import {BOX_CATEGORIES} from '@/lib/config/box-categories';
 import {ManifestDocument} from './manifest-document';
-import type {Truck} from '@/lib/types';
+import type {Truck,Shipment} from '@/lib/types';
 vi.stubGlobal('React',React);
+it('uses the package delivery correction rather than an older shipment contact in the manifest',()=>{
+ const address={id:'a',userId:'u',label:'Bodega',street:'',exteriorNumber:'',neighborhood:'',postalCode:'',municipality:'',state:''};
+ const box:Box={id:'b',userId:'u',code:'BX-QA',categoryId:'small',status:'en-bodega',weightLb:20,dimensions:{length:10,width:10,height:10},timeline:[],shipmentId:'sh',recipientSnapshot:{name:'Contacto de la pieza corregida',phone:'15550000000',address}};
+ const shipment:Shipment={id:'sh',userId:'u',code:'SH-QA',boxIds:['b'],recipientId:'old',status:'pendiente',destinationCity:'Destino',timeline:[],recipientSnapshot:{name:'Contacto antiguo del envío',phone:'15550000001',address}};
+ const truck:Truck={id:'t',code:'TR-QA',status:'cargando',plate:'QA',driverId:'d',driverName:'Ejemplo',boxIds:['b'],route:'Ruta',destinationCity:'Destino',departureDate:'2099-01-01',timeline:[],capacity:{}};
+ const content=JSON.stringify(ManifestDocument({truck,boxes:[box],users:[],shipments:[shipment],recipients:[]}));
+ expect(content).toContain('Contacto de la pieza corregida');expect(content).not.toContain('Contacto antiguo del envío');
+});
 it('renders the mixed receipt and manifest without showing motorcycle weight as a box allocation',async()=>{
  const plan=prepareReceptionConcepts([{id:'moto',description:'Moto Honda VIN 201285',quantity:1,mode:'manual',priceUsd:3000,weightUnknown:true,weightLb:0},{id:'boxes',description:'Cajas extras',quantity:5,mode:'peso-personalizado',weightScope:'grupo',weightLb:117,rateUsd:3.2}],DEFAULT_WEIGHT_PRICING,BOX_CATEGORIES);
  const boxes=plan.rows.map((r,i)=>({id:'qa-'+i,userId:'qa',code:`BX-EJEMPLO-${String(i+1).padStart(2,'0')}`,receivedAt:'2026-10-03',categoryId:'personalizada',categoryName:'Carga personalizada',status:'en-bodega',weightLb:r.item.weightLb,weightUnknown:r.item.weightUnknown,dimensions:{length:0,width:0,height:0},contentsNote:r.item.contentsNote,receptionConcept:r.concept,receptionGroup:{id:'qa-reception',code:'BX-EJEMPLO',index:i+1,total:6},billing:{...calculateBilling(r.item.billingMode,{length:0,width:0,height:0},r.item.weightLb,DEFAULT_WEIGHT_PRICING,r.allocatedAmountUsd),amountUsd:r.allocatedAmountUsd,groupWeight:r.groupWeight},timeline:[]} as Box));

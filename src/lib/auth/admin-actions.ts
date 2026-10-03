@@ -493,7 +493,7 @@ export async function assignBoxToTruck(truckId: string, boxId: string, scan?: { 
   }
   if(box.originWarehouseId&&truck.originWarehouseId!==box.originWarehouseId)return {ok:false as const,error:"El paquete está en otro almacén de origen. El viaje debe salir del mismo almacén."};
   const shipment = box.shipmentId ? shipments.find(item => item.id === box.shipmentId) : undefined;
-  const deliveryAddress=shipment?.recipientSnapshot?.address??box.recipientSnapshot?.address;
+  const deliveryAddress=box.recipientSnapshot?.address??shipment?.recipientSnapshot?.address;
   const deliveryCity=deliveryAddress?.municipality??shipment?.destinationCity;
   const destinationWarehouse=warehouses.find(w=>w.id===scan?.warehouseId);
   if(truck.stops?.length&&deliveryCity&&(!destinationWarehouse||!matchesWarehouseDestination(destinationWarehouse,deliveryCity,deliveryAddress?.state)))return {ok:false as const,error:"El municipio o estado de entrega no coincide con el almacén seleccionado."};

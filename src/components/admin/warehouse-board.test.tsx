@@ -62,7 +62,7 @@ it("preserves selection on a failed direct load",async()=>{
 it("groups a reception under one customer and loads all its selected pieces directly",async()=>{
   const grouped=props.initialBoxes.map((piece,index)=>({...piece,receptionGroup:{id:"receipt",code:"BX-GROUP",index:index+1,total:2}}));
   const {node}=mount(<WarehouseBoard {...props} initialBoxes={grouped} users={[{id:"u",firstName:"Carlos",paternalLastName:"García",lockerCode:"AL-MX-QA",role:"cliente",email:"qa@example.invalid",phone:"",active:true,internalNotes:[],activity:[]}]}/>);
-  expect(node.querySelectorAll("article")).toHaveLength(1);
+  expect(node.querySelectorAll("[data-reception-row]")).toHaveLength(1);
   expect(node.textContent?.match(/Carlos García/g)).toHaveLength(1);
   act(()=>node.querySelector<HTMLInputElement>('[aria-label="Seleccionar recepción BX-GROUP"]')!.click());
   vi.mocked(loadSelectedPackages).mockResolvedValue({ok:true,count:2,truck:{...truck,boxIds:["old","b","b2"]},assigned:grouped.map(piece=>({...piece,status:"cargada-en-camion",truckId:"t"}))});
@@ -70,6 +70,48 @@ it("groups a reception under one customer and loads all its selected pieces dire
   expect(loadSelectedPackages).toHaveBeenCalledWith("t",["b","b2"],"w");
   expect(scanLoad).not.toHaveBeenCalled();
   expect(node.querySelector('[role="dialog"]')).toBeNull();
+});
+it('keeps partial selection visible and allows expanding individual pieces',()=>{
+ const grouped=props.initialBoxes.map((piece,index)=>({...piece,receptionGroup:{id:'receipt',code:'BX-GROUP',index:index+1,total:2}}));
+ const {node}=mount(<WarehouseBoard {...props} initialBoxes={grouped}/>);
+ expect(node.querySelector('[aria-label="Seleccionar BX-001"]')).toBeNull();
+ act(()=>node.querySelector<HTMLButtonElement>('[aria-label="Ver piezas de BX-GROUP"]')!.click());
+ act(()=>node.querySelector<HTMLInputElement>('[aria-label="Seleccionar BX-001"]')!.click());
+ expect(node.querySelector<HTMLInputElement>('[aria-label="Seleccionar recepción BX-GROUP"]')?.indeterminate).toBe(true);
+ expect(node.querySelector<HTMLInputElement>('[aria-label="Seleccionar todas las cajas disponibles"]')?.indeterminate).toBe(true);
+ expect(node.textContent).toContain('1 seleccionadas');
+ click('Limpiar selección');
+ expect(node.querySelector<HTMLInputElement>('[aria-label="Seleccionar BX-001"]')?.checked).toBe(false);
+});
+it('summarizes repeated content without duplicating the customer or rendering hidden pieces',()=>{
+ const grouped=props.initialBoxes.map((piece,index)=>({...piece,contentsNote:'Cajas de ropa',receptionGroup:{id:'receipt',code:'BX-GROUP',index:index+1,total:2}}));
+ const {node}=mount(<WarehouseBoard {...props} initialBoxes={grouped}/>);
+ expect(node.querySelector('[data-reception-row]')?.textContent).toContain('2 × Cajas de ropa');
+ expect(node.querySelector('[aria-label="Seleccionar BX-001"]')).toBeNull();
+});
+it('finds clients by name without accents or by telephone and filters warehouse origin',()=>{
+ const customer={id:'u',firstName:'Carlos',paternalLastName:'García',lockerCode:'AL-MX-QA',role:'cliente' as const,email:'qa@example.invalid',phone:'9156946671',active:true,internalNotes:[],activity:[]};
+ const inventory=[{...box,originWarehouseId:'chicago',originWarehouseName:'Chicago'},{...box,id:'b2',code:'BX-002' as const,originWarehouseId:'el-paso',originWarehouseName:'El Paso'}];
+ const {node}=mount(<WarehouseBoard {...props} initialBoxes={inventory} users={[customer]}/>);
+ function search(value:string){act(()=>{const input=node.querySelector<HTMLInputElement>('input[placeholder="Recepción, cliente o contenido"]')!;Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(input,value);input.dispatchEvent(new Event('input',{bubbles:true}));});}
+ search('garcia');expect(node.querySelectorAll('[data-reception-row]')).toHaveLength(2);
+ search('9156946671');expect(node.querySelectorAll('[data-reception-row]')).toHaveLength(2);
+ act(()=>{const label=Array.from(node.querySelectorAll('label')).find(label=>label.textContent==='Almacén de origen')!;const origin=document.getElementById(label.htmlFor) as HTMLSelectElement;origin.value='el-paso';origin.dispatchEvent(new Event('change',{bubbles:true}));});
+ expect(node.querySelectorAll('[data-reception-row]')).toHaveLength(1);
+ expect(node.querySelector('[data-reception-row]')?.textContent).toContain('El Paso');
+ click('Limpiar filtros');expect(node.querySelectorAll('[data-reception-row]')).toHaveLength(2);
+});
+it('paginates receptions, selects only the current page and preserves selections across pages',()=>{
+ const many=Array.from({length:21},(_,index)=>({...box,id:`many-${index}`,code:`BX-${String(index).padStart(3,'0')}` as const}));
+ const {node}=mount(<WarehouseBoard {...props} initialBoxes={many}/>);
+ expect(node.querySelectorAll('[data-reception-row]')).toHaveLength(20);
+ expect(node.textContent).toContain('1–20 de 21 recepciones');
+ act(()=>node.querySelector<HTMLInputElement>('[aria-label="Seleccionar todas las cajas disponibles"]')!.click());
+ expect(node.textContent).toContain('20 seleccionadas');
+ act(()=>node.querySelector<HTMLButtonElement>('[aria-label="Página siguiente de bodega"]')!.click());
+ expect(node.querySelectorAll('[data-reception-row]')).toHaveLength(1);
+ expect(node.querySelector<HTMLInputElement>('[aria-label="Seleccionar todas las cajas disponibles"]')?.checked).toBe(false);
+ expect(node.textContent).toContain('20 seleccionadas');
 });
 it("keeps a rejected package in inventory with its server validation visible", async () => {
   const { node } = mount(); click("Escanear carga");

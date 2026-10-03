@@ -66,6 +66,7 @@ import {receivePackageGroup,completeReceptionPayment} from "@/lib/auth/file-acti
 import {deleteCustomerRecipient,upsertCustomerRecipient} from "@/lib/auth/admin-actions";
 import {getReceptionContacts} from "@/lib/auth/reception-contacts";
 import {registerPendingCargoWeight} from '@/lib/auth/cargo-weight-actions';
+import {getPackageDelivery,savePackageDelivery} from '@/lib/auth/package-delivery-actions';
 import { POST as webhook } from "@/app/api/webhooks/resend/route";
 
 import { saveWarehouse, saveWarehouseOperator, getWarehouseAdministration, getDestinationDesk, saveTruckStops, scanLoad, scanUnload, saveAdminPrealert, selectPrealertAtWarehouse, loadSelectedPackages } from "@/lib/auth/warehouse-actions";
@@ -1680,5 +1681,67 @@ describe.sequential("Optional customer contact and full-admin test cleanup",()=>
   const [messages]=await root.query<mysql.RowDataPacket[]>("SELECT payload FROM email_outbox WHERE status IN ('queued','retry')");
   expect(messages.map(row=>decryptEmail(typeof row.payload==='string'?JSON.parse(row.payload):row.payload).to)).not.toContain(email);
   expect((await createCustomerAsAdmin({...minimal,email})).ok).toBe(true);
+ });
+});
+
+describe.sequential('Package-specific delivery assignment',()=>{
+ let packageId='',otherPackageId='',addressId='',personId='',customerId='';
+ it('assigns an existing address explicitly and persists the snapshot without modifying payments or other pieces',async()=>{
+  cookieJar.set('ayl_session',{value:adminSession});
+  const account=await withStore(()=>createAccount({...customer,email:'delivery-edit@example.invalid'},password),true);
+  customerId=account.user.id;addressId=account.address.id;personId=randomUUID();
+  await withStore(async()=>recipients.push({id:personId,userId:customerId,name:'Guadalupe QA',phone:'3332388900',addressId:''}),true);
+  const origin=await withStore(async()=>warehouses.find(w=>w.active&&(w.kind==='origen'||w.kind==='ambos'))!);
+  const input={customer:customerId,recipientId:personId,originWarehouseId:origin.id,billingMode:'manual',customPriceUsd:50,weightLb:67,invoiceNow:true};
+  const received=await receiveBox(input),other=await receiveBox(input);
+  if(!received.ok||!other.ok)throw new Error('Could not set up test reception');
+  packageId=received.box.id;otherPackageId=other.box.id;
+  const original=JSON.stringify(await logisticsService.getBoxById(otherPackageId));
+  const financial=JSON.stringify(await withStore(async()=>invoices.filter(i=>i.userId===customerId)));
+  const directory=JSON.stringify(await withStore(async()=>({addresses:addresses.filter(a=>a.userId===customerId),recipients:recipients.filter(r=>r.userId===customerId)})));
+  const data=await getPackageDelivery(packageId);expect(data?.recipient?.address?.street).toBe('');
+  const result=await savePackageDelivery(packageId,{revision:data!.revision,recipientId:personId,name:'Guadalupe QA',phone:'3332388900',addressId,reason:'Completar dirección pendiente'});
+  expect(result.ok).toBe(true);
+  expect((await logisticsService.getBoxById(packageId))?.recipientSnapshot?.address.id).toBe(addressId);
+  expect((await logisticsService.getPackageLabelRecipients([packageId]))[0].recipient?.address?.street).toBe(customer.street);
+  expect(JSON.stringify(await logisticsService.getBoxById(otherPackageId))).toBe(original);
+  expect(JSON.stringify(await withStore(async()=>invoices.filter(i=>i.userId===customerId)))).toBe(financial);
+  expect(JSON.stringify(await withStore(async()=>({addresses:addresses.filter(a=>a.userId===customerId),recipients:recipients.filter(r=>r.userId===customerId)})))).toBe(directory);
+  expect((await getPackageDelivery(packageId))?.revision).not.toBe(data!.revision);
+  expect(await withStore(async()=>collection<{id:string;boxId:string}>('packageDeliveryEdits').filter(e=>e.boxId===packageId).length)).toBe(1);
+ });
+ it('allows a pickup-only reference and preserves its label when the customer directory changes',async()=>{
+  const data=await getPackageDelivery(packageId);
+  expect((await savePackageDelivery(packageId,{revision:data!.revision,recipientId:personId,name:'Guadalupe QA',phone:'3332388900',newAddress:{label:'Bodega Valle de Juárez'},reason:'Retiro solicitado por cliente'})).ok).toBe(true);
+  await withStore(async()=>{addresses.find(a=>a.id===addressId)!.street='Dirección cambiada en directorio';},true);
+  const printed=(await logisticsService.getPackageLabelRecipients([packageId]))[0].recipient;
+  expect(printed?.address).toMatchObject({label:'Bodega Valle de Juárez',street:'',municipality:''});
+  expect((await logisticsService.getBoxById(packageId))?.timeline.at(-1)?.note).toContain('Reimprimir etiqueta');
+ });
+ it('rejects stale changes, foreign-client contacts/addresses and delivered packages atomically',async()=>{
+  const data=await getPackageDelivery(packageId),base={revision:data!.revision,name:'Guadalupe QA',phone:'3332388900',addressId,reason:'Completar entrega de prueba'};
+  const foreign=await withStore(async()=>addresses.find(a=>a.userId!==customerId)!);
+  const original=JSON.stringify(await logisticsService.getBoxById(packageId));
+  expect((await savePackageDelivery(packageId,{...base,addressId:foreign.id})).ok).toBe(false);
+  expect((await savePackageDelivery(packageId,{...base,recipientId:'foreign-contact'})).ok).toBe(false);
+  expect((await savePackageDelivery(packageId,{...base,revision:'0'.repeat(64)})).ok).toBe(false);
+  expect((await savePackageDelivery(packageId,{...base,addressId:'',newAddress:{label:'Sin dirección'}})).ok).toBe(false);
+  expect(JSON.stringify(await logisticsService.getBoxById(packageId))).toBe(original);
+  await withStore(async()=>{boxes.find(b=>b.id===packageId)!.status='entregada';},true);
+  const delivered=await getPackageDelivery(packageId);expect(delivered?.canEdit).toBe(false);
+  expect((await savePackageDelivery(packageId,{...base,revision:delivered!.revision})).ok).toBe(false);
+ });
+ it('keeps warehouse-only administrators read-only and denies client access to the editor',async()=>{
+  cookieJar.set('ayl_session',{value:adminSession});
+  expect((await saveAdministrativeStaff({firstName:'Lectura',paternalLastName:'Bodega',email:'delivery-readonly@example.invalid',phone:'',active:true,fullAccess:false,permissions:['bodega']})).ok).toBe(true);
+  const staff=(await getAdministrativeStaff()).find(user=>user.email==='delivery-readonly@example.invalid')!;
+  const invitation=await withStore(()=>issueToken(staff.id,'invite'),true);
+  expect((await consumeToken(invitation,'reset',password))?.id).toBe(staff.id);
+  cookieJar.set('ayl_session',{value:await createSessionToken(staff.id,'admin')});
+  expect((await getPackageDelivery(otherPackageId))?.canEdit).toBe(false);
+  await expect(savePackageDelivery(otherPackageId,{})).rejects.toThrow('REDIRECT:');
+  cookieJar.set('ayl_session',{value:clientSession});await expect(getPackageDelivery(otherPackageId)).rejects.toThrow('REDIRECT:');
+  await expect(savePackageDelivery(otherPackageId,{})).rejects.toThrow('REDIRECT:');
+  cookieJar.set('ayl_session',{value:adminSession});
  });
 });
