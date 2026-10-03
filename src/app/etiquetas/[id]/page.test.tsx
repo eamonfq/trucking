@@ -1,0 +1,22 @@
+import React from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {expect,it,vi} from 'vitest';
+import Page from './page';
+import {logisticsService} from '@/lib/services/logistics';
+vi.stubGlobal('React',React);
+vi.mock('@/lib/auth/actions',()=>({requireAdminUser:vi.fn()}));
+vi.mock('next/navigation',()=>({notFound:()=>{throw new Error('not found');}}));
+vi.mock('@/lib/services/logistics',()=>({logisticsService:{getBoxById:vi.fn(),getUserById:vi.fn(),getBoxes:vi.fn(),getPackageLabelRecipients:vi.fn()}}));
+vi.mock('@/components/admin/package-label',()=>({PackageLabel:({code,recipient}:{code:string;recipient?:{address?:{references?:string}}})=><article>{code} · {recipient?.address?.references}</article>}));
+it('uses resolved delivery addresses for every piece when printing the whole reception',async()=>{
+ const base={id:'b1',code:'BX-QA-01' as const,userId:'u',receivedAt:'2026-10-03',dimensions:{length:0,width:0,height:0},weightLb:20,categoryId:'small',status:'en-bodega' as const,timeline:[],receptionGroup:{id:'g',code:'BX-QA',index:1,total:2}};
+ const second={...base,id:'b2',code:'BX-QA-02' as const,receptionGroup:{...base.receptionGroup,index:2}};
+ vi.mocked(logisticsService.getBoxById).mockResolvedValue(base);
+ vi.mocked(logisticsService.getUserById).mockResolvedValue(null);
+ vi.mocked(logisticsService.getBoxes).mockResolvedValue([second,base]);
+ vi.mocked(logisticsService.getPackageLabelRecipients).mockResolvedValue([base,second].map(b=>({id:b.id,recipient:{name:'Ejemplo',phone:'15550000000',address:{id:'a',userId:'u',label:'Principal',street:'',exteriorNumber:'',neighborhood:'',postalCode:'',municipality:'',state:'',references:'Bodega Valle de Juárez'}}})));
+ const markup=renderToStaticMarkup(await Page({params:Promise.resolve({id:'b1'}),searchParams:Promise.resolve({grupo:'1'})}));
+ expect(logisticsService.getPackageLabelRecipients).toHaveBeenCalledWith(['b1','b2']);
+ expect(markup.match(/Bodega Valle de Juárez/g)).toHaveLength(2);
+ expect(markup.indexOf('BX-QA-01')).toBeLessThan(markup.indexOf('BX-QA-02'));
+});

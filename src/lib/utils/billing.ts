@@ -14,7 +14,7 @@ export function calculateBilling(mode: BillingMode, dimensions: Dimensions, actu
   const measures = [dimensions.length, dimensions.width, dimensions.height];
   if ([...measures, actualWeightLb].some(value => !Number.isFinite(value) || value < 0) || [settings.pricePerLbUsd, settings.dimensionalBase, settings.dimensionalFactor].some(value => !Number.isFinite(value) || value <= 0)) throw new Error('Revisa las medidas, el peso y los factores.');
   if (['peso', 'volumen', 'fijo'].includes(mode) && measures.some(value => value <= 0)) throw new Error('Completa las tres medidas.');
-  if (mode !== 'volumen' && actualWeightLb <= 0) throw new Error('Escribe el peso real.');
+  if (mode !== 'volumen' && mode !== 'manual' && actualWeightLb <= 0) throw new Error('Escribe el peso real.');
   const dimensionalResult = dimensions.length * dimensions.width * dimensions.height / settings.dimensionalBase * settings.dimensionalFactor;
   const directVolume = mode === 'volumen' && volumePricing === 'direct-usd';
   const dimensionalWeightLb = directVolume ? 0 : dimensionalResult;

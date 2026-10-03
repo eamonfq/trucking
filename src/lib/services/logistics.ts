@@ -5,6 +5,7 @@ import { getCurrentUser, requireAdminUser } from "@/lib/auth/actions";
 import {deliveryPaymentError} from "@/lib/utils/delivery-payment";
 import { canAnyAdmin, canReadInvoice, isFullAdmin, type AdminSection } from "@/lib/auth/admin-permissions";
 import { clone } from "./delay";
+import {packageLabelRecipient} from '@/lib/utils/package-label-recipient';
 const operational:AdminSection[]=["resumen","recepcion","prealertas","clientes","bodega","camiones","entregas","facturas"];
 async function all<T>(items:T[],sections:AdminSection[],adminOnly=false):Promise<T[]> {
  return withStore(async()=>{
@@ -23,6 +24,11 @@ async function all<T>(items:T[],sections:AdminSection[],adminOnly=false):Promise
  });
 }
 export const logisticsService={
+ getPackageLabelRecipients:(ids:string[])=>withStore(async()=>{
+  await requireAdminUser(["recepcion","bodega","camiones"]);
+  const selected=new Set(ids);
+  return clone(boxes.filter(box=>selected.has(box.id)).map(box=>({id:box.id,recipient:packageLabelRecipient(box,recipients,addresses)})));
+ }),
  getDeliveryClearance:()=>withStore(async()=>{await requireAdminUser(["entregas"]);return boxes.filter(b=>["en-destino","entregada"].includes(b.status)).map(b=>({id:b.id,blocked:deliveryPaymentError(b,invoices,boxes)}));}),
  getUsers:()=>all(users,[...operational,"soporte"],true),
  getBoxes:()=>all(boxes,operational),

@@ -59,6 +59,18 @@ it("preserves selection on a failed direct load",async()=>{
   expect(node.querySelector<HTMLInputElement>('[aria-label="Seleccionar BX-001"]')?.checked).toBe(true);
   expect(document.querySelector('[role="dialog"]')).toBeNull();
 });
+it("groups a reception under one customer and loads all its selected pieces directly",async()=>{
+  const grouped=props.initialBoxes.map((piece,index)=>({...piece,receptionGroup:{id:"receipt",code:"BX-GROUP",index:index+1,total:2}}));
+  const {node}=mount(<WarehouseBoard {...props} initialBoxes={grouped} users={[{id:"u",firstName:"Carlos",paternalLastName:"García",lockerCode:"AL-MX-QA",role:"cliente",email:"qa@example.invalid",phone:"",active:true,internalNotes:[],activity:[]}]}/>);
+  expect(node.querySelectorAll("article")).toHaveLength(1);
+  expect(node.textContent?.match(/Carlos García/g)).toHaveLength(1);
+  act(()=>node.querySelector<HTMLInputElement>('[aria-label="Seleccionar recepción BX-GROUP"]')!.click());
+  vi.mocked(loadSelectedPackages).mockResolvedValue({ok:true,count:2,truck:{...truck,boxIds:["old","b","b2"]},assigned:grouped.map(piece=>({...piece,status:"cargada-en-camion",truckId:"t"}))});
+  await act(async()=>click("Cargar 2 paquetes"));
+  expect(loadSelectedPackages).toHaveBeenCalledWith("t",["b","b2"],"w");
+  expect(scanLoad).not.toHaveBeenCalled();
+  expect(node.querySelector('[role="dialog"]')).toBeNull();
+});
 it("keeps a rejected package in inventory with its server validation visible", async () => {
   const { node } = mount(); click("Escanear carga");
   vi.mocked(scanLoad).mockResolvedValue({ ok: false, error: "El paquete pertenece a otro almacén de origen." });

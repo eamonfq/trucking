@@ -79,6 +79,8 @@ export type Recipient = {
 export type TimelineEvent = TransitionEvent;
 
 export type Box = {
+  weightUnknown?: boolean;
+  receptionConcept?: import('./utils/reception-concepts').ReceptionConcept;
   contentsNote?: string;
   receptionGroup?: { id:string; code?:string; index:number; total:number; groupWeight?:{totalWeightLb:number;totalAmountUsd:number;pieces:number} };
   recipientId?: string;

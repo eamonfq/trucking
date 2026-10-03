@@ -37,7 +37,7 @@ vi.mock("next/server", () => ({ after: () => {} }));
 vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
 vi.mock("next/navigation", () => ({ redirect: (path: string) => { throw new Error(`REDIRECT:${path}`); } }));
 import { withStore,collection } from "@/lib/db/store";
-import { users, addresses, boxes, shipments, invoices, trucks, warehouses } from "@/lib/db/collections";
+import { users, addresses, recipients, boxes, shipments, invoices, trucks, warehouses } from "@/lib/db/collections";
 import { runMutation } from "@/lib/db/mutation";
 import { invoiceTotal } from "@/lib/utils/invoices";
 import { manageSupportTicket, registerDelivery } from "@/lib/auth/operations-actions";
@@ -65,6 +65,7 @@ import {chargeClover,quoteClover,reconcileClover} from '@/lib/payments/clover';
 import {receivePackageGroup,completeReceptionPayment} from "@/lib/auth/file-actions";
 import {deleteCustomerRecipient,upsertCustomerRecipient} from "@/lib/auth/admin-actions";
 import {getReceptionContacts} from "@/lib/auth/reception-contacts";
+import {registerPendingCargoWeight} from '@/lib/auth/cargo-weight-actions';
 import { POST as webhook } from "@/app/api/webhooks/resend/route";
 
 import { saveWarehouse, saveWarehouseOperator, getWarehouseAdministration, getDestinationDesk, saveTruckStops, scanLoad, scanUnload, saveAdminPrealert, selectPrealertAtWarehouse, loadSelectedPackages } from "@/lib/auth/warehouse-actions";
@@ -1516,6 +1517,52 @@ describe.sequential("Full-admin invoice corrections and recoverable duplicate pa
 });
 
 describe.sequential("Optional customer contact and full-admin test cleanup",()=>{
+ it('resolves an empty label address from the linked recipient without changing reception history',async()=>{
+  cookieJar.set('ayl_session',{value:adminSession});
+  const account=await withStore(()=>createAccount({...customer,email:'label-address@example.invalid'},password),true);
+  const personId=randomUUID();
+  await withStore(async()=>{recipients.push({id:personId,userId:account.user.id,name:'Destinatario QA',phone:'15550000000',addressId:''});},true);
+  const origin=await withStore(async()=>warehouses.find(w=>w.active&&(w.kind==='origen'||w.kind==='ambos'))!);
+  const result=await receiveBox({customer:account.user.id,recipientId:personId,originWarehouseId:origin.id,billingMode:'manual',customPriceUsd:30,weightLb:20,invoiceNow:true});
+  if(!result.ok)throw new Error(result.error);
+  const snapshot=JSON.stringify(result.box.recipientSnapshot);
+  await withStore(async()=>{const address=addresses.find(a=>a.id===account.address.id)!;address.references='Bodega Valle de Juárez';recipients.find(r=>r.id===personId)!.addressId=address.id;},true);
+  const printed=await logisticsService.getPackageLabelRecipients([result.box.id]);
+  expect(printed[0].recipient?.address?.references).toBe('Bodega Valle de Juárez');
+  expect((await logisticsService.getBoxById(result.box.id))?.recipientSnapshot).toEqual(JSON.parse(snapshot));
+  cookieJar.set('ayl_session',{value:clientSession});
+  await expect(logisticsService.getPackageLabelRecipients([result.box.id])).rejects.toThrow('REDIRECT:');
+  cookieJar.set('ayl_session',{value:adminSession});
+ });
+ it('persists a mixed reception without assigning box weight or cost to the motorcycle and replays safely',async()=>{
+  cookieJar.set('ayl_session',{value:adminSession});
+  const origin=await withStore(async()=>warehouses.find(w=>w.active&&(w.kind==='origen'||w.kind==='ambos'))!);
+  const base={customer:operationClient,originWarehouseId:origin.id,invoiceNow:true};
+  const concepts=[{id:'moto',description:'Moto Honda · VIN 201285',quantity:1,mode:'manual',priceUsd:3000,weightLb:0,weightUnknown:true},{id:'boxes',description:'Cajas extras',quantity:5,mode:'peso-personalizado',weightScope:'grupo',weightLb:117,rateUsd:3.2}];
+  const payment={method:'mixto',warehouseId:origin.id,parts:[{method:'efectivo',amount:1000},{method:'zelle',amount:2374.4,reference:'MIXED-QA'}]},request=randomUUID();
+  const [beforeEmails]=await root.query<mysql.RowDataPacket[]>('SELECT id FROM email_outbox');
+  const before=await withStore(async()=>({boxes:boxes.length,invoices:invoices.length}));
+  const invalid=await receivePackageGroup([base],new FormData(),payment,randomUUID(),undefined,[concepts[0],{...concepts[1],weightLb:0}]);expect(invalid.ok).toBe(false);
+  expect(await withStore(async()=>({boxes:boxes.length,invoices:invoices.length}))).toEqual(before);
+  const result=await receivePackageGroup([base],new FormData(),payment,request,undefined,concepts);
+  expect(result.ok).toBe(true);if(!result.ok)throw new Error(result.error);
+  expect(result.total).toBe(3374.4);expect(result.results).toHaveLength(6);
+  const moto=result.results[0];expect(moto.box).toMatchObject({weightLb:0,weightUnknown:true,receptionConcept:{description:'Moto Honda · VIN 201285',totalAmountUsd:3000,totalWeightLb:0},billing:{amountUsd:3000}});expect(moto.box.billing?.groupWeight).toBeUndefined();
+  for(const row of result.results.slice(1)){expect(row.box.billing).toMatchObject({amountUsd:74.88,groupWeight:{totalWeightLb:117,pieces:5,totalAmountUsd:374.4}});expect(row.box.weightLb).toBe(23.4);}
+  expect(new Set(result.results.map(r=>r.box.code)).size).toBe(6);expect(new Set(result.results.map(r=>r.box.receptionGroup?.id)).size).toBe(1);
+  expect(moto.invoice?.lines[0].description).toContain('Moto Honda');
+  const replay=await receivePackageGroup([base],new FormData(),payment,request,undefined,concepts);expect(replay.ok).toBe(true);expect(await withStore(async()=>boxes.length)).toBe(before.boxes+6);
+  expect((await receivePackageGroup([base],new FormData(),payment,request,undefined,[{...concepts[0],description:'Changed'},concepts[1]])).ok).toBe(false);
+  const stored=await logisticsService.getBoxById(moto.box.id);expect(stored?.receptionConcept?.totalAmountUsd).toBe(3000);
+  const [messages]=await root.query<mysql.RowDataPacket[]>('SELECT id,payload FROM email_outbox');
+  const emails=messages.filter(row=>!beforeEmails.some(previous=>previous.id===row.id)).map(row=>decryptEmail(typeof row.payload==='string'?JSON.parse(row.payload):row.payload));
+  expect(emails).toHaveLength(1);expect(emails[0].reception?.concepts).toMatchObject([{amountUsd:3000,count:1},{amountUsd:374.4,count:5}]);
+  const originalInvoice=JSON.stringify(await withStore(async()=>invoices.find(i=>i.id===moto.invoice!.id)));
+  expect((await registerPendingCargoWeight(moto.box.id,250)).ok).toBe(true);
+  expect((await logisticsService.getBoxById(moto.box.id))?.weightUnknown).toBe(false);
+  expect(JSON.stringify(await withStore(async()=>invoices.find(i=>i.id===moto.invoice!.id)))).toBe(originalInvoice);
+  expect((await registerPendingCargoWeight(moto.box.id,260)).ok).toBe(false);
+ });
  it("receives 13 jointly weighed packages with a custom rate and cash plus Zelle exactly once",async()=>{
   cookieJar.set('ayl_session',{value:adminSession});
   const origin=await withStore(async()=>warehouses.find(w=>w.active&&(w.kind==='origen'||w.kind==='ambos'))!);

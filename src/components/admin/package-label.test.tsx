@@ -52,3 +52,8 @@ it('prints a pickup reference or full address beneath the recipient without hidi
  expect(printed).toContain('C.P. 49540');
  expect(printed).toContain('Portón azul frente a la plaza');
 });
+it('prints an explicit pending address instead of silently omitting the delivery section',()=>{
+ const markup=renderToStaticMarkup(<PackageLabel code="BX-QA" dimensions={{length:0,width:0,height:0}} weightLb={20} lockerCode="AL-QA" recipient={{name:'Destinatario Ejemplo',phone:'15550000000'}}/>);
+ const container=document.createElement('div');container.innerHTML=markup;
+ expect(container.querySelector('.label-contact:last-of-type .label-address')?.textContent).toBe('Dirección / referencia no registrada');
+});

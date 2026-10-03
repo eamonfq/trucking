@@ -251,7 +251,7 @@ async function createInvoiceForBoxes(userId: string, invoiceBoxes: Box[], actor:
   invoiceBoxes.forEach(box=>{
     const rate=rates.find(r=>r.id===box.categoryId);
     const price=box.customPriceUsd??rate?.priceUsd??0;
-    const description=box.billing ? `${box.code} · ${billingDescription(box.billing)}` : undefined;
+    const description=box.billing ? `${box.code} · ${box.contentsNote?box.contentsNote+' · ':''}${billingDescription(box.billing)}` : undefined;
     const key=box.billing ? box.id : `${box.categoryId}:${price}`;
     const previous=groups.get(key);
     groups.set(key,{categoryId:box.categoryId,categoryName:box.categoryName??rate?.name??box.categoryId,description,quantity:(previous?.quantity??0)+1,unitPriceUsd:price});
@@ -313,11 +313,14 @@ export async function receiveBox(input: unknown) {
   const code = receptionGroup ? `${receptionGroup.code}${receptionGroup.total>1?`-${String(receptionGroup.index).padStart(2,"0")}`:""}` as const : prealert?.code ?? `BX-26${String(nextDocumentSequence("box")).padStart(4, "0")}` as const;
   if(boxes.some(b=>b.code===code&&b.id!==id))return {ok:false as const,error:"El código de recepción ya existe. Actualiza e intenta nuevamente."};
   const rejected = Boolean(parsed.data.reject);
-  const note = custom ? (mode==="manual" ? `Carga personalizada. Precio acordado USD ${parsed.data.customPriceUsd}. Medidas y peso reales registrados.` : mode==="volumen"?"Carga fuera de categoría estándar. Cobro por volumen.":"Cobro por peso real. Medidas opcionales.") : rejected ? parsed.data.rejectionReason : parsed.data.overrideCategory ? parsed.data.overrideReason : suggestion.reason ? `Categoría ajustada por ${suggestion.reason.replaceAll("-", " ")}.` : "Medidas y peso validados.";
+  const note = custom ? (mode==="manual" ? `Carga personalizada. Precio acordado USD ${parsed.data.customPriceUsd}. ${parsed.data.weightUnknown?"Peso no registrado.":"Peso real registrado."}` : mode==="volumen"?"Carga fuera de categoría estándar. Cobro por volumen.":"Cobro por peso real. Medidas opcionales.") : rejected ? parsed.data.rejectionReason : parsed.data.overrideCategory ? parsed.data.overrideReason : suggestion.reason ? `Categoría ajustada por ${suggestion.reason.replaceAll("-", " ")}.` : "Medidas y peso validados.";
   const billing = rejected ? undefined : calculateBilling(mode, dimensions, parsed.data.weightLb, {...flow,...(mode==="peso-personalizado"?{pricePerLbUsd:parsed.data.customRatePerLbUsd!}:{})}, mode==="manual" ? parsed.data.customPriceUsd : rates.find(rate=>rate.id===categoryId)?.priceUsd);
-  if(billing&&receptionGroup?.groupWeight){billing.groupWeight=receptionGroup.groupWeight;billing.amountUsd=receptionGroup.allocatedAmountUsd!;billing.billableWeightLb=0;}
+  if(billing&&receptionGroup?.allocatedAmountUsd!==undefined)billing.amountUsd=receptionGroup.allocatedAmountUsd;
+  if(billing&&receptionGroup?.groupWeight){billing.groupWeight=receptionGroup.groupWeight;billing.billableWeightLb=0;}
   const box: Box = {
     contentsNote: parsed.data.contentsNote || undefined,
+    weightUnknown:parsed.data.weightUnknown||undefined,
+    receptionConcept:receptionGroup?.concept,
     receptionGroup,
     recipientId:recipient?.id,recipientSnapshot:recipient?{name:recipient.name,phone:recipient.phone,address:recipientAddress?{...recipientAddress}:{id:"",userId:customer.id,label:"Sin dirección",street:"",exteriorNumber:"",neighborhood:"",postalCode:"",municipality:"",state:""}}:undefined,
     billing, originWarehouseId:origin?.id,originWarehouseName:origin?.name,
@@ -369,6 +372,7 @@ export async function transitionTruckState(truckId: string, note?: string) {
   if (truckIndex < 0) return { ok: false as const, error: "No encontramos el camión seleccionado." };
   const previousStatus = trucks[truckIndex]!.status;
   const currentTruck=trucks[truckIndex]!;
+  if(previousStatus==='cargando'&&currentTruck.maxWeightLb!==undefined&&truckLoad(boxes.filter(b=>currentTruck.boxIds.includes(b.id))).missingWeights)return {ok:false as const,error:'Completa los pesos pendientes antes de verificar el límite y despachar el camión.'};
   if(previousStatus==="cargando"&&currentTruck.maxWeightLb!==undefined&&truckLoad(boxes.filter(b=>currentTruck.boxIds.includes(b.id))).weightLb>currentTruck.maxWeightLb)return {ok:false as const,error:"El peso real cargado supera el límite del camión."};
   const result = transitionTruckWithCascade(trucks[truckIndex]!, boxes, shipments, { actor: "Operaciones A&L", note });
   if (!result.ok) return result;
@@ -467,6 +471,7 @@ export async function updateTruck(truckId: string, input: unknown) {
   const driver = drivers.find((item) => item.id === parsed.data.driverId);
   if (!driver?.active) return { ok: false as const, error: "Selecciona un chofer activo." };
   const assignedBoxes = boxes.filter(box => trucks[truckIndex]!.boxIds.includes(box.id));
+  if(parsed.data.maxWeightLb!==undefined&&truckLoad(assignedBoxes).missingWeights)return {ok:false as const,error:'Completa los pesos pendientes antes de configurar un límite para esta carga.'};
   if(parsed.data.maxWeightLb!==undefined&&truckLoad(assignedBoxes).weightLb>parsed.data.maxWeightLb)return {ok:false as const,error:"El límite de peso no puede ser menor que el peso real ya cargado."};
   trucks[truckIndex] = { ...trucks[truckIndex]!, plate: parsed.data.plate, driverId: driver.id, driverName: driver.name, departureDate: parsed.data.departureDate, destinationCity: parsed.data.destinationCity, route: trucks[truckIndex]!.stops?.length ? trucks[truckIndex]!.route : `${trucks[truckIndex]!.originWarehouseName ?? "Origen por confirmar"} → ${parsed.data.destinationCity}`, capacity: parsed.data.capacity,maxWeightLb:parsed.data.maxWeightLb, notes: parsed.data.notes };
   return { ok: true as const, truck: trucks[truckIndex]! };
@@ -498,6 +503,7 @@ export async function assignBoxToTruck(truckId: string, boxId: string, scan?: { 
   if (!(["planificado", "cargando"] as const).includes(truck.status as "planificado" | "cargando")) return { ok: false as const, error: "Solo puedes asignar cajas antes del despacho." };
   if (box.status !== "en-bodega" || box.truckId) return { ok: false as const, error: "La caja debe estar disponible en bodega." };
   const loaded=boxes.filter(b=>truck.boxIds.includes(b.id));
+  if(truck.maxWeightLb!==undefined&&truckLoad([...loaded,box]).missingWeights)return {ok:false as const,error:'Este camión tiene límite de peso. Registra primero el peso pendiente desde el detalle del paquete.'};
   if(truck.maxWeightLb!==undefined&&truckLoad([...loaded,box]).weightLb>truck.maxWeightLb)return {ok:false as const,error:`La carga superaría el límite de peso real de ${truck.maxWeightLb} lb.`};
   if (truck.status === "cargando") {
     const transition = transitionBox(box, "cargada-en-camion", { actor: "Operaciones A&L", note: scan?.method === "manual" ? `Cargada a ${truck.code} por selección manual desde Bodega.` : `Asignada a ${truck.code}.` });

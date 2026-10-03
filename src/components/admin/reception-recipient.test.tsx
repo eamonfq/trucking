@@ -25,6 +25,32 @@ function mount(element:React.ReactNode){const node=document.createElement('div')
 afterEach(()=>{for(const {root,node} of mounts.splice(0)){act(()=>root.unmount());node.remove();}vi.clearAllMocks();vi.mocked(cloverAvailability).mockResolvedValue({enabled:false,issues:[]});});
 const addr={id:'a',userId:'u',label:'Casa',street:'Reforma',exteriorNumber:'10',neighborhood:'Centro',postalCode:'49540',municipality:'Valle de Juárez',state:'Jalisco'};
 const person={id:'r',userId:'u',name:'Juan Perez',phone:'5512345678',addressId:'a'};
+it('captures a motorcycle and jointly weighed boxes as separate concepts in one reception',async()=>{
+ vi.mocked(getReceptionContacts).mockResolvedValue({recipients:[person],addresses:[addr]});
+ vi.mocked(receivePackageGroup).mockResolvedValue({ok:false,error:'Captured'});
+ const {node}=mount(<ReceptionForm users={[]} defaultCustomerId="u" rates={[...BOX_CATEGORIES]} origins={[{id:'origin',name:'Origen'}]} excessPolicy="recargo"/>);await act(async()=>{});
+ const click=async(text:string)=>act(async()=>Array.from(node.querySelectorAll<HTMLButtonElement>('button')).find(b=>b.textContent?.includes(text))!.click());
+ const field=(article:Element,label:string)=>{const l=Array.from(article.querySelectorAll<HTMLLabelElement>('label')).find(l=>l.textContent===label)!;return document.getElementById(l.htmlFor) as HTMLInputElement;};
+ const change=async(element:HTMLInputElement|HTMLSelectElement,value:string)=>act(async()=>{Object.getOwnPropertyDescriptor(element instanceof HTMLSelectElement?HTMLSelectElement.prototype:HTMLInputElement.prototype,'value')!.set!.call(element,value);element.dispatchEvent(new Event(element instanceof HTMLSelectElement?'change':'input',{bubbles:true}));});
+ await click('Varios conceptos');
+ let articles=node.querySelectorAll('[aria-label="Conceptos de la recepción"] article');
+ await change(field(articles[0],'Contenido del concepto 1'),'Moto Honda · VIN 201285');
+ await change(field(articles[0],'Precio total de este concepto (USD)'),'3000');
+ await act(async()=>articles[0].querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
+ await click('Añadir otro concepto');articles=node.querySelectorAll('[aria-label="Conceptos de la recepción"] article');
+ await change(field(articles[1],'Contenido del concepto 2'),'Cajas de ropa');
+ await change(field(articles[1],'Piezas'),'5');
+ await change(articles[1].querySelector<HTMLSelectElement>('select')!,'peso-personalizado');
+ await change(field(articles[1],'Peso conjunto de este concepto (lb)'),'117');
+ await change(field(articles[1],'Tarifa por libra (USD)'),'3.20');
+ expect(node.querySelector('[aria-label="Total de recepción"]')?.textContent).toContain('$3,374.40');
+ expect(node.querySelector('[aria-label="Total de recepción"]')?.textContent).toContain('6 piezas · 2 conceptos');
+ expect(node.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(false);
+ await act(async()=>node.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ expect(receivePackageGroup).toHaveBeenCalledTimes(1);
+ const args=vi.mocked(receivePackageGroup).mock.calls[0];expect(args[0]).toHaveLength(1);expect(args[4]).toBeUndefined();
+ expect(args[5]).toMatchObject([{description:'Moto Honda · VIN 201285',quantity:1,mode:'manual',weightUnknown:true,priceUsd:3000},{description:'Cajas de ropa',quantity:5,mode:'peso-personalizado',weightScope:'grupo',weightLb:117,rateUsd:3.2}]);
+});
 it('charges fixed catalog prices for multiple boxes and clears the selection when switching to volume',async()=>{
  vi.mocked(getReceptionContacts).mockResolvedValue({recipients:[person],addresses:[addr]});
  vi.mocked(receivePackageGroup).mockResolvedValue({ok:false,error:'Captured'});

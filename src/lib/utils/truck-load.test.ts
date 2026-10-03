@@ -1,5 +1,8 @@
 import {expect,it} from "vitest";
 import {truckLoad} from "./truck-load";
+it('identifies unknown cargo weight instead of treating it as measured zero',()=>{
+ expect(truckLoad([{weightLb:0,weightUnknown:true,dimensions:{length:0,width:0,height:0}},{weightLb:117,dimensions:{length:0,width:0,height:0}}])).toMatchObject({count:2,weightLb:117,missingWeights:1});
+});
 it("marks volume as partial when weight-priced packages have no measurements",()=>{
  expect(truckLoad([{weightLb:50,dimensions:{length:0,width:0,height:0}},{weightLb:20,dimensions:{length:12,width:12,height:12}}])).toMatchObject({weightLb:70,volumeFt3:1,missingDimensions:1});
 });

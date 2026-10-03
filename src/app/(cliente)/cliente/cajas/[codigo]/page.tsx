@@ -1,5 +1,6 @@
 import {formatDimensions} from "@/lib/utils/format";
 import {formatDeliveryAddress} from "@/lib/utils/address-display";
+import {boxWeightLabel} from "@/lib/utils/reception-display";
 import { billingDescription } from "@/lib/utils/billing";
 import Link from "next/link";
 import { PrivatePhoto } from "@/components/ui/private-photo";
@@ -28,10 +29,10 @@ export default async function BoxDetail({ params }: { params: Promise<{ codigo: 
         <Card className="shadow-none">
           <p className="text-xs font-bold uppercase tracking-wider text-navy-400">Categoría asignada</p>
           <p className="mt-3 font-display text-3xl font-bold text-navy-950">{box.categoryName ?? category?.name ?? "Por categorizar"}</p>
-          <p className="mt-1 font-display text-xl font-bold text-orange-600">{formatUsd(box.customPriceUsd ?? category?.priceUsd ?? 0)}</p>{box.billing&&<p className="mt-2 text-sm text-navy-500">{billingDescription(box.billing)}</p>}{box.contentsNote&&<div className="mt-5 rounded-xl bg-cream-100 p-4"><p className="text-xs font-bold uppercase tracking-wider text-navy-500">Contenido / nota de carga</p><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-navy-900">{box.contentsNote}</p></div>}
+          <p className="mt-1 font-display text-xl font-bold text-orange-600">{formatUsd(box.billing?.amountUsd??box.customPriceUsd ?? category?.priceUsd ?? 0)}</p>{box.receptionConcept&&<p className="mt-3 text-sm text-navy-500">Concepto: {box.receptionConcept.description} · {box.receptionConcept.quantity} piezas · {formatUsd(box.receptionConcept.totalAmountUsd)} en total.</p>}{box.billing&&<p className="mt-2 text-sm text-navy-500">{billingDescription(box.billing)}</p>}{box.contentsNote&&<div className="mt-5 rounded-xl bg-cream-100 p-4"><p className="text-xs font-bold uppercase tracking-wider text-navy-500">Contenido / nota de carga</p><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-navy-900">{box.contentsNote}</p></div>}
           <dl className="mt-5 grid grid-cols-2 gap-4 border-t border-stone-200 pt-5 text-sm">
             <div><dt className="text-navy-400">Medidas</dt><dd className="mt-1 font-semibold">{formatDimensions(box.dimensions)}</dd></div>
-            <div><dt className="text-navy-400">{box.billing?.groupWeight?"Peso prorrateado (no individual)":"Peso"}</dt><dd className="mt-1 font-semibold">{box.weightLb ? `${box.weightLb} lb` : "Se registra al recibir"}{box.billing?.groupWeight&&<span className="block text-xs">Grupo: {box.billing.groupWeight.totalWeightLb} lb / {box.billing.groupWeight.pieces} piezas</span>}</dd></div>
+            <div><dt className="text-navy-400">Peso registrado</dt><dd className="mt-1 font-semibold">{boxWeightLabel(box)}</dd></div>
             <div><dt className="text-navy-400">Tracking de origen</dt><dd className="mt-1 font-semibold">{box.originTracking ?? "No aplica"}</dd></div>
             <div><dt className="text-navy-400">Recepción</dt><dd className="mt-1 font-semibold">{box.receivedAt ? formatDate(box.receivedAt) : "Pendiente"}</dd></div>
           </dl>

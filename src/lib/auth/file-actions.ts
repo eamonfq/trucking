@@ -20,6 +20,8 @@ import {collection} from '@/lib/db/store';
 import {recordRevision} from '@/lib/db/revision';
 import {quoteGroupWeight,allocateUnits} from '@/lib/utils/group-weight';
 import {configService} from '@/lib/services/config';
+import {prepareReceptionConcepts} from '@/lib/utils/reception-concepts';
+import {boxWeightLabel,receptionConceptSummaries} from '@/lib/utils/reception-display';
 
 const receptionRequests=collection<{id:string;actorId:string;fingerprint:string;boxIds:string[];invoiceIds:string[]}>('receptionRequests');
 function savedReception(request:typeof receptionRequests[number]){
@@ -27,11 +29,19 @@ function savedReception(request:typeof receptionRequests[number]){
   return {ok:true as const,results,total:results.reduce((sum,r)=>sum+(r.invoice?Math.round(invoiceTotal(r.invoice)*100):0),0)/100,replayed:true};
 }
 
-export async function receivePackageGroup(input:unknown,data:FormData,paymentInput?:unknown,requestId?:string,groupInput?:unknown){
+export async function receivePackageGroup(input:unknown,data:FormData,paymentInput?:unknown,requestId?:string,groupInput?:unknown,conceptInput?:unknown){
   return runMutation("admin:recepcion",async()=>withConsolidatedEmail(async()=>{
     const group=groupInput===undefined?undefined:z.object({totalWeightLb:z.number().finite().positive().max(1000000).multipleOf(0.001)}).safeParse(groupInput);
     if(group&&!group.success)return {ok:false as const,error:'Revisa el peso conjunto (máximo tres decimales).'};
     let prepared=input;
+    let conceptPlan:ReturnType<typeof prepareReceptionConcepts>|undefined;
+    if(conceptInput!==undefined){
+      if(groupInput!==undefined||!Array.isArray(input)||input.length!==1||!input[0]||typeof input[0]!=='object'||input[0].reject)return {ok:false as const,error:'Una recepción mixta requiere un cliente y conceptos válidos, sin rechazo parcial.'};
+      try{
+        conceptPlan=prepareReceptionConcepts(conceptInput,await configService.getFlowConfig(),await configService.getRateTable());
+        prepared=conceptPlan.rows.map((row,i)=>({...input[0],...row.item,prealertId:i===0?input[0].prealertId:''}));
+      }catch(e){return {ok:false as const,error:e instanceof z.ZodError?e.issues[0]?.message??'Revisa los conceptos.':(e as Error).message};}
+    }
     if(group?.success){
       if(!Array.isArray(input)||input.length<1||input.length>50)return {ok:false as const,error:'Revisa las piezas del grupo.'};
       try{const weights=allocateUnits(group.data.totalWeightLb,input.length,1000);prepared=input.map((p,i)=>({...p,weightLb:weights[i]}));}catch(e){return {ok:false as const,error:(e as Error).message};}
@@ -41,7 +51,7 @@ export async function receivePackageGroup(input:unknown,data:FormData,paymentInp
     const items=parsed.data;
     const actor=await requireAdminUser(["recepcion"]);
     if(requestId&&!z.string().uuid().safeParse(requestId).success)return {ok:false as const,error:'Identificador de recepción inválido.'};
-    const fingerprint=recordRevision({items,payment:paymentInput??null,...(group?.success?{group:group.data}:{})});
+    const fingerprint=recordRevision({items,payment:paymentInput??null,...(group?.success?{group:group.data}:{}),...(conceptPlan?{concepts:conceptPlan.rows.map(r=>r.concept)}:{})});
     const previous=requestId?receptionRequests.find(r=>r.id===requestId):undefined;
     if(previous){if(previous.actorId!==actor.id||previous.fingerprint!==fingerprint)return {ok:false as const,error:'Esta recepción ya se guardó con otros datos. Revisa la bodega antes de continuar.'};return savedReception(previous);}
     if(items.some(p=>p.customer!==items[0].customer||p.originWarehouseId!==items[0].originWarehouseId||p.recipientId!==items[0].recipientId))return {ok:false as const,error:"Un grupo debe tener el mismo cliente, origen y destinatario."};
@@ -59,7 +69,8 @@ export async function receivePackageGroup(input:unknown,data:FormData,paymentInp
     const groupId=crypto.randomUUID();
     const groupCode=boxes.find(b=>b.id===items[0].prealertId)?.code??`BX-26${String(nextDocumentSequence("box")).padStart(4,"0")}` as const;
     for(const [index,item] of items.entries()){
-      const result=await withReceptionPiece({id:groupId,code:groupCode,index:index+1,total:items.length,...(groupQuote?{groupWeight:{totalWeightLb:groupQuote.billing.actualWeightLb,totalAmountUsd:groupQuote.billing.amountUsd,pieces:items.length},allocatedAmountUsd:groupQuote.amounts[index]}:{})},()=>receiveBoxWithPhoto({...item,invoiceNow:!!payment||item.invoiceNow},data));
+      const conceptRow=conceptPlan?.rows[index];
+      const result=await withReceptionPiece({id:groupId,code:groupCode,index:index+1,total:items.length,...(conceptRow?{concept:conceptRow.concept,allocatedAmountUsd:conceptRow.allocatedAmountUsd,groupWeight:conceptRow.groupWeight}:groupQuote?{groupWeight:{totalWeightLb:groupQuote.billing.actualWeightLb,totalAmountUsd:groupQuote.billing.amountUsd,pieces:items.length},allocatedAmountUsd:groupQuote.amounts[index]}:{})},()=>receiveBoxWithPhoto({...item,invoiceNow:!!payment||item.invoiceNow},data));
       if(!result.ok)return result;
       results.push(result);
     }
@@ -100,7 +111,7 @@ function receptionEmail(result:{results:Array<{box:Box;invoice?:Invoice}>;total:
     const receptionPhoto=firstPhoto?.photoFileId?{fileId:firstPhoto.photoFileId,ownerId:firstPhoto.userId}:undefined;
     const rejected=result.results.filter(r=>r.box.status==="rechazada").length;
     const invoiceList=result.results.flatMap(r=>r.invoice?[`${r.invoice.number} (${r.invoice.status})`]:[]);
-    const reception={reference:code,totalWeightLb:first.billing?.groupWeight?.totalWeightLb,totalUsd:invoiceList.length?result.total:undefined,pieces:result.results.map(r=>({code:r.box.code,weightLb:r.box.weightLb,dimensions:Object.values(r.box.dimensions).every(n=>n>0)?`${r.box.dimensions.length} × ${r.box.dimensions.width} × ${r.box.dimensions.height}`:"No registradas",rejected:r.box.status==="rechazada"})),invoices:result.results.flatMap(r=>r.invoice?[{number:r.invoice.number,status:r.invoice.status}]:[])};
+    const reception={reference:code,totalWeightLb:!first.receptionConcept?first.billing?.groupWeight?.totalWeightLb:undefined,concepts:first.receptionConcept?receptionConceptSummaries(result.results.map(r=>r.box)):undefined,totalUsd:invoiceList.length?result.total:undefined,pieces:result.results.map(r=>({code:r.box.code,weightLb:r.box.weightLb,weightLabel:boxWeightLabel(r.box),description:r.box.contentsNote,dimensions:Object.values(r.box.dimensions).every(n=>n>0)?`${r.box.dimensions.length} × ${r.box.dimensions.width} × ${r.box.dimensions.height}`:"No registradas",rejected:r.box.status==="rechazada"})),invoices:result.results.flatMap(r=>r.invoice?[{number:r.invoice.number,status:r.invoice.status}]:[])};
     return {receptionPhoto,reception,to:customer.email,subject:`Recepción ${code} · ${result.results.length} unidad(es)`,heading:rejected?"Recepción registrada con observaciones":"Tu paquete ya está en bodega",body:`Recepción ${code}: ${result.results.length} unidad(es). ${result.results.map(r=>`${r.box.code}: ${r.box.weightLb} lb${r.box.billing?.groupWeight?" prorrateadas":""}, ${r.box.dimensions.length} × ${r.box.dimensions.width} × ${r.box.dimensions.height} in`).join("; ")}. ${rejected?`${rejected} unidad(es) rechazada(s); consulta los motivos en tu panel.`:""} ${invoiceList.length?`Total facturado: USD ${result.total.toFixed(2)}. Facturas: ${invoiceList.join(", ")}.`:"El cobro se determinará según la configuración de facturación."}`,actionLabel:"Ver mis paquetes",actionUrl:`${siteUrl()}/cliente/cajas`};
 }
 

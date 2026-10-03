@@ -4,7 +4,7 @@ import {CloverCheckout} from "@/components/payments/clover-checkout";
 import { calculateBilling, DEFAULT_WEIGHT_PRICING, type WeightPricing } from "@/lib/utils/billing";
 import {CloverCardFields,type CloverCardHandle} from "@/components/payments/clover-card-fields";
 import {submitCloverPayment,prepareCloverPayment} from "@/lib/auth/clover-actions";
-import { useEffect,useRef,useState } from "react";
+import { useEffect,useMemo,useRef,useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import styles from "./reception-pos.module.css";
@@ -34,6 +34,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 
 import {quoteGroupWeight} from "@/lib/utils/group-weight";
+import {ReceptionConceptEditor,newReceptionConcept} from './reception-concept-editor';
+import {prepareReceptionConcepts,type ReceptionConceptInput} from '@/lib/utils/reception-concepts';
 import {resolveReceptionPieces} from "@/lib/utils/reception-pieces";
 
 type Receipt = Extract<Awaited<ReturnType<typeof receivePackageGroup>>,{ok:true}>;
@@ -43,6 +45,9 @@ export function ReceptionForm({ users, prealerts = [], excessPolicy, excessFeeUs
   const card=useRef<CloverCardHandle>(null),requestId=useRef<string|undefined>(undefined),submitLock=useRef(false);
   const [cardReady,setCardReady]=useState(false),[pendingReceipt,setPendingReceipt]=useState<Receipt|null>(null),[paymentReview,setPaymentReview]=useState(false),[receiptUncertain,setReceiptUncertain]=useState(false),[paymentNotice,setPaymentNotice]=useState("");
   const [quantity,setQuantity]=useState(1),[shared,setShared]=useState({dimensions:true,weight:false,price:false}),[pieces,setPieces]=useState<Array<{length:number;width:number;height:number;weightLb:number;customPriceUsd:number}>>([]);
+  const [mixedMode,setMixedMode]=useState(false),[concepts,setConcepts]=useState<ReceptionConceptInput[]>([]);
+  const mixed=useMemo(()=>{if(!mixedMode)return {};try{return {plan:prepareReceptionConcepts(concepts,weightPricing,rates)};}catch(e){const partial=concepts.reduce((sum,c)=>{try{const p=prepareReceptionConcepts([c],weightPricing,rates);return {total:sum.total+p.total,count:sum.count+p.count};}catch{return sum;}},{total:0,count:0});return {partial,error:e instanceof z.ZodError?e.issues[0]?.message:e instanceof Error?e.message:"Revisa los conceptos."};}},[mixedMode,concepts,weightPricing,rates]);
+  const mixedPlan=mixed.plan;
   const [catalogPieces,setCatalogPieces]=useState<CatalogPiece[]>([]);
   const [weightScope,setWeightScope]=useState<"individual"|"grupo">("individual");
   const [piecePage,setPiecePage]=useState(0);
@@ -75,8 +80,8 @@ export function ReceptionForm({ users, prealerts = [], excessPolicy, excessFeeUs
   const catalogItems=catalogPieces.map(piece=>({category:rates.find(rate=>rate.id===piece.categoryId),weightLb:piece.weightLb}));
   const resolvedPieces=mode==="fijo"?catalogItems.slice(1).map(p=>({...p.category?.dimensions,length:p.category?.dimensions.length??0,width:p.category?.dimensions.width??0,height:p.category?.dimensions.height??0,weightLb:p.weightLb,customPriceUsd:0})):resolveReceptionPieces({...dims,weightLb:Number(values.weightLb)||0,customPriceUsd:customPrice},pieces.slice(0,quantity-1),shared).map(p=>mode==="volumen"?p:{...p,length:0,width:0,height:0});
   const piecePrices=resolvedPieces.map((p,index)=>{try{const category=mode==="fijo"?catalogItems[index+1]?.category:suggestCategory(p,p.weightLb,rates).category;if(mode==="fijo"&&(!category||!suggestCategory(p,p.weightLb,[category]).category))return 0;return calculateBilling(mode,{length:p.length,width:p.width,height:p.height},p.weightLb,pricing,mode==="manual"?p.customPriceUsd:category?.priceUsd??0).amountUsd;}catch{return 0;}});
-  const total=mode==="fijo"?Math.round((catalogItems.reduce((sum,p)=>sum+(p.category?.priceUsd??0),0)+surcharge)*100)/100:globalWeight?(groupQuote?.billing.amountUsd??0):Math.round(((billing?.amountUsd??0)+surcharge+piecePrices.reduce((a,b)=>a+b,0))*100)/100;
-  const pricedCount=mode==="fijo"?catalogItems.filter(p=>p.category&&p.weightLb>0&&p.category.priceUsd>0&&suggestCategory(p.category.dimensions,p.weightLb,[p.category]).category).length:globalWeight?(groupQuote?quantity:0):(billing?1:0)+piecePrices.filter(price=>price>0).length;
+  const total=mixedMode?Math.round(((mixedPlan?.total??mixed.partial?.total??0)+(mixedPlan?surcharge:0))*100)/100:mode==="fijo"?Math.round((catalogItems.reduce((sum,p)=>sum+(p.category?.priceUsd??0),0)+surcharge)*100)/100:globalWeight?(groupQuote?.billing.amountUsd??0):Math.round(((billing?.amountUsd??0)+surcharge+piecePrices.reduce((a,b)=>a+b,0))*100)/100;
+  const pricedCount=mixedMode?(mixedPlan?.count??mixed.partial?.count??0):mode==="fijo"?catalogItems.filter(p=>p.category&&p.weightLb>0&&p.category.priceUsd>0&&suggestCategory(p.category.dimensions,p.weightLb,[p.category]).category).length:globalWeight?(groupQuote?quantity:0):(billing?1:0)+piecePrices.filter(price=>price>0).length;
 
   function updateCatalog(next:CatalogPiece[]){
     setCatalogPieces(next);setQuantity(Math.max(1,next.length));
@@ -86,15 +91,17 @@ export function ReceptionForm({ users, prealerts = [], excessPolicy, excessFeeUs
 
   // Sync after the previous mode's dimension inputs unregister on unmount.
   useEffect(()=>{
-    if(mode!=="fijo")return;
+    if(mixedMode||mode!=="fijo")return;
     const first=catalogPieces[0],category=rates.find(rate=>rate.id===first?.categoryId);
     setValue("length",category?.dimensions.length??0);setValue("width",category?.dimensions.width??0);setValue("height",category?.dimensions.height??0);setValue("weightLb",first?.weightLb||"");
     setValue("overrideCategory",category?.id??"");setValue("overrideReason",category?"Selección de precio fijo por caja del catálogo.":"");
-  },[catalogPieces,mode,rates,setValue]);
+  },[catalogPieces,mode,mixedMode,rates,setValue]);
+
+  useEffect(()=>{if(!mixedMode||!mixedPlan)return;const item=mixedPlan.rows[0].item;for(const [key,value] of Object.entries(item))setValue(key as keyof ReceptionInput,value as never);},[mixedMode,mixedPlan,setValue]);
 
   function completeReceipt(result:Receipt){
     const first=result.results[0],data=getValues();
-    setWeightScope("individual");setReceivedIds(current=>[...current,...result.results.map(r=>r.box.id)]);setQuantity(1);setPieces([]);setCatalogPieces([]);setPiecePage(0);setShared({dimensions:true,weight:false,price:false});
+    setConcepts([]);setMixedMode(false);setWeightScope("individual");setReceivedIds(current=>[...current,...result.results.map(r=>r.box.id)]);setQuantity(1);setPieces([]);setCatalogPieces([]);setPiecePage(0);setShared({dimensions:true,weight:false,price:false});
     reset({recipientId:data.recipientId,originWarehouseId:data.originWarehouseId,length:"",width:"",height:"",weightLb:"",customPriceUsd:undefined,contentsNote:"",billingMode:mode,customer:data.customer,prealertId:"",reject:false,overrideCategory:"",overrideReason:"",rejectionReason:""});
     setPhoto(null);setPayment({method:"destino",amount:"",reference:"",warehouseId:payment.warehouseId});
     setLastReceived({id:first.box.id,code:first.box.receptionGroup?.code??first.box.code,count:result.results.length,total:result.total,rejected:first.box.status==="rechazada"});
@@ -106,8 +113,9 @@ export function ReceptionForm({ users, prealerts = [], excessPolicy, excessFeeUs
     if(photoBusy||paymentReview||submitLock.current)return;
     submitLock.current=true;
     try{
-      if(mode==="fijo"&&!data.reject&&!pendingReceipt&&(!catalogPieces.length||pricedCount!==quantity)){setPiecePage(Math.floor(Math.max(0,catalogItems.findIndex(p=>!p.category||!(p.weightLb>0)||p.weightLb>p.category.maxWeightLb))/5));showToast({title:"Revisa las cajas del catálogo",description:"Selecciona el tamaño y registra un peso válido para cada pieza.",variant:"error"});return;}
-      if(quantity>1&&!globalWeight&&!pendingReceipt){const invalid=resolvedPieces.findIndex(p=>!receptionSchema.safeParse({...data,...p,customPriceUsd:mode==="manual"?p.customPriceUsd:undefined}).success);if(invalid>=0){setPiecePage(Math.floor(invalid/5));showToast({title:"Revisa el paquete "+(invalid+2),description:"Completa peso, medidas o cotización.",variant:"error"});return;}}
+      if(!mixedMode&&mode==="fijo"&&!data.reject&&!pendingReceipt&&(!catalogPieces.length||pricedCount!==quantity)){setPiecePage(Math.floor(Math.max(0,catalogItems.findIndex(p=>!p.category||!(p.weightLb>0)||p.weightLb>p.category.maxWeightLb))/5));showToast({title:"Revisa las cajas del catálogo",description:"Selecciona el tamaño y registra un peso válido para cada pieza.",variant:"error"});return;}
+      if(!mixedMode&&quantity>1&&!globalWeight&&!pendingReceipt){const invalid=resolvedPieces.findIndex(p=>!receptionSchema.safeParse({...data,...p,customPriceUsd:mode==="manual"?p.customPriceUsd:undefined}).success);if(invalid>=0){setPiecePage(Math.floor(invalid/5));showToast({title:"Revisa el paquete "+(invalid+2),description:"Completa peso, medidas o cotización.",variant:"error"});return;}}
+      if(mixedMode&&!mixedPlan){showToast({title:"Revisa los conceptos",description:mixed.error,variant:"error"});return;}
       const clover=payment.method==="clover"&&!data.reject;
       const location=payment.warehouseId??(locations.length===1?locations[0].id:undefined);
       if(clover&&!location){setPaymentNotice("Selecciona la ubicación del cobro.");return;}
@@ -118,10 +126,10 @@ export function ReceptionForm({ users, prealerts = [], excessPolicy, excessFeeUs
       if(!result){
         const upload=new FormData();if(photo)upload.set("file",photo);
         const base={...data,invoiceNow:clover||data.invoiceNow,customPriceUsd:isExceeded&&!data.reject?data.customPriceUsd:undefined};
-        const batch=mode==="fijo"?catalogItems.map((item,i)=>({...base,...item.category?.dimensions,weightLb:item.weightLb,overrideCategory:item.category?.id??"",overrideReason:"Selección de precio fijo por caja del catálogo.",prealertId:i===0?base.prealertId:""})):Array.from({length:quantity},(_,i)=>globalWeight?{...base,prealertId:i===0?base.prealertId:""}:i===0?base:{...base,...resolvedPieces[i-1],customPriceUsd:mode==="manual"?resolvedPieces[i-1]?.customPriceUsd:undefined,overrideCategory:"",overrideReason:"",prealertId:""});
+        const batch=mixedMode?[base]:mode==="fijo"?catalogItems.map((item,i)=>({...base,...item.category?.dimensions,weightLb:item.weightLb,overrideCategory:item.category?.id??"",overrideReason:"Selección de precio fijo por caja del catálogo.",prealertId:i===0?base.prealertId:""})):Array.from({length:quantity},(_,i)=>globalWeight?{...base,prealertId:i===0?base.prealertId:""}:i===0?base:{...base,...resolvedPieces[i-1],customPriceUsd:mode==="manual"?resolvedPieces[i-1]?.customPriceUsd:undefined,overrideCategory:"",overrideReason:"",prealertId:""});
         requestId.current??=crypto.randomUUID();
         let saved;
-        try{saved=await receivePackageGroup(batch,upload,data.reject||clover?undefined:paymentInput,requestId.current,globalWeight?{totalWeightLb:Number(data.weightLb)}:undefined);}catch{setReceiptUncertain(true);setPaymentNotice("No se confirmó el guardado. Conserva esta pantalla y vuelve a intentar: se recuperará la misma recepción, sin duplicar paquetes.");return;}
+        try{saved=await receivePackageGroup(batch,upload,data.reject||clover?undefined:paymentInput,requestId.current,!mixedMode&&globalWeight?{totalWeightLb:Number(data.weightLb)}:undefined,mixedMode?concepts:undefined);}catch{setReceiptUncertain(true);setPaymentNotice("No se confirmó el guardado. Conserva esta pantalla y vuelve a intentar: se recuperará la misma recepción, sin duplicar paquetes.");return;}
         if(!saved.ok){setReceiptUncertain(false);setPaymentNotice(saved.error);return;}
         result=saved;setReceiptUncertain(false);
         if(clover)setPendingReceipt(saved);
@@ -163,6 +171,8 @@ export function ReceptionForm({ users, prealerts = [], excessPolicy, excessFeeUs
       </section>
       <section className="@container grid min-w-0 gap-3 rounded-2xl border border-stone-200 bg-white p-4">
         <StepHeading number="02" title="Paquetes y cobro" description="Selecciona cómo se cobrará esta recepción."/>
+        <div className="flex flex-wrap gap-2 rounded-xl bg-stone-50 p-1.5" aria-label="Composición de la recepción"><Button type="button" variant="ghost" aria-pressed={!mixedMode} className={!mixedMode?"bg-white shadow-sm":""} onClick={()=>{setMixedMode(false);setValue("weightUnknown",false);setValue("weightLb","");}}>Una modalidad</Button><Button type="button" variant="ghost" aria-pressed={mixedMode} className={mixedMode?"bg-white shadow-sm":""} onClick={()=>{setMixedMode(true);setValue("reject",false);setConcepts(current=>current.length?current:[{...newReceptionConcept(),rateUsd:weightPricing.pricePerLbUsd}]);}}>Varios conceptos · carga mixta</Button></div>
+        {mixedMode?<><ReceptionConceptEditor value={concepts} onChange={setConcepts} rates={rates} pricing={weightPricing}/>{mixed.error&&<p className="text-xs leading-5 text-navy-500">Completa cada concepto para calcular el total.</p>}</>:<>
         <Select label="Método de cobro" options={[{value:"fijo",label:"Precio fijo por caja · catálogo"},{value:"peso-real",label:"Peso · solo libras reales"},{value:"volumen",label:"Volumen · según las medidas"},{value:"manual",label:"Carga especial · precio acordado"},{value:"peso-personalizado",label:"Carga especial · tarifa por libra"}]} {...register("billingMode",{onChange:event=>{setValue("overrideCategory","");setValue("overrideReason","");if(event.target.value==="fijo")updateCatalog(catalogPieces);else if(mode==="fijo")setShared(current=>({...current,dimensions:false,weight:false}));}})}/>
         {mode!=="fijo"&&<div className="py-2"><PackageQuantity value={quantity} onChange={n=>{setQuantity(n);setPieces(current=>Array.from({length:n-1},(_,i)=>current[i]??{...dims,weightLb:0,customPriceUsd:0}));}}/></div>}
         {quantity>1&&["peso-real","peso-personalizado","manual"].includes(mode)&&<Select label="Cómo se pesaron los paquetes" value={weightScope} onChange={e=>{setWeightScope(e.target.value as "individual"|"grupo");setValue("weightLb","");setShared(v=>({...v,weight:false}));}} options={[{value:"individual",label:"Peso individual por pieza"},{value:"grupo",label:"Peso total del grupo · pesados juntos"}]}/>}
@@ -182,19 +192,20 @@ export function ReceptionForm({ users, prealerts = [], excessPolicy, excessFeeUs
         {isExceeded&&!values.reject&&<Input label={globalWeight?"Precio acordado por todo el grupo (USD)":"Precio de carga personalizada (USD)"} type="number" inputMode="decimal" min="0.01" step="0.01" required placeholder="0.00" error={errors.customPriceUsd?.message} {...register("customPriceUsd",{shouldUnregister:true,setValueAs:value=>value===""?undefined:Number(value)})}/>}
         <Textarea label="Contenido / nota de carga (opcional)" rows={3} maxLength={600} placeholder="Ej. Ropa, herramientas o equipo frágil. No incluyas datos de pago." hint={quantity>1?"Esta nota se guardará en cada una de las piezas de la recepción.":"Visible en el detalle del paquete."} error={errors.contentsNote?.message} {...register("contentsNote")}/>
         {quantity>1&&!globalWeight&&mode!=="fijo"&&<PackageMeasurements showDimensions={mode==="volumen"} shared={shared} page={piecePage} onPageChange={setPiecePage} pieces={resolvedPieces} prices={piecePrices} manual={mode==="manual"} onChange={(i,field,value)=>setPieces(items=>items.map((item,j)=>j===i?{...item,[field]:value}:item))}/>}
-        {!values.reject&&<section aria-label="Total de recepción" aria-live="polite" className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-navy-950 p-4 text-white"><div><p className="text-xs font-semibold uppercase tracking-wider">{mode==="fijo"&&pricedCount!==quantity?"Total de catálogo":pricedCount===quantity?"Total de recepción":"Subtotal provisional"}</p><p className="mt-1 text-xs">{mode==="fijo"?(catalogPieces.length?`${pricedCount} de ${catalogPieces.length} cajas con peso validado`:"Añade cajas del catálogo"):<>{pricedCount} de {quantity} unidades calculadas{pricedCount<quantity?" · Completa las piezas pendientes":""}</>}</p></div><strong className="text-2xl tabular-nums">{formatUsd(total)}</strong></section>}
+        </>}
+        {!values.reject&&<section aria-label="Total de recepción" aria-live="polite" className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-navy-950 p-4 text-white"><div><p className="text-xs font-semibold uppercase tracking-wider">{!mixedMode&&mode==="fijo"&&pricedCount!==quantity?"Total de catálogo":(mixedMode?!!mixedPlan:pricedCount===quantity)?"Total de recepción":"Subtotal provisional"}</p><p className="mt-1 text-xs">{mixedMode?(mixedPlan?`${mixedPlan.count} piezas · ${concepts.length} conceptos`:`${pricedCount} piezas calculadas · Completa los conceptos pendientes`):mode==="fijo"?(catalogPieces.length?`${pricedCount} de ${catalogPieces.length} cajas con peso validado`:"Añade cajas del catálogo"):<>{pricedCount} de {quantity} unidades calculadas{pricedCount<quantity?" · Completa las piezas pendientes":""}</>}</p></div><strong className="text-2xl tabular-nums">{formatUsd(total)}</strong></section>}
         <details className="rounded-xl border border-stone-200 p-4"><summary className="cursor-pointer text-sm font-semibold">Foto del paquete y ajustes opcionales</summary><div className="mt-4 grid gap-4"><PhotoField key={`photo-${receivedIds.length}`} value={photo} onChange={setPhoto} onBusyChange={setPhotoBusy}/>
         </div></details>
-        <div className={`rounded-xl border p-4 ${values.reject?"border-red-200 bg-red-50":"border-stone-200"}`}><Checkbox label="Rechazar este paquete" {...register("reject")}/>{values.reject&&<div className="mt-4"><Textarea label="Motivo del rechazo" error={errors.rejectionReason?.message} {...register("rejectionReason")}/></div>}</div>
+        {!mixedMode&&<div className={`rounded-xl border p-4 ${values.reject?"border-red-200 bg-red-50":"border-stone-200"}`}><Checkbox label="Rechazar este paquete" {...register("reject")}/>{values.reject&&<div className="mt-4"><Textarea label="Motivo del rechazo" error={errors.rejectionReason?.message} {...register("rejectionReason")}/></div>}</div>}
       </section>
     </fieldset>
     <aside className="xl:sticky xl:top-4 grid min-w-0 gap-4 rounded-2xl border border-stone-200 bg-white p-4">
-      <p className="text-lg font-bold">{mode==="fijo"?catalogPieces.length:quantity} paquete(s) · {formatUsd(pendingReceipt?.total??total)}</p><StepHeading number="03" title={values.reject?"Confirmar rechazo":"Forma de pago"} description={values.reject?"No se registrará un cobro para este paquete.":"Selecciona método y ubicación. El folio se genera al guardar."}/>
+      <p className="text-lg font-bold">{mixedMode?mixedPlan?.count??concepts.reduce((n,c)=>n+Number(c.quantity),0):mode==="fijo"?catalogPieces.length:quantity} paquete(s) · {formatUsd(pendingReceipt?.total??total)}</p><StepHeading number="03" title={values.reject?"Confirmar rechazo":"Forma de pago"} description={values.reject?"No se registrará un cobro para este paquete.":"Selecciona método y ubicación. El folio se genera al guardar."}/>
       {!values.reject&&<fieldset disabled={isSubmitting||paymentReview||receiptUncertain}><PaymentCapture allowSplit locations={locations} value={payment} onChange={setPayment} total={pendingReceipt?.total??total}/></fieldset>}
       {paymentNotice&&<p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm leading-5 text-amber-900">{paymentNotice}</p>}
       {pendingReceipt&&!paymentReview&&<p className="text-xs leading-5 text-navy-500">Recepción guardada · pago pendiente. Cambiar de método conserva los mismos paquetes.</p>}
       {paymentReview&&pendingReceipt?<CloverCheckout autoOpen invoiceIds={pendingReceipt.results.flatMap(r=>r.invoice?[r.invoice.id]:[])} warehouseId={payment.warehouseId??(locations.length===1?locations[0].id:undefined)} requireLocation onPaid={()=>completeReceipt(pendingReceipt)} onPayable={()=>{setPaymentReview(false);setPaymentNotice("No hay un cargo pendiente. Puedes elegir cómo pagar.");}}/>:payment.method==="clover"&&!values.reject&&<CloverCardFields ref={card} onReady={setCardReady}/>}
-      <div className="border-t border-stone-200 pt-5"><Button type="submit" className="w-full" loading={isSubmitting} disabled={paymentReview||photoBusy||selectingPrealert||!values.recipientId||(!values.reject&&(!billing||(mode==="fijo"&&(!catalogPieces.length||pricedCount!==quantity))||(globalWeight&&!groupQuote)))||(payment.method==="clover"&&!values.reject&&!cardReady)}><PackageCheck className="size-4"/>{photoBusy?"Comprimiendo foto…":isSubmitting&&photo?"Guardando recepción y foto…":values.reject?"Guardar rechazo":payment.method==="clover"?`Cobrar ${formatUsd(pendingReceipt?.total??total)} y finalizar`:pendingReceipt?"Confirmar método y finalizar":"Guardar recepción"}</Button><p className="mt-3 text-center text-xs leading-5 text-navy-500">{values.reject?"El motivo quedará en el historial del cliente.":"Al guardar podrás imprimir la etiqueta del paquete."}</p></div>
+      <div className="border-t border-stone-200 pt-5"><Button type="submit" className="w-full" loading={isSubmitting} disabled={paymentReview||photoBusy||selectingPrealert||!values.recipientId||(!values.reject&&(mixedMode?!mixedPlan:(!billing||(mode==="fijo"&&(!catalogPieces.length||pricedCount!==quantity))||(globalWeight&&!groupQuote))))||(payment.method==="clover"&&!values.reject&&!cardReady)}><PackageCheck className="size-4"/>{photoBusy?"Comprimiendo foto…":isSubmitting&&photo?"Guardando recepción y foto…":values.reject?"Guardar rechazo":payment.method==="clover"?`Cobrar ${formatUsd(pendingReceipt?.total??total)} y finalizar`:pendingReceipt?"Confirmar método y finalizar":"Guardar recepción"}</Button><p className="mt-3 text-center text-xs leading-5 text-navy-500">{values.reject?"El motivo quedará en el historial del cliente.":"Al guardar podrás imprimir la etiqueta del paquete."}</p></div>
 
     </aside>
   </form>;
