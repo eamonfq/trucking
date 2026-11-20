@@ -428,17 +428,19 @@ export async function createTruck(input: unknown) {
   const parsed = truckSchema.safeParse(input);
   if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Revisa los datos del camión." };
   if(!(await configService.getFlowConfig()).destinationCities.includes(parsed.data.destinationCity)) return {ok:false as const,error:"El destino no está habilitado en Configuración."};
-  const number = trucks.length + 1;
   let driver = drivers.find((item) => item.id === parsed.data.driverId);
   if (parsed.data.driverId === "new") {
     driver = { id: `driver-${String(drivers.length + 1).padStart(3, "0")}`, name: parsed.data.newDriverName!, phone: parsed.data.newDriverPhone!, license: parsed.data.newDriverLicense!, active: true };
     drivers.push(driver);
   }
   if (!driver?.active) return { ok: false as const, error: "Selecciona un chofer activo." };
+  // Protected sequence: deleting trucks never makes a printed TR code available again.
+  const sequence = nextDocumentSequence("truck");
+  const numberedId = `truck-${String(sequence - 100).padStart(3, "0")}`;
   const createdAt = new Date().toISOString();
   const truck: Truck = {
-    id: `truck-${String(number).padStart(3, "0")}`,
-    code: `TR-26${String(100 + number).padStart(4, "0")}`,
+    id: trucks.some((item) => item.id === numberedId) ? `${numberedId}-${crypto.randomUUID().slice(0, 8)}` : numberedId,
+    code: `TR-26${String(sequence).padStart(4, "0")}`,
     plate: parsed.data.plate,
     driverId: driver.id,
     driverName: driver.name,

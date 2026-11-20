@@ -1,16 +1,18 @@
 import "server-only";
 import {collection,transactionConnection} from "./store";
-import {billsOfLading,boxes,invoices,shipments} from "./collections";
+import {billsOfLading,boxes,invoices,shipments,trucks} from "./collections";
 const counters=collection<{id:string;value:number}>("documentSequences");
-type Kind="box"|"invoice"|"shipment"|"billOfLading";
+type Kind="box"|"invoice"|"shipment"|"billOfLading"|"truck";
+/** Trucks were numbered TR-26(100 + n) before they had a sequence; the counter keeps that offset. */
+const TRUCK_OFFSET=100;
 function counter(kind:Kind){
- const values=kind==="box"?boxes.map(b=>b.receptionGroup?.code??b.code):kind==="invoice"?invoices.map(i=>i.number):kind==="billOfLading"?billsOfLading.map(b=>b.code):shipments.map(s=>s.code);
- const expression=kind==="invoice"?/^AL-26-(\d+)$/:kind==="box"?/^BX-26(\d+)(?:-\d+)?$/:kind==="billOfLading"?/^BOL-26(\d+)$/:/^SH-26(\d+)$/;
- const baseline=values.reduce((max,v)=>Math.max(max,Number(v.match(expression)?.[1]??0)),values.length);
+ const values=kind==="box"?boxes.map(b=>b.receptionGroup?.code??b.code):kind==="invoice"?invoices.map(i=>i.number):kind==="billOfLading"?billsOfLading.map(b=>b.code):kind==="truck"?trucks.map(t=>t.code):shipments.map(s=>s.code);
+ const expression=kind==="invoice"?/^AL-26-(\d+)$/:kind==="box"?/^BX-26(\d+)(?:-\d+)?$/:kind==="billOfLading"?/^BOL-26(\d+)$/:kind==="truck"?/^TR-26(\d+)$/:/^SH-26(\d+)$/;
+ const baseline=values.reduce((max,v)=>Math.max(max,Number(v.match(expression)?.[1]??0)),kind==="truck"?TRUCK_OFFSET+values.length:values.length);
  let record=counters.find(c=>c.id===kind);
  if(!record){record={id:kind,value:baseline};counters.push(record);}else record.value=Math.max(record.value,baseline);
  return record;
 }
 /** Seed before removing test records so previously issued references are never reused. */
-export function reserveDocumentSequences(){for(const kind of ["box","invoice","shipment"] as const)counter(kind);}
+export function reserveDocumentSequences(){for(const kind of ["box","invoice","shipment","billOfLading","truck"] as const)counter(kind);}
 export function nextDocumentSequence(kind:Kind){if(!transactionConnection())throw new Error("A document sequence requires a transaction.");return ++counter(kind).value;}

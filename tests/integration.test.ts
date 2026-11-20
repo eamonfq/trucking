@@ -985,6 +985,20 @@ describe.sequential("Real MySQL authentication and operations", () => {
     expect((await updateTruck(created.truck.id,{...input,notes:"Se conserva el destino histórico"})).ok).toBe(true);
   });
 
+  it("never reuses a truck code or id after trucks are removed", async () => {
+    cookieJar.set("ayl_session",{value:adminSession});
+    const input={plate:"SEQ-2099",driverId:(await logisticsService.getDrivers())[0].id,departureDate:"2099-01-01",destinationCity:DESTINATION_CITIES[0],capacity:{small:1}};
+    const first=await createTruck(input);
+    expect(first.ok).toBe(true);if(!first.ok)throw new Error("first truck");
+    // A bulk cleanup removes rows directly, without going through the app.
+    await withStore(async()=>{const index=trucks.findIndex(t=>t.id===first.truck.id);trucks.splice(index,1);},true);
+    const second=await createTruck({...input,plate:"SEQ-2098"});
+    expect(second.ok).toBe(true);if(!second.ok)throw new Error("second truck");
+    const number=(code:string)=>Number(code.replace(/^TR-26/,""));
+    expect(number(second.truck.code)).toBe(number(first.truck.code)+1);
+    expect(second.truck.id).not.toBe(first.truck.id);
+  });
+
   it("separates warehouse geography, origins and unloading destinations", async () => {
     cookieJar.set("ayl_session",{value:adminSession});
     const base={active:true,arrivalMessage:"{codigo} recibido en {almacen}, {destino}."};
