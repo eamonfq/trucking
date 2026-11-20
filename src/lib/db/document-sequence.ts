@@ -1,11 +1,11 @@
 import "server-only";
 import {collection,transactionConnection} from "./store";
-import {boxes,invoices,shipments} from "./collections";
+import {billsOfLading,boxes,invoices,shipments} from "./collections";
 const counters=collection<{id:string;value:number}>("documentSequences");
-type Kind="box"|"invoice"|"shipment";
+type Kind="box"|"invoice"|"shipment"|"billOfLading";
 function counter(kind:Kind){
- const values=kind==="box"?boxes.map(b=>b.receptionGroup?.code??b.code):kind==="invoice"?invoices.map(i=>i.number):shipments.map(s=>s.code);
- const expression=kind==="invoice"?/^AL-26-(\d+)$/:kind==="box"?/^BX-26(\d+)(?:-\d+)?$/:/^SH-26(\d+)$/;
+ const values=kind==="box"?boxes.map(b=>b.receptionGroup?.code??b.code):kind==="invoice"?invoices.map(i=>i.number):kind==="billOfLading"?billsOfLading.map(b=>b.code):shipments.map(s=>s.code);
+ const expression=kind==="invoice"?/^AL-26-(\d+)$/:kind==="box"?/^BX-26(\d+)(?:-\d+)?$/:kind==="billOfLading"?/^BOL-26(\d+)$/:/^SH-26(\d+)$/;
  const baseline=values.reduce((max,v)=>Math.max(max,Number(v.match(expression)?.[1]??0)),values.length);
  let record=counters.find(c=>c.id===kind);
  if(!record){record={id:kind,value:baseline};counters.push(record);}else record.value=Math.max(record.value,baseline);

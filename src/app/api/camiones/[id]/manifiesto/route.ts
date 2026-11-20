@@ -17,5 +17,5 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   const truckBoxes = boxes.filter((box) => truck.boxIds.includes(box.id));
   const logoSrc="data:image/png;base64,"+(await readFile(path.join(process.cwd(),"public/brand/logoayl.png"))).toString("base64");
   const buffer = await renderToBuffer(ManifestDocument({ truck, boxes: truckBoxes, users, shipments, recipients,warehouses:locations.warehouses,logoSrc }));
-  return new Response(new Uint8Array(buffer), { headers: { "Cache-Control":"private, no-store", "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="bill-of-lading-${truck.code}.pdf"` } });
+  return new Response(new Uint8Array(buffer), { headers: { "Cache-Control":"private, no-store", "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="manifiesto-${truck.code}.pdf"` } });
 }

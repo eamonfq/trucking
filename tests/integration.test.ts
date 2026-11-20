@@ -68,6 +68,9 @@ import {getReceptionContacts} from "@/lib/auth/reception-contacts";
 import {registerPendingCargoWeight} from '@/lib/auth/cargo-weight-actions';
 import {getPackageDelivery,savePackageDelivery} from '@/lib/auth/package-delivery-actions';
 import { POST as webhook } from "@/app/api/webhooks/resend/route";
+import { createBillOfLading, updateBillOfLading, deleteBillOfLading, truckCargoForBillOfLading } from "@/lib/auth/bill-of-lading-actions";
+import { billOfLadingService } from "@/lib/services/bill-of-lading";
+import { GET as billOfLadingPdf } from "@/app/api/bill-of-lading/[id]/route";
 
 import { saveWarehouse, saveWarehouseOperator, getWarehouseAdministration, getDestinationDesk, saveTruckStops, scanLoad, scanUnload, saveAdminPrealert, selectPrealertAtWarehouse, loadSelectedPackages } from "@/lib/auth/warehouse-actions";
 // Existing scenarios exercise historical single-stop trips. New-route tests use createNewTruck directly.
@@ -1267,6 +1270,57 @@ describe.sequential("Real MySQL authentication and operations", () => {
     expect((await scanLoad(trip.truck.id,b.box.code,destination.id)).ok).toBe(true);
   });
 
+  it("creates an editable bill of lading from a truck with the cargo summarised by quantity",async()=>{
+    cookieJar.set("ayl_session",{value:adminSession});
+    const locations=(await getWarehouseAdministration()).warehouses;
+    const origin=locations.find(w=>w.kind==="origen")!,destination=locations.find(w=>w.active&&(w.kind??"destino")==="destino")!;
+    const trip=await createNewTruck({plate:"BOL-2099",driverId:(await logisticsService.getDrivers())[0].id,departureDate:"2099-02-01",destinationCity:destination.city,notes:"HANDLE WITH CARE"});
+    if(!trip.ok)throw new Error("bol truck");
+    expect((await saveTruckStops(trip.truck.id,[{warehouseId:destination.id,arrivalDate:"2099-02-03"}],origin.id)).ok).toBe(true);
+    expect((await transitionTruckState(trip.truck.id)).ok).toBe(true);
+    const input={customer:operationClient,originWarehouseId:origin.id,length:10,width:10,height:10,weightLb:20,billingMode:"peso",reject:false};
+    const received:Array<{id:string;code:string}>=[];
+    for(const weightLb of [20,20,20,600]){const r=await receiveBox({...input,weightLb});if(!r.ok)throw new Error("bol box");received.push(r.box);}
+    await withStore(async()=>{boxes.find(b=>b.id===received[3]!.id)!.contentsNote="2020 QA ATV VIN 12345";},true);
+    for(const box of received)expect((await scanLoad(trip.truck.id,box.code,destination.id)).ok).toBe(true);
+
+    const created=await createBillOfLading({truckId:trip.truck.id});
+    if(!created.ok)throw new Error(created.error);
+    expect(created.code).toMatch(/^BOL-26\d{4}$/);
+    let bill=(await billOfLadingService.get(created.id))!;
+    expect(bill.lines.map(l=>[l.packageQty,l.packageType,l.weightLb])).toEqual([[3,"BOXES",60],[1,"VEHICLE",600]]);
+    expect(bill).toMatchObject({truckId:trip.truck.id,truckCode:trip.truck.code,date:"2099-02-01",number:created.code,specialInstructions:"HANDLE WITH CARE",freightTerms:"prepaid"});
+    expect(bill.orders[0]).toMatchObject({orderNumber:trip.truck.code,packages:4,weightLb:660});
+
+    const saved=await updateBillOfLading(created.id,{...bill,scac:"QAQA",billTo:"QA SALES INC",specialInstructions:"HANDLE WITH CARE\nVEHICLES SECURED",lines:[...bill.lines,{id:"extra",packageQty:"2",packageType:"PALLET",weightLb:"1,000",description:"Extra"}]});
+    expect(saved.ok).toBe(true);
+    expect((await updateBillOfLading(created.id,{...bill,lines:[{id:"bad",weightLb:-5}]})).ok).toBe(false);
+    bill=(await billOfLadingService.get(created.id))!;
+    expect(bill).toMatchObject({scac:"QAQA",specialInstructions:"HANDLE WITH CARE\nVEHICLES SECURED"});
+    expect(bill.lines.at(-1)).toMatchObject({packageQty:2,packageType:"PALLET",weightLb:1000,hazmat:false});
+    expect(bill).not.toHaveProperty("bad");
+
+    const pdf=await billOfLadingPdf(new Request("http://localhost"),{params:Promise.resolve({id:created.id})});
+    expect(pdf.status).toBe(200);expect(pdf.headers.get("content-type")).toBe("application/pdf");
+    expect(Buffer.from(await pdf.arrayBuffer()).subarray(0,4).toString()).toBe("%PDF");
+    const cargo=await truckCargoForBillOfLading(trip.truck.id);
+    expect(cargo.ok&&[cargo.pieces,cargo.weightLb]).toEqual([4,660]);
+
+    const blank=await createBillOfLading({});
+    if(!blank.ok)throw new Error(blank.error);
+    expect(await billOfLadingService.get(blank.id)).toMatchObject({scac:"QAQA",billTo:"QA SALES INC",specialInstructions:"",shipFrom:""});
+
+    cookieJar.set("ayl_session",{value:clientSession});
+    await expect(createBillOfLading({truckId:trip.truck.id})).rejects.toThrow();
+    await expect(deleteBillOfLading(created.id)).rejects.toThrow();
+    expect((await billOfLadingPdf(new Request("http://localhost"),{params:Promise.resolve({id:created.id})})).status).toBe(401);
+    cookieJar.set("ayl_session",{value:adminSession});
+
+    expect((await deleteBillOfLading(blank.id)).ok).toBe(true);
+    expect(await billOfLadingService.get(blank.id)).toBeNull();
+    const next=await createBillOfLading({});
+    expect(next.ok&&next.code).not.toBe(blank.code);
+  });
 });
 
 describe.sequential('Web Push with real MySQL and mocked delivery',()=>{

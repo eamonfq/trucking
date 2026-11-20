@@ -7,7 +7,9 @@ import {TruckLoadSummary} from "./truck-load-summary";
 import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Edit3, FileDown, Trash2 } from "lucide-react";
+import { Edit3, FileDown, FileText, Trash2 } from "lucide-react";
+import Link from "@/components/admin/admin-access";
+import { createBillOfLading } from "@/lib/auth/bill-of-lading-actions";
 import { z } from "zod";
 import { removeBoxFromTruck, transitionTruckState, updateTruck } from "@/lib/auth/admin-actions";
 import { useCatalog, useDestinations } from "@/components/ui/catalog-provider";
@@ -27,7 +29,7 @@ import { useToast } from "@/components/ui/toast";
 
 type TruckInput = z.input<typeof truckSchema>;
 
-export function TruckDetailManager({ initialTruck, initialAssigned, users, drivers, shipments }: { initialTruck: Truck; initialAssigned: Box[]; initialAvailable: Box[]; users: User[]; drivers: Driver[]; shipments: Shipment[] }) {
+export function TruckDetailManager({ initialTruck, initialAssigned, users, drivers, shipments, billOfLading }: { initialTruck: Truck; initialAssigned: Box[]; initialAvailable: Box[]; users: User[]; drivers: Driver[]; shipments: Shipment[]; billOfLading?: { id: string; code: string } }) {
   const router=useRouter();
   const destinations=useDestinations();
   const catalog=useCatalog();
@@ -37,6 +39,7 @@ export function TruckDetailManager({ initialTruck, initialAssigned, users, drive
   const [editOpen, setEditOpen] = useState(false);
   const [transitionOpen, setTransitionOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [creatingBill, setCreatingBill] = useState(false);
   const { showToast } = useToast();
   const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<TruckInput>({
     resolver: zodResolver(truckSchema),
@@ -55,6 +58,14 @@ export function TruckDetailManager({ initialTruck, initialAssigned, users, drive
     showToast({ title: "Caja retirada", description: `${result.box.code} volvió a estar disponible en bodega.` });
   };
 
+  const createBill = async () => {
+    setCreatingBill(true);
+    const result = await createBillOfLading({ truckId: truck.id });
+    if (!result.ok) { setCreatingBill(false); return showToast({ title: "No se pudo crear el bill of lading", description: result.error, variant: "error" }); }
+    showToast({ title: `${result.code} creado`, description: "Carga agrupada por cantidad. Revisa los datos y guarda." });
+    router.push(`/admin/camiones/bill-of-lading/${result.id}`);
+  };
+
   const transition = async () => {
     setBusy(true);
     const result = await transitionTruckState(truck.id, action?.description);
@@ -66,7 +77,7 @@ export function TruckDetailManager({ initialTruck, initialAssigned, users, drive
   };
 
   return <div className="grid gap-6">
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-stone-200 bg-white p-5"><div className="flex flex-wrap items-center gap-3"><StatusBadge status={truck.status} /><span className="text-sm text-navy-500">{truck.plate} · {truck.driverName} · salida {truck.departureDate}</span></div><div className="flex flex-wrap gap-2">{truck.status === "planificado" && <Button variant="secondary" onClick={() => { reset({ plate: truck.plate, driverId: truck.driverId, departureDate: truck.departureDate, destinationCity: truck.destinationCity as TruckInput["destinationCity"], maxWeightLb: truck.maxWeightLb, notes: truck.notes }); setEditOpen(true); }}><Edit3 className="size-4" />Editar viaje</Button>}<a href={`/api/camiones/${truck.id}/manifiesto`} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-stone-200 px-4 text-sm font-bold"><FileDown className="size-4" />Bill of Lading PDF</a>{action && !(truck.stops?.length && action.to==="en-destino") && <Button onClick={() => setTransitionOpen(true)}>{action.label}</Button>}</div></div>
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-stone-200 bg-white p-5"><div className="flex flex-wrap items-center gap-3"><StatusBadge status={truck.status} /><span className="text-sm text-navy-500">{truck.plate} · {truck.driverName} · salida {truck.departureDate}</span></div><div className="flex flex-wrap gap-2">{truck.status === "planificado" && <Button variant="secondary" onClick={() => { reset({ plate: truck.plate, driverId: truck.driverId, departureDate: truck.departureDate, destinationCity: truck.destinationCity as TruckInput["destinationCity"], maxWeightLb: truck.maxWeightLb, notes: truck.notes }); setEditOpen(true); }}><Edit3 className="size-4" />Editar viaje</Button>}<a href={`/api/camiones/${truck.id}/manifiesto`} title="Una fila por caja, para verificar la carga" className="inline-flex min-h-11 items-center gap-2 rounded-full border border-stone-200 px-4 text-sm font-bold"><FileDown className="size-4" />Manifiesto PDF</a>{billOfLading ? <Link href={`/admin/camiones/bill-of-lading/${billOfLading.id}`} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-stone-200 px-4 text-sm font-bold"><FileText className="size-4" />Bill of Lading {billOfLading.code}</Link> : <Button variant="ghost" loading={creatingBill} onClick={createBill}><FileText className="size-4" />Crear Bill of Lading</Button>}{action && !(truck.stops?.length && action.to==="en-destino") && <Button onClick={() => setTransitionOpen(true)}>{action.label}</Button>}</div></div>
 
     <TruckLoadSummary boxes={assigned} maxWeightLb={truck.maxWeightLb}/>
 
