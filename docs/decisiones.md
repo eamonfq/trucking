@@ -1,0 +1,104 @@
+# Decisiones
+
+Una entrada por decisión, la más reciente arriba. Las entradas no se borran: si una decisión cambia, se añade otra que la reemplaza. Las entradas anteriores al 2026-11-06 resumen los documentos por tema, que conservan el detalle.
+
+## 2026-11-08 — Bill of lading editable con el formato del cliente
+**Decisión:**
+- El *bill of lading* es un documento propio, guardado (`billsOfLading`) y editable, con el formato *Short Form* (VICS) que el cliente usa en papel. Se crea desde un camión o en blanco.
+- La carga va **por cantidad**: las cajas comunes en una fila, y cada vehículo (nota con VIN) en su fila. Las *Special Instructions* y el resto de campos de la muestra se editan.
+- El PDF anterior del camión, con una fila por pieza, se conserva como «Manifiesto de carga» para verificar la carga.
+
+**Motivo:** el cliente pidió poder crear el BOL, ver cantidades en vez del detalle de 20 o 30 cajas y llenar las instrucciones especiales. Su muestra (2026-09-12, 222 cajas y 7 vehículos) estaba hecha a mano porque el PDF del sistema no lo permitía. Se descartó un formulario sin guardar porque no deja corregir ni consultar los anteriores. Detalle en [BILL-OF-LADING.md](BILL-OF-LADING.md).
+**Reemplaza:** el «Bill of Lading operativo» generado desde el camión, con formato propio y sin copiar los textos del formato de referencia (BILL-OF-LADING.md, 2026-09-13). Ahora el PDF reproduce los textos estándar del formulario VICS, como la muestra del cliente.
+
+## 2026-11-07 — Cargo solo cambia mediante despliegues planificados
+**Decisión:** en el servidor de producción no se cambia nada a mano: ni `.env`, ni PM2, ni nginx, ni Node. Solo cambia mediante `./deploy.sh`, con código probado en local y un respaldo hecho justo antes. Los pendientes de configuración del servidor (`.env` duplicados, `PORT`, Node 22, `noindex`) esperan a un despliegue planificado o a una decisión explícita.
+**Motivo:** producción tiene datos reales y funciona; un cambio que no es necesario hoy solo añade riesgo. Se mantiene pendiente, como decisión del dueño, el `chmod 600` de `.env` y `.env.production`, que no cambia el funcionamiento.
+
+## 2026-11-07 — Respaldos de producción hacia la Mac
+**Decisión:** `scripts/respaldo-produccion.sh` saca el respaldo desde la Mac. En el servidor solo lee (`mysqldump --single-transaction` por SSH) y no deja archivos allí. Guarda en `~/Respaldos/ayl-produccion/` y conserva los 30 más recientes. Es obligatorio antes de cada despliegue.
+**Motivo:** no había ningún respaldo, y se quiere resolver sin instalar ni programar nada en cargo. Se descartaron `scripts/backup-database.mjs` (guarda en el servidor) y el cron en cargo. Límites: depende de que alguien lo ejecute, y la copia queda en una Mac sin FileVault.
+
+## 2026-11-07 — `deploy.sh` versionado como `scripts/deploy.sh`
+**Decisión:** la copia versionada del script de despliegue va en `scripts/deploy.sh`, idéntica a la del servidor. El servidor sigue usando su `./deploy.sh` de la raíz, sin seguimiento.
+**Motivo:** en la raíz del repo, el siguiente `git pull` del servidor fallaría por el archivo sin seguimiento, y habría que tocar cargo para moverlo. En `scripts/` no choca con nada.
+**Reemplaza:** 2026-11-06, «`deploy.sh` versionado en el repositorio».
+
+## 2026-11-06 — `deploy.sh` versionado en el repositorio
+**Decisión:** el script de despliegue que solo existía en el servidor (`/var/www/trucking/deploy.sh`, sin seguimiento en git) se añade al repo sin cambios.
+**Motivo:** que el procedimiento de despliegue quede versionado y revisable. No contiene secretos.
+**Consecuencia:** el primer `git pull` en el servidor después del commit falla («untracked working tree files would be overwritten») mientras exista la copia sin seguimiento. Hay que moverla una vez (ver docs/progreso.md).
+
+## 2026-11-06 — Desarrollo local en MySQL 8 con una copia saneada de producción
+**Decisión:** la base local de trabajo es `ayl_real` en la MySQL 8.0 de la Mac (3306), copiada de producción y saneada:
+- se borran sesiones, tokens, límites y colas de correo y push;
+- todos los correos pasan a `@example.invalid`;
+- todas las cuentas comparten una contraseña local, sin los hashes reales.
+
+Se conservan nombres, teléfonos, direcciones, facturas y fotos.
+**Motivo:** producción corre en MySQL 8.0.46, no en 5.7, y trabajar con los datos reales permite reproducir los flujos tal como se usan. Al cambiar los correos, nada puede llegar a un cliente aunque se active el envío en local. Con MySQL 8, además, pasan los 85 tests de integración, que fallaban en la 5.7 local. Se descartaron una copia idéntica (riesgo de correos reales) y una base vacía (poco realista).
+**Reemplaza:** el entorno local en MySQL 5.7, heredado de Laragon (DESPLIEGUE-SERVIDOR.md, 2026-09-12).
+
+## 2026-10-03 — Recepciones con varios conceptos
+**Decisión:** una recepción puede mezclar conceptos con precio, pesaje o modalidad distintos. El redondeo a la libra se aplica una vez por concepto, y el peso y el costo no se reparten entre conceptos.
+**Motivo:** cargas mixtas reales (p. ej. una moto a precio acordado y cajas por libra). Detalle en [recepciones-mixtas.md](recepciones-mixtas.md).
+
+## 2026-09-28 — Recepción personalizada sin alterar tarifas
+**Decisión:** «Carga especial · tarifa por libra» usa una tarifa manual solo para esa recepción. El peso conjunto se redondea una vez y se prorratea entre las piezas, marcado como peso prorrateado.
+**Motivo:** cobrar acuerdos puntuales sin cambiar la tarifa general ni las facturas históricas. Detalle en [recepcion-personalizada.md](recepcion-personalizada.md).
+
+## 2026-09-26 — Contacto opcional y eliminación controlada de pruebas
+**Decisión:**
+- El correo y la dirección del cliente son opcionales (correo `NULL` en `accounts`); son obligatorios el nombre, el apellido y el teléfono.
+- `/admin/eliminar` queda reservado al administrador completo, con vista previa, motivo y confirmación escrita, y guarda un respaldo en `deletionHistory`.
+
+**Motivo:** muchos clientes llegan al mostrador sin correo, y había que limpiar los datos de prueba sin borrar en masa. Detalle en [limpieza-pruebas-y-contacto-opcional.md](limpieza-pruebas-y-contacto-opcional.md).
+
+## 2026-09-25 — Permisos administrativos por sección
+**Decisión:** los administradores reciben secciones concretas (el perfil propuesto es Recepción). El «administrador completo» tiene todo, y el sistema no puede quedarse sin uno activo.
+**Motivo:** separar a recepción de la facturación y la configuración. Detalle en [permisos-administrativos.md](permisos-administrativos.md).
+
+## 2026-09-25 — PWA instalable sin caché sin conexión
+**Decisión:** el service worker solo usa la red y no guarda páginas privadas, archivos ni respuestas de la API. Las notificaciones push acompañan a los correos operativos.
+**Motivo:** que nunca quede información privada en el dispositivo. Detalle en [pwa.md](pwa.md).
+
+## 2026-09-25 — Clover con Hosted iFrame
+**Decisión:** el cobro con tarjeta usa el formulario alojado de Clover (los datos de la tarjeta no pasan por el servidor) y protege contra cargos duplicados. Se activa por variable (`CLOVER_ENABLED`).
+**Motivo:** reducir el alcance de PCI y evitar cargos dobles al reintentar. Detalle en [clover.md](clover.md). A 2026-11-06 está activo en producción.
+
+## 2026-09-22 — Fotos comprimidas y almacenamiento privado opcional en R2
+**Decisión:** las fotos se comprimen en el navegador y se normalizan en el servidor: se quitan los metadatos y el tamaño máximo es 2 MB. Pueden ir a R2 (`PHOTO_STORAGE=r2`), y se descargan siempre por `/api/files/[id]`, con sesión.
+**Motivo:** fotos de tablet pesadas y que no exista ninguna URL pública. Detalle en [fotos-r2.md](fotos-r2.md).
+
+## 2026-09-21 — Modalidades de cobro de recepción
+**Decisión:** hay tres modalidades:
+- peso real, redondeado a la libra × tarifa;
+- volumen, con resultado directo en USD;
+- carga especial, a precio acordado.
+
+Las facturas emitidas no se recalculan.
+**Motivo:** alinear el cobro con la operación real. Detalle en [cobro-recepcion.md](cobro-recepcion.md).
+
+## 2026-09-12 — Almacenes de origen y destino separados
+**Decisión:** cada ubicación es de origen, de destino o ambos. Los operadores ven solo su ubicación y nunca ven facturas, tarifas ni cobros.
+**Motivo:** reflejar las rutas reales (Chicago y El Paso → Valle de Juárez). Detalle en [ALMACENES-ORIGEN-DESTINO.md](ALMACENES-ORIGEN-DESTINO.md).
+
+## 2026-09-05 — Persistencia real en MySQL y autenticación propia
+**Decisión:**
+- Datos en MySQL: el dominio va como documentos JSON en `entities`, con una transacción por solicitud y escrituras serializadas con `operation_lock`.
+- Cuentas, sesiones y tokens en tablas propias: scrypt, tokens opacos guardados como SHA-256 y sesiones revocables.
+- Correo en una cola cifrada.
+
+**Motivo:** pasar del demo a un sistema operativo conservando los servicios del demo. Detalle en [AUTH-REAL.md](AUTH-REAL.md).
+**Reemplaza:** «las mutaciones del demo viven en memoria» (DECISIONS.md, punto 7, 2026-09-02).
+
+## 2026-09-02 — Decisiones del demo inicial
+**Decisión:** los 20 puntos de [DECISIONS.md](DECISIONS.md). Entre ellos:
+- Diseño: naranja para la acción principal y azul marino para la navegación; fuentes autoalojadas.
+- Todo importe sale de la categoría de caja; el peso solo es un límite.
+- Fechas en UTC.
+- Toda mutación en Server Actions, con la identidad tomada de la cookie.
+- Las notas internas nunca llegan al cliente.
+- Estados a través de la máquina de estados.
+
+**Motivo:** el que se explica en cada punto de ese documento. Sus «supuestos pendientes» siguen en docs/progreso.md.
