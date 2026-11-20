@@ -4,21 +4,22 @@ _Última actualización: 2026-11-20_
 
 ## Dónde quedó el trabajo
 
-- **Bill of lading editable (2026-11-08), terminado en local y sin commit ni despliegue.** Lo pidió el cliente: crear el BOL, mostrar cantidades en vez del detalle de cada caja y llenar las instrucciones especiales.
-  - Va en Admin › Camiones › Bill of Lading, con el formato VICS de su muestra (`~/Downloads/bill of landing2.pdf`).
+- **Bill of lading editable: desplegado en producción el 2026-11-20** (commit `4959f02`). Lo pidió el cliente: crear el BOL, mostrar cantidades en vez del detalle de cada caja y llenar las instrucciones especiales.
+  - Va en Admin › Camiones › Bill of Lading, con el formato VICS de su muestra (`~/Downloads/bill of landing2.pdf`). Se crea desde un camión o con «Nuevo en blanco».
   - El PDF por pieza del camión se conserva como «Manifiesto PDF».
-  - Verificado: 276 tests unitarios, 86 de integración, lint, `tsc` y build en verde. Además, un recorrido en el navegador sobre la copia local: crear desde TR-260101, editar, guardar, PDF, móvil y eliminar.
+  - Antes del despliegue, con Node 22 (el de producción): 276 tests unitarios, 86 de integración, lint, `tsc` y build en verde. En la copia local también se recorrió en el navegador: crear desde TR-260101, editar, guardar, PDF, móvil y eliminar.
+  - Después del despliegue: `/admin/camiones/bill-of-lading` redirige al login y `/api/bill-of-lading/[id]` responde 401 sin sesión. No hay errores nuevos en PM2. No se crearon BOL de prueba en producción.
   - Con las 228 piezas reales en bodega, el prellenado da 16 filas (200 cajas en una, más 15 de vehículos) en lugar de 228.
   - Detalle en docs/BILL-OF-LADING.md.
-  - **Siguiente paso:** que el cliente revise un PDF de prueba; commit; y desplegar en cargo con el procedimiento de la regla (respaldo y después `./deploy.sh`). No necesita migración.
-- **Producción** (`cargo-deploy:/var/www/trucking`) está en el commit `f02c21d` (2026-10-03, «refine warehouse inventory and edit package delivery»), el mismo que `master` local y `origin/master`. PM2 la tiene en línea desde el 2026-10-24.
+  - **Siguiente paso:** que el cliente lo use y confirme los puntos de «Pendiente › Código».
+- **Producción** (`cargo-deploy:/var/www/trucking`) está en el commit `32d2a30` (despliegue del 2026-11-20). `origin/master` va un commit por delante, con solo la actualización de este archivo; el siguiente despliegue lo traerá. Respaldo previo: `~/Respaldos/ayl-produccion/ayl_real-20261120T210935Z.sql.gz`, verificado.
+- **Ruido conocido en el log de errores de PM2:** «The Server Reference ID did not match the expected format» (unas 3.900 líneas antes del despliegue). Son peticiones con una cabecera `Next-Action` falsa, de bots; no son fallos de la aplicación.
 - **Regla desde el 2026-11-07:** en cargo no se cambia nada a mano. Solo cambia mediante `./deploy.sh`, con código probado en local y `scripts/respaldo-produccion.sh` justo antes (docs/decisiones.md).
 - **Entorno local integrado** (2026-11-06):
   - `ayl_real` está en la MySQL 8.0 local (3306) como copia saneada de producción, y `.env.local` apunta ahí.
   - Accesos locales en `.local/acceso-local.txt`.
   - Verificado: 267 tests unitarios, 85 de integración, lint, `tsc` y build en verde; `/login`, el rastreo público y seis páginas de `/admin` responden 200 con los datos reales.
 - **Primer respaldo de producción** (2026-11-07) en `~/Respaldos/ayl-produccion/`, comprobado restaurándolo en una base temporal.
-- Sin commit todavía: `docs/` (arquitectura, decisiones, progreso, BILL-OF-LADING), `scripts/deploy.sh`, `scripts/respaldo-produccion.sh` y todo el bill of lading editable.
 
 ## Pendiente
 
@@ -60,6 +61,7 @@ _Última actualización: 2026-11-20_
 - [ ] Responsable y tiempo de respuesta (SLA) de los tickets de soporte.
 
 ## Hecho
+- 2026-11-20: despliegue en producción del bill of lading editable, de `docs/` y de los scripts `deploy.sh` y `respaldo-produccion.sh` (commits `4959f02` y `32d2a30`), con respaldo previo verificado.
 - 2026-11-08: bill of lading editable con el formato VICS del cliente: se crea desde un camión o en blanco, la carga va por cantidad (cajas juntas y vehículos aparte) y las *Special Instructions* se editan. El PDF por pieza pasa a llamarse «Manifiesto de carga».
 - 2026-11-07: regla de no tocar cargo salvo en despliegues planificados. `scripts/respaldo-produccion.sh` y primer respaldo de producción, verificado. `deploy.sh` versionado como `scripts/deploy.sh`.
 - 2026-11-06: análisis del proyecto. Entorno local integrado con producción (MySQL 8 y copia saneada). Estructura de `docs/` (arquitectura, decisiones, progreso). `deploy.sh` traído del servidor.
