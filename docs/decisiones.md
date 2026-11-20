@@ -2,6 +2,21 @@
 
 Una entrada por decisión, la más reciente arriba. Las entradas no se borran: si una decisión cambia, se añade otra que la reemplaza. Las entradas anteriores al 2026-11-06 resumen los documentos por tema, que conservan el detalle.
 
+## 2026-11-20 — Producción se vacía de operaciones; se conservan clientes y destinatarios
+**Decisión:** a pedido del dueño se borró en producción todo lo operativo:
+- recepciones y cajas (229), facturas con sus pagos (229), camiones (7) y Bill of Lading (2);
+- notificaciones, solicitudes de recepción, intentos de Clover, historial de borrados anteriores y las 8 fotos (estaban en MySQL, no en R2).
+
+Se conservaron:
+- clientes (83), destinatarios (84) y direcciones;
+- el personal (4 administradores), los choferes, los almacenes y la configuración;
+- las tablas de cuentas, sesiones y auditoría.
+
+Los folios **continúan** (siguientes: BX-260230, AL-26-0258, TR-260108, BOL-260003) para no repetir un código ya impreso.
+**Cómo:** con un script de un solo uso (`.local/limpieza-2026-11-20/limpiar-operacion.cjs`, no versionado), probado antes en una copia local. Se ejecuta por SSH desde la Mac, sin dejar archivos en el servidor, en dos pasos: vista previa con conteos y ejecución con esos conteos como confirmación. Toma el mismo candado que la app (`operation_lock`), fija las secuencias antes de borrar y registra `operational_data_cleanup` en `security_audit`. Respaldo previo verificado: `~/Respaldos/ayl-produccion/ayl_real-20261120T213939Z.sql.gz`.
+**Motivo:** el dueño quiere empezar la operación desde cero sin volver a dar de alta a sus clientes. Se descartó `/admin/eliminar`, que borra una recepción a la vez, y se aceptó perder el registro de los cobros en el sistema: los cobros siguen en Clover. Es una excepción explícita a la regla del 2026-11-07, autorizada por el dueño ese día.
+**Consecuencia:** el número de camión pasó a la secuencia protegida (`documentSequences`, tipo `truck`, commit `4db2ce6`). Antes se calculaba con el número de camiones existentes, y al borrarlos el siguiente habría vuelto a ser TR-260101.
+
 ## 2026-11-08 — Bill of lading editable con el formato del cliente
 **Decisión:**
 - El *bill of lading* es un documento propio, guardado (`billsOfLading`) y editable, con el formato *Short Form* (VICS) que el cliente usa en papel. Se crea desde un camión o en blanco.

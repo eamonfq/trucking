@@ -4,6 +4,8 @@ _Última actualización: 2026-11-20_
 
 ## Dónde quedó el trabajo
 
+- **Producción vaciada de operaciones el 2026-11-20**, a pedido del dueño. Se conservaron clientes, destinatarios, direcciones, personal y configuración, y los folios continúan (detalle en docs/decisiones.md). Verificado después: no queda nada operativo, el sitio responde, un folio borrado muestra «No encontramos ese folio» y no hay errores nuevos en PM2. Si hubiera que deshacerlo: restaurar `~/Respaldos/ayl-produccion/ayl_real-20261120T213939Z.sql.gz`.
+- **Siguiente tema: sitio en español e inglés** (público, panel del cliente y admin). Idioma según el navegador y con un selector para cambiarlo. Plan en preparación; todavía no hay código.
 - **Bill of lading editable: desplegado en producción el 2026-11-20** (commit `4959f02`). Lo pidió el cliente: crear el BOL, mostrar cantidades en vez del detalle de cada caja y llenar las instrucciones especiales.
   - Va en Admin › Camiones › Bill of Lading, con el formato VICS de su muestra (`~/Downloads/bill of landing2.pdf`). Se crea desde un camión o con «Nuevo en blanco».
   - El PDF por pieza del camión se conserva como «Manifiesto PDF».
@@ -12,7 +14,7 @@ _Última actualización: 2026-11-20_
   - Con las 228 piezas reales en bodega, el prellenado da 16 filas (200 cajas en una, más 15 de vehículos) en lugar de 228.
   - Detalle en docs/BILL-OF-LADING.md.
   - **Siguiente paso:** que el cliente lo use y confirme los puntos de «Pendiente › Código».
-- **Producción** (`cargo-deploy:/var/www/trucking`) está en el commit `32d2a30` (despliegue del 2026-11-20). `origin/master` va un commit por delante, con solo la actualización de este archivo; el siguiente despliegue lo traerá. Respaldo previo: `~/Respaldos/ayl-produccion/ayl_real-20261120T210935Z.sql.gz`, verificado.
+- **Producción** (`cargo-deploy:/var/www/trucking`) está en el commit `4db2ce6` (segundo despliegue del 2026-11-20: numeración de camiones con secuencia protegida). `origin/master` puede ir por delante solo con cambios de `docs/`.
 - **Ruido conocido en el log de errores de PM2:** «The Server Reference ID did not match the expected format» (unas 3.900 líneas antes del despliegue). Son peticiones con una cabecera `Next-Action` falsa, de bots; no son fallos de la aplicación.
 - **Regla desde el 2026-11-07:** en cargo no se cambia nada a mano. Solo cambia mediante `./deploy.sh`, con código probado en local y `scripts/respaldo-produccion.sh` justo antes (docs/decisiones.md).
 - **Entorno local integrado** (2026-11-06):
@@ -43,7 +45,7 @@ _Última actualización: 2026-11-20_
   - el mapa es fijo, con la ruta Miami → Nuevo Laredo → centro de México, que no es la de A&L;
   - la entrega estimada sale vacía («— de mes»);
   - no es GPS y las notas no se publican. Una pieza que se recoge en otra ciudad (p. ej. una moto en Oklahoma registrada en El Paso) aparece «En bodega» desde que se registra. Valorar con el cliente una etapa «Pendiente de recolección» o una nota pública.
-- [ ] **Año fijo en los códigos** `BX-26…`, `SH-26…`, `AL-26-…` y `BOL-26…` (`client-actions.ts`, `admin-actions.ts`, `file-actions.ts`, `document-sequence.ts`, `bill-of-lading-actions.ts`). Decidir antes del 2026-12-31 si «26» es el año. Además, `warehouse-actions.ts:40` genera `BX-<uuid8>`, otro formato.
+- [ ] **Año fijo en los códigos** `BX-26…`, `SH-26…`, `AL-26-…`, `BOL-26…` y `TR-26…` (`client-actions.ts`, `admin-actions.ts`, `file-actions.ts`, `document-sequence.ts`, `bill-of-lading-actions.ts`). Decidir antes del 2026-12-31 si «26» es el año. Además, `warehouse-actions.ts:40` genera `BX-<uuid8>`, otro formato.
 - [ ] **Escalabilidad de `withStore`:** cada solicitud carga toda la tabla `entities` (1.462 documentos el 2026-11-06), y `/admin/facturas` y `/admin/clientes` ya generan más de 1 MB de HTML. Pasar a tablas propias primero las colecciones que más crecen (`notifications`, `boxes`, `invoices`), o paginar.
 - [ ] **El test de integración falla contra MySQL 5.7** (`changeUser` de mysql2 no reenvía la contraseña, en `tests/integration.test.ts:99`). En 8.0 pasa. Cambiarlo por `USE` si vuelve a usarse la 5.7.
 - [ ] **Sin formateador:** hay líneas de hasta 8.800 caracteres. Valorar Prettier, en un commit de reformateo aparte.
@@ -61,6 +63,7 @@ _Última actualización: 2026-11-20_
 - [ ] Responsable y tiempo de respuesta (SLA) de los tickets de soporte.
 
 ## Hecho
+- 2026-11-20: limpieza de operaciones en producción (se conservan clientes y destinatarios) y numeración de camiones con secuencia protegida (`4db2ce6`, desplegado). Hubo respaldo verificado antes de cada paso.
 - 2026-11-20: despliegue en producción del bill of lading editable, de `docs/` y de los scripts `deploy.sh` y `respaldo-produccion.sh` (commits `4959f02` y `32d2a30`), con respaldo previo verificado.
 - 2026-11-08: bill of lading editable con el formato VICS del cliente: se crea desde un camión o en blanco, la carga va por cantidad (cajas juntas y vehículos aparte) y las *Special Instructions* se editan. El PDF por pieza pasa a llamarse «Manifiesto de carga».
 - 2026-11-07: regla de no tocar cargo salvo en despliegues planificados. `scripts/respaldo-produccion.sh` y primer respaldo de producción, verificado. `deploy.sh` versionado como `scripts/deploy.sh`.

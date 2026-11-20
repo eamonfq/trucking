@@ -52,7 +52,7 @@ Los cambios de estado pasan por `src/lib/domain/state-machine.ts`.
 Las migraciones están en `migrations/` (001 a 007) y se aplican con `npm run db:migrate`, que registra cada una en `schema_migrations`.
 
 - **Tablas relacionales:** `accounts`, `sessions`, `auth_tokens`, `rate_limits`, `security_audit`, `email_outbox` (cifrada con `AUTH_SECRET`), `email_events`, `push_subscriptions`, `push_outbox`, `private_files` (fotos y comprobantes; contenido en MySQL o referencia a R2).
-- **`entities`:** el resto del dominio como documentos JSON (`collection_name`, `entity_id`, `payload`). Colecciones: `users`, `boxes`, `invoices`, `shipments`, `trucks`, `drivers`, `warehouses`, `addresses`, `recipients`, `notifications`, `receptionRequests`, `supportTickets`, `settings`, `documentSequences`, `billsOfLading`, `deletionHistory`, `cloverAttempts`, etc.
+- **`entities`:** el resto del dominio como documentos JSON (`collection_name`, `entity_id`, `payload`). Colecciones: `users`, `boxes`, `invoices`, `shipments`, `trucks`, `drivers`, `warehouses`, `addresses`, `recipients`, `notifications`, `receptionRequests`, `supportTickets`, `settings`, `documentSequences` (folios BX, AL, SH, BOL y TR; nunca se reutilizan), `billsOfLading`, `deletionHistory`, `cloverAttempts`, etc.
 - **`withStore`** abre una transacción y **carga toda la tabla `entities`** en memoria. Si escribe, bloquea antes `operation_lock` (`FOR UPDATE`), lo que serializa todas las escrituras, y al final guarda solo los documentos que cambiaron. Es simple y consistente, pero su coste crece con el volumen (ver docs/progreso.md).
 
 Volumen en producción el 2026-11-06 (unos 5 MB):
