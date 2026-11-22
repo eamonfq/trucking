@@ -1,11 +1,11 @@
 # Progreso
 
-_Última actualización: 2026-11-20_
+_Última actualización: 2026-11-22_
 
 ## Dónde quedó el trabajo
 
 - **Producción vaciada de operaciones el 2026-11-20**, a pedido del dueño. Se conservaron clientes, destinatarios, direcciones, personal y configuración, y los folios continúan (detalle en docs/decisiones.md). Verificado después: no queda nada operativo, el sitio responde, un folio borrado muestra «No encontramos ese folio» y no hay errores nuevos en PM2. Si hubiera que deshacerlo: restaurar `~/Respaldos/ayl-produccion/ayl_real-20261120T213939Z.sql.gz`.
-- **Todo el sistema en español e inglés: fases 1 a 4 hechas en local (2026-11-20), sin commit ni despliegue.**
+- **Todo el sistema en español e inglés: desplegado en producción el 2026-11-22** (commit `d9ec3eb`; fases 1 a 4 hechas en local el 2026-11-20).
   - Incluye:
     - el sitio público y el acceso;
     - el panel del cliente, el admin y el almacén, cada uno con su selector ES | EN;
@@ -21,7 +21,9 @@ _Última actualización: 2026-11-20_
     - recorrido en el navegador con la copia local: 17 pantallas del cliente y 22 del admin en inglés, sin errores de consola, sin texto de interfaz en español y sin desborde en móvil (390 px);
     - el modo español sigue igual.
   - En la copia local quedaron, solo por la prueba, la cuenta AL-MX-0019 verificada y la preferencia `en` en ella y en `admin-1`.
-  - **Siguiente paso:** commit y despliegue (respaldo y después `./deploy.sh`); que el dueño revise el inglés en el uso diario y responda las preguntas 4–7 de idiomas.md.
+  - Despliegue: respaldo previo `ayl_real-20261122T170737Z.sql.gz` (verificado con gzip y SHA-256), `./deploy.sh` sin migraciones nuevas y «Deploy OK».
+  - Después del despliegue: `/`, `/login`, `/registro`, `/rastrear` y `/como-funciona` responden 200 en los dos idiomas, con `lang` `es-MX` o `en-US` según la cookie `ayl_lang` y, sin cookie, según `Accept-Language`; `/cliente` sin sesión redirige al login. No hay errores nuevos en PM2 tras el reinicio. El panel del cliente con sesión no se probó en producción (no hay contraseñas de clientes); se probó en local.
+  - **Siguiente paso:** que el dueño revise el inglés en el uso diario, confirme que los clientes ya entran a su panel y responda las preguntas 4–7 de idiomas.md.
 - **Bill of lading editable: desplegado en producción el 2026-11-20** (commit `4959f02`). Lo pidió el cliente: crear el BOL, mostrar cantidades en vez del detalle de cada caja y llenar las instrucciones especiales.
   - Va en Admin › Camiones › Bill of Lading, con el formato VICS de su muestra (`~/Downloads/bill of landing2.pdf`). Se crea desde un camión o con «Nuevo en blanco».
   - El PDF por pieza del camión se conserva como «Manifiesto PDF».
@@ -30,7 +32,7 @@ _Última actualización: 2026-11-20_
   - Con las 228 piezas reales en bodega, el prellenado da 16 filas (200 cajas en una, más 15 de vehículos) en lugar de 228.
   - Detalle en docs/BILL-OF-LADING.md.
   - **Siguiente paso:** que el cliente lo use y confirme los puntos de «Pendiente › Código».
-- **Producción** (`cargo-deploy:/var/www/trucking`) está en el commit `4db2ce6` (segundo despliegue del 2026-11-20: numeración de camiones con secuencia protegida). `origin/master` puede ir por delante solo con cambios de `docs/`.
+- **Producción** (`cargo-deploy:/var/www/trucking`) está en el commit `d9ec3eb` (despliegue del 2026-11-22: sistema en español e inglés). `origin/master` puede ir por delante solo con cambios de `docs/`.
 - **Ruido conocido en el log de errores de PM2:** «The Server Reference ID did not match the expected format» (unas 3.900 líneas antes del despliegue). Son peticiones con una cabecera `Next-Action` falsa, de bots; no son fallos de la aplicación.
 - **Regla desde el 2026-11-07:** en cargo no se cambia nada a mano. Solo cambia mediante `./deploy.sh`, con código probado en local y `scripts/respaldo-produccion.sh` justo antes (docs/decisiones.md).
 - **Entorno local integrado** (2026-11-06):
@@ -81,6 +83,7 @@ _Última actualización: 2026-11-20_
 
 ## Hecho
 - 2026-11-20: limpieza de operaciones en producción (se conservan clientes y destinatarios) y numeración de camiones con secuencia protegida (`4db2ce6`, desplegado). Hubo respaldo verificado antes de cada paso.
+- 2026-11-22: despliegue en producción del sistema en español e inglés y de la corrección del error 500 del panel del cliente (commit `d9ec3eb`), con respaldo previo verificado.
 - 2026-11-20: despliegue en producción del bill of lading editable, de `docs/` y de los scripts `deploy.sh` y `respaldo-produccion.sh` (commits `4959f02` y `32d2a30`), con respaldo previo verificado.
 - 2026-11-08: bill of lading editable con el formato VICS del cliente: se crea desde un camión o en blanco, la carga va por cantidad (cajas juntas y vehículos aparte) y las *Special Instructions* se editan. El PDF por pieza pasa a llamarse «Manifiesto de carga».
 - 2026-11-07: regla de no tocar cargo salvo en despliegues planificados. `scripts/respaldo-produccion.sh` y primer respaldo de producción, verificado. `deploy.sh` versionado como `scripts/deploy.sh`.

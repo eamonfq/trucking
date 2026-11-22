@@ -97,10 +97,10 @@ Estilo:
 
 | Fase | Alcance | Estado |
 |---|---|---|
-| 1 | Base, selector, sitio público (portada, cómo funciona, rastreo, preguntas), acceso (login, registro, recuperar, restablecer, verificar), errores 404/500, componentes base y etiquetas de estado | **Hecha en local, 2026-11-20** |
-| 2 | Panel del cliente (`/cliente/*`), pagos con Clover y avisos push del dispositivo | **Hecha en local, 2026-11-20** |
-| 3 | Admin y almacén, con su selector de idioma. Sin el formateo previo con Prettier: no hizo falta | **Hecha en local, 2026-11-20** |
-| 4 | Correos (asunto, cuerpo y marco), push y avisos del panel en el idioma del destinatario; factura y recibo en el del cliente; etiqueta y manifiesto bilingües; BOL en inglés | **Hecha en local, 2026-11-20** |
+| 1 | Base, selector, sitio público (portada, cómo funciona, rastreo, preguntas), acceso (login, registro, recuperar, restablecer, verificar), errores 404/500, componentes base y etiquetas de estado | **Hecha el 2026-11-20; en producción desde el 2026-11-22** |
+| 2 | Panel del cliente (`/cliente/*`), pagos con Clover y avisos push del dispositivo | **Hecha el 2026-11-20; en producción desde el 2026-11-22** |
+| 3 | Admin y almacén, con su selector de idioma. Sin el formateo previo con Prettier: no hizo falta | **Hecha el 2026-11-20; en producción desde el 2026-11-22** |
+| 4 | Correos (asunto, cuerpo y marco), push y avisos del panel en el idioma del destinatario; factura y recibo en el del cliente; etiqueta y manifiesto bilingües; BOL en inglés | **Hecha el 2026-11-20; en producción desde el 2026-11-22** |
 | 5 (opcional) | `/en` y `hreflang` para Google, solo si se activa `SEO_INDEXABLE` | Pendiente |
 
 El idioma del cliente lo cambia él con el selector (se guarda en su perfil) o el admin con «Idioma de correos y facturas» en la ficha del cliente, en el alta desde Clientes y en el alta en mostrador (por defecto, español).
