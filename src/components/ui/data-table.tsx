@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
 import { EmptyState } from "@/components/ui/empty-state";
+import { UiText } from "./localized";
 
 export type Column<T> = { key: string; header: string; render: (row: T) => ReactNode; className?: string };
 
-export function DataTable<T>({ columns, rows, getRowKey, emptyTitle = "No hay registros", emptyDescription = "Los elementos aparecerán aquí cuando estén disponibles." }: { columns: Column<T>[]; rows: T[]; getRowKey: (row: T) => string; emptyTitle?: string; emptyDescription?: string }) {
+export function DataTable<T>({ columns, rows, getRowKey, emptyTitle = <UiText text="No hay registros" />, emptyDescription = <UiText text="Los elementos aparecerán aquí cuando estén disponibles." /> }: { columns: Column<T>[]; rows: T[]; getRowKey: (row: T) => string; emptyTitle?: ReactNode; emptyDescription?: ReactNode }) {
   if (rows.length === 0) return <EmptyState title={emptyTitle} description={emptyDescription} />;
   return (
     <div className="overflow-x-auto rounded-2xl border border-stone-200 bg-white">

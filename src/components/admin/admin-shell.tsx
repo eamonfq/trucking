@@ -9,6 +9,9 @@ import { BrandLogo } from "@/components/marketing/brand-logo";
 import { signOut } from "@/lib/auth/actions";
 import { canAdminPath, type AdminPrincipal } from "@/lib/auth/admin-permissions";
 import {AdminAccessProvider} from "./admin-access";
+import { LanguageSwitcher } from "@/components/ui/language-switcher";
+import { adminShell } from "@/lib/i18n/catalogs/admin-shell";
+import { useT } from "@/lib/i18n/provider";
 
 const navigation = [
   { label: "Eliminar pruebas", href: "/admin/eliminar", icon: Settings },
@@ -28,10 +31,11 @@ const navigation = [
   { label: "Edición", href: "/admin/edicion", icon: PencilLine },
   { label: "Correos", href: "/admin/correos", icon: Mail },
   { label: "Configuración", href: "/admin/configuracion", icon: Settings },
-];
+] as const;
 
 export function AdminShell({ children, user }: { children: ReactNode; user: AdminPrincipal }) {
-  const items=navigation.filter(item=>canAdminPath(user,item.href));
+  const t=useT(adminShell);
+  const items=navigation.filter(item=>canAdminPath(user,item.href)).map(item=>({...item,label:t(item.label)}));
   const pathname=usePathname();
   const activeHref=items.filter(item=>pathname===item.href||pathname.startsWith(`${item.href}/`)).sort((a,b)=>b.href.length-a.href.length)[0]?.href;
   return (
@@ -42,10 +46,13 @@ export function AdminShell({ children, user }: { children: ReactNode; user: Admi
             <Sidebar
               items={items}
               footer={
-                <form action={signOut}>
-                  <p className="text-sm font-bold">Operaciones A&amp;L</p>
-                  <button className="mt-3 text-xs font-semibold text-orange-400">Cerrar sesión</button>
-                </form>
+                <div className="flex items-end justify-between gap-3">
+                  <form action={signOut}>
+                    <p className="text-sm font-bold">{t("Operaciones A&L")}</p>
+                    <button className="mt-3 text-xs font-semibold text-orange-400">{t("Cerrar sesión")}</button>
+                  </form>
+                  <LanguageSwitcher tone="dark" className="shrink-0" />
+                </div>
               }
             />
           </div>
@@ -56,7 +63,7 @@ export function AdminShell({ children, user }: { children: ReactNode; user: Admi
             <BrandLogo />
             <details className="relative">
               <summary className="flex cursor-pointer list-none items-center gap-2 rounded-full border border-stone-200 bg-white px-4 py-2 text-sm font-bold shadow-sm">
-                <Menu className="size-4" /> Menú
+                <Menu className="size-4" /> {t("Menú")}
               </summary>
               <nav className="fixed right-6 top-24 z-30 max-h-[calc(100dvh-7.5rem)] w-64 max-w-[calc(100vw-3rem)] overflow-y-auto overscroll-contain rounded-2xl border border-stone-200 bg-white p-2 shadow-xl">
                 {items.map((item) => (
@@ -65,9 +72,12 @@ export function AdminShell({ children, user }: { children: ReactNode; user: Admi
                     {item.label}<NavigationPending/>
                   </Link>
                 ))}
-                <form action={signOut} className="border-t border-stone-100 px-3 pt-2">
-                  <button className="py-2 text-sm font-bold text-orange-600">Cerrar sesión</button>
-                </form>
+                <div className="flex items-center justify-between gap-3 border-t border-stone-100 px-3 pt-2">
+                  <form action={signOut}>
+                    <button className="py-2 text-sm font-bold text-orange-600">{t("Cerrar sesión")}</button>
+                  </form>
+                  <LanguageSwitcher className="shrink-0" />
+                </div>
               </nav>
             </details>
           </div>

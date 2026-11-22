@@ -20,6 +20,25 @@ export const FLOW_OPTION_LABELS: Record<string, string> = {
   ambas: "Ambas",
 };
 
+const FLOW_OPTION_LABELS_EN: Record<string, string> = {
+  casillero: "Locker",
+  "entrega-directa": "Direct drop-off",
+  cliente: "Customer packs",
+  agencia: "Agency packs",
+  "al-recibir": "On receipt",
+  "al-despachar": "On dispatch",
+  "subir-categoria": "Suggest a larger category",
+  recargo: "Apply a surcharge",
+  rechazo: "Reject",
+  sucursal: "Pickup location",
+  domicilio: "Home delivery",
+  ambas: "Both",
+};
+
+export function flowOptionLabel(value: string, locale: "es" | "en" = "es") {
+  return (locale === "en" ? FLOW_OPTION_LABELS_EN[value] : undefined) ?? FLOW_OPTION_LABELS[value] ?? value;
+}
+
 export type FlowConfig = {
   pricePerLbUsd: number;
   dimensionalBase: number;

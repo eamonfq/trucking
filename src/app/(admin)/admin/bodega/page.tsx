@@ -4,6 +4,8 @@ import { WarehouseBoard } from "@/components/admin/warehouse-board";
 import { logisticsService } from "@/lib/services/logistics";
 import { canAdmin } from "@/lib/auth/admin-permissions";
 import { getOperationalLocations } from "@/lib/auth/warehouse-actions";
+import { receptionWarehouse } from "@/lib/i18n/catalogs/reception-warehouse";
+import { getT } from "@/lib/i18n/server";
 
 export default async function WarehousePage() {
   const actor = await requireAdminUser(["bodega"]);
@@ -11,7 +13,8 @@ export default async function WarehousePage() {
     logisticsService.getBoxes(), logisticsService.getTrucks(), logisticsService.getUsers(),
     canAdmin(actor, "camiones") ? getOperationalLocations() : Promise.resolve({ warehouses: [] }),
   ]);
-  return <><SectionTitle eyebrow="Inventario operativo" title="Bodega" description="Consulta el inventario y carga paquetes al camión desde aquí, verificando su origen, destino y capacidad." /><div className="mt-7"><WarehouseBoard
+  const t = await getT(receptionWarehouse);
+  return <><SectionTitle eyebrow={t("Inventario operativo")} title={t("Bodega")} description={t("Consulta el inventario y carga paquetes al camión desde aquí, verificando su origen, destino y capacidad.")} /><div className="mt-7"><WarehouseBoard
     initialBoxes={boxes.filter((box) => ["recibida", "categorizada", "en-bodega", "excede-categoria"].includes(box.status) && !box.truckId)}
     initialLoadedBoxes={boxes.filter((box) => !!box.truckId)}
     initialTrucks={trucks.filter((truck) => ["planificado", "cargando"].includes(truck.status))}

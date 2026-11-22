@@ -10,7 +10,7 @@ import { z } from "zod";
 import { createClientShipment } from "@/lib/auth/client-actions";
 import { formatDeliveryAddress } from "@/lib/utils/address-display";
 import type { BoxCategory } from "@/lib/config/box-categories";
-import { FLOW_OPTION_LABELS, type FlowConfig } from "@/lib/config/flow";
+import { flowOptionLabel, type FlowConfig } from "@/lib/config/flow";
 import { createShipmentSchema } from "@/lib/schemas/logistics";
 import type { Address, Box, Recipient } from "@/lib/types";
 import { formatUsd } from "@/lib/utils/format";
@@ -19,15 +19,22 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
+import { clientShipments } from "@/lib/i18n/catalogs/client-shipments";
+import { validation } from "@/lib/i18n/catalogs/validation";
+import { useLocale, useMessageTranslator, useT } from "@/lib/i18n/provider";
+import { localizeCategoryName } from "@/lib/utils/reception-display";
 
 type ShipmentInput = z.input<typeof createShipmentSchema>;
 
-const DELIVERY_OPTIONS = [
+const DELIVERY_OPTIONS: { value: string; label: keyof typeof clientShipments }[] = [
   { value: "sucursal", label: "Recoger en sucursal" },
   { value: "domicilio", label: "Entrega a domicilio" },
 ];
 
 export function ShipmentCreator({ boxes, recipients, excessPolicy, deliveryMode, rates, addresses=[] }: { addresses?:Address[]; boxes: Box[]; recipients: Recipient[]; excessPolicy: string; deliveryMode: FlowConfig["deliveryMode"]; rates: BoxCategory[] }) {
+  const t = useT(clientShipments);
+  const tm = useMessageTranslator(validation);
+  const locale = useLocale();
   const [createdCode, setCreatedCode] = useState("");
   const { showToast } = useToast();
   const options = deliveryMode === "ambas" ? DELIVERY_OPTIONS : DELIVERY_OPTIONS.filter((option) => option.value === deliveryMode);
@@ -46,38 +53,38 @@ export function ShipmentCreator({ boxes, recipients, excessPolicy, deliveryMode,
   const contact=recipients.find(r=>r.id===recipientId);
   const address=receiver?.address??addresses.find(a=>a.id===contact?.addressId);
 
-  if (createdCode) return <div className="rounded-card bg-success-50 p-8"><h2 className="font-display text-3xl font-bold text-success-700">Envío confirmado</h2><p className="mt-3 text-sm leading-6 text-navy-600">{createdCode} quedó registrado. Te avisaremos cuando se asigne a un camión.</p><Link href={`/cliente/envios/${createdCode}`} className="mt-6 inline-flex min-h-11 items-center rounded-full bg-navy-950 px-5 text-sm font-bold text-white">Ver el envío</Link></div>;
-  if (!boxes.length) return <EmptyState title="No hay cajas disponibles" description="Para crear un envío necesitas cajas en bodega que no estén asignadas a otro envío o camión." action={<Link href="/cliente/cajas" className="inline-flex min-h-11 items-center rounded-full bg-orange-500 px-5 text-sm font-bold text-white">Ver mis cajas</Link>} />;
-  if (!recipients.length) return <EmptyState title="Falta un destinatario" description="Registra a quién entregamos en México y su dirección antes de crear el envío." action={<Link href="/cliente/destinatarios" className="inline-flex min-h-11 items-center rounded-full bg-orange-500 px-5 text-sm font-bold text-white">Agregar destinatario</Link>} />;
+  if (createdCode) return <div className="rounded-card bg-success-50 p-8"><h2 className="font-display text-3xl font-bold text-success-700">{t("Envío confirmado")}</h2><p className="mt-3 text-sm leading-6 text-navy-600">{t("{code} quedó registrado. Te avisaremos cuando se asigne a un camión.", { code: createdCode })}</p><Link href={`/cliente/envios/${createdCode}`} className="mt-6 inline-flex min-h-11 items-center rounded-full bg-navy-950 px-5 text-sm font-bold text-white">{t("Ver el envío")}</Link></div>;
+  if (!boxes.length) return <EmptyState title={t("No hay cajas disponibles")} description={t("Para crear un envío necesitas cajas en bodega que no estén asignadas a otro envío o camión.")} action={<Link href="/cliente/cajas" className="inline-flex min-h-11 items-center rounded-full bg-orange-500 px-5 text-sm font-bold text-white">{t("Ver mis cajas")}</Link>} />;
+  if (!recipients.length) return <EmptyState title={t("Falta un destinatario")} description={t("Registra a quién entregamos en México y su dirección antes de crear el envío.")} action={<Link href="/cliente/destinatarios" className="inline-flex min-h-11 items-center rounded-full bg-orange-500 px-5 text-sm font-bold text-white">{t("Agregar destinatario")}</Link>} />;
 
   const submit = handleSubmit(async (data) => {
     const result = await createClientShipment(data);
-    if (!result.ok) return showToast({ title: "No se pudo crear el envío", description: result.error, variant: "error" });
+    if (!result.ok) return showToast({ title: t("No se pudo crear el envío"), description: result.error, variant: "error" });
     setCreatedCode(result.shipment.code);
-    showToast({ title: "Envío confirmado", description: `${result.shipment.code} ya aparece en tu panel.` });
+    showToast({ title: t("Envío confirmado"), description: t("{code} ya aparece en tu panel.", { code: result.shipment.code }) });
   });
 
   return <form onSubmit={submit} className="grid gap-6 lg:grid-cols-[1fr_.7fr]">
     <div className="grid content-start gap-4">
-      <h2 className="font-display text-xl font-bold">1. Elige cajas en bodega</h2>
-      <Input label="Buscar paquete o destinatario" value={search} onChange={e=>setSearch(e.target.value)}/>{boxes.filter(b=>[b.code,b.recipientSnapshot?.name].join(" ").toLowerCase().includes(search.toLowerCase())).map((box) => <div key={box.id} className={`flex cursor-pointer items-center justify-between gap-4 rounded-2xl border bg-white p-4 ${box.status === "excede-categoria" ? "border-danger-700/30" : "border-stone-200"}`}>
+      <h2 className="font-display text-xl font-bold">{t("1. Elige cajas en bodega")}</h2>
+      <Input label={t("Buscar paquete o destinatario")} value={search} onChange={e=>setSearch(e.target.value)}/>{boxes.filter(b=>[b.code,b.recipientSnapshot?.name].join(" ").toLowerCase().includes(search.toLowerCase())).map((box) => <div key={box.id} className={`flex cursor-pointer items-center justify-between gap-4 rounded-2xl border bg-white p-4 ${box.status === "excede-categoria" ? "border-danger-700/30" : "border-stone-200"}`}>
         <Checkbox label={box.code} value={box.id} checked={selected.includes(box.id)} onChange={e=>{const ids=e.target.checked?[...selected,box.id]:selected.filter(id=>id!==box.id);setValue("boxIds",ids,{shouldValidate:true});const assigned=boxes.filter(b=>ids.includes(b.id)&&b.recipientId);if(assigned.length&&new Set(assigned.map(b=>b.recipientId)).size===1)setValue("recipientId",assigned[0].recipientId!,{shouldValidate:true});}} />
-        <div className="text-right">{box.receptionGroup&&<p className="text-xs">Pieza {box.receptionGroup.index}/{box.receptionGroup.total}</p>}{box.recipientSnapshot&&<p className="text-xs">Para: {box.recipientSnapshot.name}</p>}<p className="text-sm font-bold">{box.categoryName ?? category(box)?.name}</p><p className="text-xs text-navy-500">{formatUsd(box.customPriceUsd ?? category(box)?.priceUsd ?? 0)}</p>{box.status === "excede-categoria" && <p className="mt-1 text-xs font-bold text-danger-700">Requiere revisión</p>}</div>
+        <div className="text-right">{box.receptionGroup&&<p className="text-xs">{t("Pieza {index}/{total}", { index: box.receptionGroup.index, total: box.receptionGroup.total })}</p>}{box.recipientSnapshot&&<p className="text-xs">{t("Para: {name}", { name: box.recipientSnapshot.name })}</p>}<p className="text-sm font-bold">{box.categoryName ? localizeCategoryName(box.categoryName, locale) : category(box)?.name}</p><p className="text-xs text-navy-500">{formatUsd(box.customPriceUsd ?? category(box)?.priceUsd ?? 0)}</p>{box.status === "excede-categoria" && <p className="mt-1 text-xs font-bold text-danger-700">{t("Requiere revisión")}</p>}</div>
       </div>)}
-      {errors.boxIds?.message && <p className="text-sm text-danger-700">{errors.boxIds.message}</p>}
-      <h2 className="mt-4 font-display text-xl font-bold">2. Entrega</h2>
-      <Select label="Destinatario" options={[{ value: "", label: "Selecciona" }, ...recipients.filter(r=>assignedIds.size!==1||assignedIds.has(r.id)).map((recipient) => ({ value: recipient.id, label: `${recipient.name} · ${recipient.phone}` }))]} error={errors.recipientId?.message} {...register("recipientId")} />
-      {address&&<div className="rounded-xl border bg-white p-4 text-sm"><strong>{receiver?.name??contact?.name} · {receiver?.phone??contact?.phone}</strong><p className="mt-2">{formatDeliveryAddress(address)}</p>{receiver&&<p className="mt-2 text-xs">Se conserva la dirección registrada al recibir estos paquetes.</p>}</div>}<div className="flex gap-4 text-sm underline"><Link href="/cliente/direcciones">Mis direcciones</Link><Link href="/cliente/destinatarios">Mis destinatarios</Link></div>
-      <Select label="Método" options={options} error={errors.deliveryMethod?.message} {...register("deliveryMethod")} />
-      {deliveryMethod==="sucursal"&&address&&!address.municipality&&<div className="grid gap-2"><Input label="Ciudad de la bodega de retiro (opcional si la referencia ya la indica)" placeholder={address.references||address.label||"Ej. Valle de Juárez"} error={errors.destinationCity?.message} {...register("destinationCity")}/><p className="text-xs text-navy-500">Usaremos esta ciudad para organizar la ruta. Si la referencia no indica la ciudad, escríbela aquí.</p></div>}
-      {deliveryMode !== "ambas" && <p className="text-xs text-navy-500">Por ahora A&amp;L opera únicamente {FLOW_OPTION_LABELS[deliveryMode]?.toLowerCase()}.</p>}
+      {errors.boxIds?.message && <p className="text-sm text-danger-700">{tm(errors.boxIds.message)}</p>}
+      <h2 className="mt-4 font-display text-xl font-bold">{t("2. Entrega")}</h2>
+      <Select label={t("Destinatario")} options={[{ value: "", label: t("Selecciona") }, ...recipients.filter(r=>assignedIds.size!==1||assignedIds.has(r.id)).map((recipient) => ({ value: recipient.id, label: `${recipient.name} · ${recipient.phone}` }))]} error={errors.recipientId?.message} {...register("recipientId")} />
+      {address&&<div className="rounded-xl border bg-white p-4 text-sm"><strong>{receiver?.name??contact?.name} · {receiver?.phone??contact?.phone}</strong><p className="mt-2">{formatDeliveryAddress(address)}</p>{receiver&&<p className="mt-2 text-xs">{t("Se conserva la dirección registrada al recibir estos paquetes.")}</p>}</div>}<div className="flex gap-4 text-sm underline"><Link href="/cliente/direcciones">{t("Mis direcciones")}</Link><Link href="/cliente/destinatarios">{t("Mis destinatarios")}</Link></div>
+      <Select label={t("Método")} options={options.map((option) => ({ ...option, label: t(option.label) }))} error={errors.deliveryMethod?.message} {...register("deliveryMethod")} />
+      {deliveryMethod==="sucursal"&&address&&!address.municipality&&<div className="grid gap-2"><Input label={t("Ciudad de la bodega de retiro (opcional si la referencia ya la indica)")} placeholder={address.references||address.label||t("Ej. Valle de Juárez")} error={errors.destinationCity?.message} {...register("destinationCity")}/><p className="text-xs text-navy-500">{t("Usaremos esta ciudad para organizar la ruta. Si la referencia no indica la ciudad, escríbela aquí.")}</p></div>}
+      {deliveryMode !== "ambas" && <p className="text-xs text-navy-500">{t("Por ahora A&L opera únicamente {mode}.", { mode: flowOptionLabel(deliveryMode, locale).toLowerCase() })}</p>}
     </div>
     <aside className="h-fit rounded-card bg-navy-950 p-6 text-white lg:sticky lg:top-8">
-      <p className="text-xs font-bold uppercase tracking-wider text-orange-400">Resumen</p>
-      <div className="mt-5 grid gap-3">{selectedBoxes.length ? selectedBoxes.map((box) => <div key={box.id} className="flex justify-between text-sm"><span className="text-white/60">1 × {box.categoryName ?? category(box)?.name}</span><span>{formatUsd(box.customPriceUsd ?? category(box)?.priceUsd ?? 0)}</span></div>) : <p className="text-sm text-white/50">Selecciona cajas para ver el desglose por categoría.</p>}</div>
-      <div className="mt-6 flex justify-between border-t border-white/15 pt-5"><span className="font-bold">Total de referencia</span><span className="font-display text-xl font-bold text-orange-400">{formatUsd(total)}</span></div>
-      {mismatch&&<p role="alert" className="mt-4 text-sm text-orange-200">Selecciona piezas para el mismo destinatario y con los mismos datos de entrega. Si necesitan corrección, contacta a operaciones.</p>}{selectedBoxes.some(b=>b.status==="excede-categoria") && <p className="mt-4 rounded-xl bg-danger-700/20 p-3 text-xs leading-5 text-red-200">Una caja excedida bloquea el envío. Política activa: {FLOW_OPTION_LABELS[excessPolicy] ?? excessPolicy}. Operaciones debe resolverla primero.</p>}
-      <Button type="submit" disabled={blocked} loading={isSubmitting} className="mt-6 w-full">Confirmar envío</Button>
+      <p className="text-xs font-bold uppercase tracking-wider text-orange-400">{t("Resumen")}</p>
+      <div className="mt-5 grid gap-3">{selectedBoxes.length ? selectedBoxes.map((box) => <div key={box.id} className="flex justify-between text-sm"><span className="text-white/60">1 × {box.categoryName ? localizeCategoryName(box.categoryName, locale) : category(box)?.name}</span><span>{formatUsd(box.customPriceUsd ?? category(box)?.priceUsd ?? 0)}</span></div>) : <p className="text-sm text-white/50">{t("Selecciona cajas para ver el desglose por categoría.")}</p>}</div>
+      <div className="mt-6 flex justify-between border-t border-white/15 pt-5"><span className="font-bold">{t("Total de referencia")}</span><span className="font-display text-xl font-bold text-orange-400">{formatUsd(total)}</span></div>
+      {mismatch&&<p role="alert" className="mt-4 text-sm text-orange-200">{t("Selecciona piezas para el mismo destinatario y con los mismos datos de entrega. Si necesitan corrección, contacta a operaciones.")}</p>}{selectedBoxes.some(b=>b.status==="excede-categoria") && <p className="mt-4 rounded-xl bg-danger-700/20 p-3 text-xs leading-5 text-red-200">{t("Una caja excedida bloquea el envío. Política activa: {policy}. Operaciones debe resolverla primero.", { policy: flowOptionLabel(excessPolicy, locale) })}</p>}
+      <Button type="submit" disabled={blocked} loading={isSubmitting} className="mt-6 w-full">{t("Confirmar envío")}</Button>
     </aside>
   </form>;
 }

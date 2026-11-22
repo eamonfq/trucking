@@ -9,6 +9,9 @@ import { boxes, invoices, shipments, supportTickets, notifications, users } from
 import { deliverBoxWithCascade } from "@/lib/domain/state-machine";
 import { sendEmail, siteUrl } from "@/lib/services/email";
 import { SUPPORT_STATUSES } from "@/lib/types";
+import { notificationMessages } from "@/lib/i18n/catalogs/notifications";
+import { translator } from "@/lib/i18n/translate";
+import { userLocale } from "@/lib/i18n/user-locale";
 
 const supportInput = z.object({ ticketId: z.string().min(1), expectedUpdatedAt: z.string().min(1), body: z.string().trim().max(4000).default(""), status: z.enum(SUPPORT_STATUSES) });
 export async function manageSupportTicket(input: unknown) {
@@ -26,11 +29,12 @@ export async function manageSupportTicket(input: unknown) {
     const at = new Date(Math.max(Date.now(), Date.parse(ticket.updatedAt) + 1)).toISOString();
     if (body) ticket.messages.push({ id: `msg-${crypto.randomUUID()}`, author: "soporte", authorName: `${actor.firstName} ${actor.paternalLastName}`, body, at });
     ticket.status = status; ticket.updatedAt = at;
-    const title = body ? "Soporte respondió tu consulta" : status === "cerrado" ? "Consulta cerrada" : "Consulta actualizada";
-    const summary = body ? `${ticket.code}: tienes una nueva respuesta en tu panel.` : `${ticket.code}: ${status === "cerrado" ? "cerramos tu consulta" : "tu consulta está en seguimiento"}.`;
-    notifications.unshift({ id: `not-${crypto.randomUUID()}`, userId: ticket.userId, title, body: summary, createdAt: at, read: false });
     const user = users.find(item => item.id === ticket.userId);
-    if (user) await sendEmail({ to: user.email, subject: `${title} · ${ticket.code}`, heading: title, body: summary, actionLabel: "Ver conversación", actionUrl: `${siteUrl()}/cliente/soporte` });
+    const locale = userLocale(user), t = translator(notificationMessages, locale);
+    const title = body ? t("Soporte respondió tu consulta") : status === "cerrado" ? t("Consulta cerrada") : t("Consulta actualizada");
+    const summary = body ? t("{code}: tienes una nueva respuesta en tu panel.", { code: ticket.code }) : status === "cerrado" ? t("{code}: cerramos tu consulta.", { code: ticket.code }) : t("{code}: tu consulta está en seguimiento.", { code: ticket.code });
+    notifications.unshift({ id: `not-${crypto.randomUUID()}`, userId: ticket.userId, title, body: summary, createdAt: at, read: false });
+    if (user) await sendEmail({ to: user.email, subject: `${title} · ${ticket.code}`, heading: title, body: summary, actionLabel: t("Ver conversación"), actionUrl: `${siteUrl()}/cliente/soporte`, locale });
     await audit(actor.id, "support.updated");
     return { ok: true as const, ticket: { ...ticket } };
   });
@@ -53,11 +57,12 @@ export async function registerDelivery(input: unknown) {
     box.deliveryReceipt = { receivedBy, note, deliveredAt: at, actorId: actor.id };
     boxes[boxes.findIndex(item => item.id === boxId)] = box;
     for (const id of result.value.completedShipmentIds) shipments[shipments.findIndex(item => item.id === id)] = result.value.shipments.find(item => item.id === id)!;
-    const title = "Entrega registrada";
-    const body = `${box.code} fue entregada a ${receivedBy}.${result.value.completedShipmentIds.length ? " Todas las cajas de tu envío fueron entregadas." : ""}`;
-    notifications.unshift({ id: `not-${crypto.randomUUID()}`, userId: box.userId, title, body, createdAt: at, read: false });
     const user = users.find(item => item.id === box.userId);
-    if (user) await sendEmail({ to: user.email, subject: `${title} · ${box.code}`, heading: title, body, actionLabel: "Ver seguimiento", actionUrl: `${siteUrl()}/cliente/cajas/${box.code}` });
+    const locale = userLocale(user), t = translator(notificationMessages, locale);
+    const title = t("Entrega registrada");
+    const body = result.value.completedShipmentIds.length ? t("{code} fue entregada a {name}. Todas las cajas de tu envío fueron entregadas.", { code: box.code, name: receivedBy }) : t("{code} fue entregada a {name}.", { code: box.code, name: receivedBy });
+    notifications.unshift({ id: `not-${crypto.randomUUID()}`, userId: box.userId, title, body, createdAt: at, read: false });
+    if (user) await sendEmail({ to: user.email, subject: `${title} · ${box.code}`, heading: title, body, actionLabel: t("Ver seguimiento"), actionUrl: `${siteUrl()}/cliente/cajas/${box.code}`, locale });
     await audit(actor.id, "delivery.registered");
     return { ok: true as const, box };
   });

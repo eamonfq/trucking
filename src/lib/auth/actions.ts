@@ -9,6 +9,7 @@ import { checkPassword, hashPassword } from "./crypto";
 import { loginSchema } from "@/lib/schemas/auth";
 import { toClientUser } from "@/lib/utils/users";
 import { canAnyAdmin, isFullAdmin, adminLanding, type AdminSection } from "./admin-permissions";
+import { getLocale, writeLocaleCookie } from "@/lib/i18n/server";
 export async function requestLimit(action: string, identifier: string, limit = 8) {
   const h = await headers();
   const source = process.env.TRUST_PROXY === "true" ? h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown" : "local";
@@ -28,12 +29,17 @@ export async function authenticate(identifier: string, password: string, remembe
     if (!account.verified_at) return { ok: false as const, message: "Confirma tu correo antes de ingresar. Puedes solicitar un nuevo enlace de verificación." };
     const user = users.find(item => item.id === account.user_id);
     if (!user) return failure;
+    // Sin preferencia guardada (cuentas anteriores a los idiomas), se queda la de este acceso:
+    // así sus correos, avisos y facturas salen en el idioma en que usa el sitio.
+    if (!user.preferredLocale) user.preferredLocale = await getLocale();
     const token = await createSessionToken(user.id, user.role, remember);
     await audit(user.id, "login.succeeded");
-    return { ok: true as const, token, user: { id: user.id, role: user.role } };
+    return { ok: true as const, token, user: { id: user.id, role: user.role }, locale: user.preferredLocale };
   }, true);
   if (!result.ok) return result;
   (await cookies()).set(SESSION_COOKIE, result.token, { ...sessionCookieOptions, ...(remember ? { maxAge: 30 * 86400 } : {}) });
+  // The saved preference wins on a new device; the selector can always change it.
+  if (result.locale) await writeLocaleCookie(result.locale);
   return { ok: true as const, user: result.user };
 }
 export async function signOut() {

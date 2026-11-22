@@ -15,12 +15,19 @@ import { sendEmail, siteUrl } from "@/lib/services/email";
 import { transitionBox, transitionShipment } from "@/lib/domain/state-machine";
 import { assignBoxToTruck, transitionTruckState } from "./admin-actions";
 import {boxWeightLabel} from "@/lib/utils/reception-display";
+import { notificationMessages } from "@/lib/i18n/catalogs/notifications";
+import { getLocale } from "@/lib/i18n/server";
+import { translator, type Translator } from "@/lib/i18n/translate";
+import { userLocale } from "@/lib/i18n/user-locale";
 import type { Box, WarehouseGrant } from "@/lib/types";
 
-async function notifyClient(userId: string, title: string, body: string) {
-  notifications.unshift({id:crypto.randomUUID(),userId,title,body,createdAt:new Date().toISOString(),read:false});
+// Written in the customer's language: the notification is stored already translated and the email follows it.
+async function notifyClient(userId: string, compose: (t: Translator<typeof notificationMessages>) => { title: string; body: string }) {
   const user=users.find(item=>item.id===userId);
-  if(user) await sendEmail({to:user.email,subject:title,heading:title,body,actionLabel:"Ver mis paquetes",actionUrl:siteUrl()+"/cliente/cajas"});
+  const locale=userLocale(user),t=translator(notificationMessages,locale);
+  const {title,body}=compose(t);
+  notifications.unshift({id:crypto.randomUUID(),userId,title,body,createdAt:new Date().toISOString(),read:false});
+  if(user) await sendEmail({to:user.email,subject:title,heading:title,body,actionLabel:t("Ver mis paquetes"),actionUrl:siteUrl()+"/cliente/cajas",locale});
 }
 
 export async function saveAdminPrealert(input: unknown, id?: string) {
@@ -39,8 +46,8 @@ export async function saveAdminPrealert(input: unknown, id?: string) {
     const previousUser=existing?.userId;
     const box:Box={id:existing?.id??crypto.randomUUID(),code:existing?.code??`BX-${crypto.randomUUID().slice(0,8).toUpperCase()}`,userId:user.id,categoryId:category.id,categoryName:category.name,status:"pre-alertada",dimensions:{...category.dimensions},weightLb:0,originTracking:tracking,prealertDetails:{store:data.store,description:data.description,declaredValue:data.declaredValue},timeline:[...(existing?.timeline??[]),{from:existing?.status??null,to:"pre-alertada",actor:actor.id,at,note:`${data.store}: ${data.description}. Valor declarado USD ${data.declaredValue}. Asignada a ${user.lockerCode}.`}]};
     if(existing)boxes[boxes.findIndex(item=>item.id===id)]=box;else boxes.push(box);
-    if(previousUser&&previousUser!==user.id)await notifyClient(previousUser,"Prealerta reasignada",`Operaciones corrigió la asignación de ${box.code}. Ya no está vinculada a tu cuenta.`);
-    await notifyClient(user.id,"Prealerta asignada",`${box.code} · tracking ${tracking}. Operaciones registró o actualizó tu prealerta.`);
+    if(previousUser&&previousUser!==user.id)await notifyClient(previousUser,t=>({title:t("Prealerta reasignada"),body:t("Operaciones corrigió la asignación de {code}. Ya no está vinculada a tu cuenta.",{code:box.code})}));
+    await notifyClient(user.id,t=>({title:t("Prealerta asignada"),body:t("{code} · tracking {tracking}. Operaciones registró o actualizó tu prealerta.",{code:box.code,tracking})}));
     return {ok:true as const,box};
   });
 }
@@ -52,7 +59,7 @@ export async function selectPrealertAtWarehouse(boxId:string,userId:string) {
     if(box.prealertSelection)return {ok:true as const};
     const actor=await requireAdminUser(["recepcion"]);
     box.prealertSelection={actorId:actor.id,at:new Date().toISOString()};
-    await notifyClient(box.userId,"Prealerta seleccionada en recepción",`El equipo seleccionó ${box.code} (tracking ${box.originTracking}) para revisar su recepción. La confirmación física se notificará por separado.`);
+    await notifyClient(box.userId,t=>({title:t("Prealerta seleccionada en recepción"),body:t("El equipo seleccionó {code} (tracking {tracking}) para revisar su recepción. La confirmación física se notificará por separado.",{code:box.code,tracking:String(box.originTracking)})}));
     return {ok:true as const};
   });
 }
@@ -116,23 +123,25 @@ export async function getOperationalLocations() {
 function can(grants:WarehouseGrant[]|undefined,id:string,permission:"receive"|"viewContacts") { return grants?.some(g=>g.warehouseId===id&&g[permission])??false; }
 export async function getOriginInventory() {
   const actor=await requireWarehouseUser();
+  const locale=await getLocale();
   return withStore(async()=>{
     const allowed=warehouses.filter(w=>w.active&&warehouseSupports(w,"origen")&&(actor.role==="admin"||actor.warehouseGrants?.some(g=>g.warehouseId===w.id&&(g.receive||g.viewContacts))));
     return allowed.map(w=>({id:w.id,name:w.name,boxes:boxes.filter(b=>b.originWarehouseId===w.id).map(b=>{
       const user=users.find(u=>u.id===b.userId);
-      return {userId:b.userId,receptionGroup:b.receptionGroup?{id:b.receptionGroup.id,code:b.receptionGroup.code,index:b.receptionGroup.index,total:b.receptionGroup.total}:undefined,contentsNote:b.contentsNote,weightLabel:boxWeightLabel(b),id:b.id,code:b.code,status:b.status,dimensions:b.dimensions,weightLb:b.weightLb,weightProrated:!!b.billing?.groupWeight,customer:user&&(actor.role==="admin"||can(actor.warehouseGrants,w.id,"viewContacts"))?{name:`${user.firstName} ${user.paternalLastName}`,phone:user.phone,email:user.email}:null};
+      return {userId:b.userId,receptionGroup:b.receptionGroup?{id:b.receptionGroup.id,code:b.receptionGroup.code,index:b.receptionGroup.index,total:b.receptionGroup.total}:undefined,contentsNote:b.contentsNote,weightLabel:boxWeightLabel(b,locale),id:b.id,code:b.code,status:b.status,dimensions:b.dimensions,weightLb:b.weightLb,weightProrated:!!b.billing?.groupWeight,customer:user&&(actor.role==="admin"||can(actor.warehouseGrants,w.id,"viewContacts"))?{name:`${user.firstName} ${user.paternalLastName}`,phone:user.phone,email:user.email}:null};
     })}));
   });
 }
 export async function getDestinationDesk() {
   const actor=await requireWarehouseUser();
+  const locale=await getLocale();
   return withStore(async()=>{
     const allowed=warehouses.filter(w=>w.active&&warehouseSupports(w,"destino")&&(actor.role==="admin"||actor.warehouseGrants?.some(g=>g.warehouseId===w.id&&(g.receive||g.viewContacts))));
     const ids=new Set(allowed.map(w=>w.id));
     const visibleBoxes=boxes.filter(box=>box.destinationWarehouseId&&ids.has(box.destinationWarehouseId));
     return {warehouses:allowed.map(w=>({...w,canReceive:actor.role==="admin"||can(actor.warehouseGrants,w.id,"receive")})),
       trucks:trucks.filter(t=>t.stops?.some(s=>ids.has(s.warehouseId))).map(t=>({id:t.id,code:t.code,plate:t.plate,status:t.status,stops:t.stops!.filter(s=>ids.has(s.warehouseId))})),
-      boxes:visibleBoxes.map(box=>{const user=users.find(u=>u.id===box.userId);return {userId:box.userId,receptionGroup:box.receptionGroup?{id:box.receptionGroup.id,code:box.receptionGroup.code,index:box.receptionGroup.index,total:box.receptionGroup.total}:undefined,contentsNote:box.contentsNote,weightLabel:boxWeightLabel(box),recipient:actor.role==="admin"||can(actor.warehouseGrants,box.destinationWarehouseId!,"viewContacts")?box.recipientSnapshot?{name:box.recipientSnapshot.name,phone:box.recipientSnapshot.phone}:null:null,id:box.id,code:box.code,truckId:box.truckId,warehouseId:box.destinationWarehouseId!,status:box.status,dimensions:box.dimensions,weightLb:box.weightLb,weightProrated:!!box.billing?.groupWeight,originTracking:box.originTracking,receivedAt:box.unloadScan?.at,customer:actor.role==="admin"||can(actor.warehouseGrants,box.destinationWarehouseId!,"viewContacts")?user?{name:`${user.firstName} ${user.paternalLastName}`,email:user.email,phone:user.phone,lockerCode:user.lockerCode}:null:null};})};
+      boxes:visibleBoxes.map(box=>{const user=users.find(u=>u.id===box.userId);return {userId:box.userId,receptionGroup:box.receptionGroup?{id:box.receptionGroup.id,code:box.receptionGroup.code,index:box.receptionGroup.index,total:box.receptionGroup.total}:undefined,contentsNote:box.contentsNote,weightLabel:boxWeightLabel(box,locale),recipient:actor.role==="admin"||can(actor.warehouseGrants,box.destinationWarehouseId!,"viewContacts")?box.recipientSnapshot?{name:box.recipientSnapshot.name,phone:box.recipientSnapshot.phone}:null:null,id:box.id,code:box.code,truckId:box.truckId,warehouseId:box.destinationWarehouseId!,status:box.status,dimensions:box.dimensions,weightLb:box.weightLb,weightProrated:!!box.billing?.groupWeight,originTracking:box.originTracking,receivedAt:box.unloadScan?.at,customer:actor.role==="admin"||can(actor.warehouseGrants,box.destinationWarehouseId!,"viewContacts")?user?{name:`${user.firstName} ${user.paternalLastName}`,email:user.email,phone:user.phone,lockerCode:user.lockerCode}:null:null};})};
   });
 }
 
@@ -142,7 +151,7 @@ export async function scanLoad(truckId:string,code:string,warehouseId:string) {
     const box=boxes.find(b=>b.code===code.trim().toUpperCase());
     if(!box)return {ok:false as const,error:"Código de paquete no encontrado."};
     const result=await assignBoxToTruck(truckId,box.id,{code:code.trim().toUpperCase(),warehouseId});
-    if(result.ok)await notifyClient(box.userId,"Paquete cargado",`${box.code} fue escaneado al ingresar al camión ${result.truck.code}. Destino: ${warehouses.find(w=>w.id===warehouseId)?.name}.`);
+    if(result.ok)await notifyClient(box.userId,t=>({title:t("Paquete cargado"),body:t("{code} fue escaneado al ingresar al camión {truck}. Destino: {destination}.",{code:box.code,truck:result.truck.code,destination:String(warehouses.find(w=>w.id===warehouseId)?.name)})}));
     return result;
   });
 }
@@ -170,7 +179,7 @@ export async function loadSelectedPackages(truckId:string,boxIds:string[],wareho
     // One notification per client, not one email per piece.
     for(const userId of new Set(assigned.map(box=>box.userId))){
       const count=assigned.filter(box=>box.userId===userId).length;
-      await notifyClient(userId,"Carga registrada",`${count} paquete(s) fueron cargados al camión ${truck.code}. Destino: ${warehouses.find(w=>w.id===warehouseId)?.name}.`);
+      await notifyClient(userId,t=>({title:t("Carga registrada"),body:t("{count} paquete(s) fueron cargados al camión {truck}. Destino: {destination}.",{count,truck:truck.code,destination:String(warehouses.find(w=>w.id===warehouseId)?.name)})}));
     }
     return {ok:true as const,assigned,truck:structuredClone(trucks.find(t=>t.id===truckId)!),count:assigned.length};
   });
@@ -199,7 +208,7 @@ export async function scanUnload(truckId:string,warehouseId:string,code:string) 
     if(truck.boxIds.every(id=>boxes.some(b=>b.id===id&&b.unloadScan))&&truck.status!=="en-destino"){
       truck.timeline.push({from:truck.status,to:"en-destino",actor:actor.id,at,note:"Todas las descargas del viaje fueron confirmadas por escaneo."});truck.status="en-destino";
     }
-    await notifyClient(box.userId,`Paquete recibido en ${warehouse.name}`,note);
+    await notifyClient(box.userId,t=>({title:t("Paquete recibido en {warehouse}",{warehouse:warehouse.name}),body:note}));
     return {ok:true as const,code:box.code,message:note};
   });
 }

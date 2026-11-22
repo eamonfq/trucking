@@ -1,0 +1,20 @@
+/** Avisos push del dispositivo (`src/components/pwa/push-settings.tsx`). Clave: español; valor: inglés. */
+export const pwaPush = {
+  "Comprobando notificaciones…": "Checking notifications…",
+  "Abre la app en un navegador compatible para activar avisos.": "Open the app in a compatible browser to turn on notifications.",
+  "Los avisos push aún no están habilitados por el equipo.": "Push notifications haven't been enabled by the team yet.",
+  "No pudimos consultar los avisos. Recarga para reintentar.": "We couldn't check your notifications. Reload to try again.",
+  "La app se está preparando. Recarga e inténtalo de nuevo.": "The app is getting ready. Reload and try again.",
+  "Vuelve a iniciar sesión para cambiar los avisos.": "Log in again to change notifications.",
+  "Avisos desactivados en este dispositivo. Seguirás recibiendo emails.": "Notifications turned off on this device. You'll still get emails.",
+  "Permite las notificaciones en la configuración del navegador para recibir avisos.": "Allow notifications in your browser settings to receive them.",
+  "No se pudo activar.": "They couldn't be turned on.",
+  "Recibirás avisos de las mismas novedades operativas que enviamos por email.": "You'll get notifications about the same updates we send by email.",
+  "No se pudo cambiar esta preferencia.": "This preference couldn't be changed.",
+  "Avisos en este dispositivo": "Notifications on this device",
+  "Recepción, movimientos y novedades de tu cuenta. Tú decides si activarlos.": "Receiving, movements and updates on your account. You decide whether to turn them on.",
+  "Guardando…": "Saving…",
+  "Desactivar avisos": "Turn off notifications",
+  "Activar avisos": "Turn on notifications",
+  "En iPhone/iPad instala la app y ábrela desde su icono para activar notificaciones (iOS/iPadOS 16.4 o posterior).": "On iPhone/iPad, install the app and open it from its icon to turn on notifications (iOS/iPadOS 16.4 or later).",
+} as const;

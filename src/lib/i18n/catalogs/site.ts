@@ -1,0 +1,23 @@
+/** Encabezado, pie y textos comunes del sitio público. Clave: español; valor: inglés. */
+export const site = {
+  "Tarifas": "Rates",
+  "Cómo funciona": "How it works",
+  "Cobertura": "Coverage",
+  "Preguntas": "FAQ",
+  "App A&L": "A&L App",
+  "Navegación principal": "Main navigation",
+  "Iniciar sesión": "Log in",
+  "Crear mi cuenta": "Create my account",
+  "Abrir menú": "Open menu",
+  "Rastrear envío": "Track shipment",
+  "Crear cuenta": "Create account",
+  "Recuperar contraseña": "Recover password",
+  "Preguntas frecuentes": "Frequently asked questions",
+  "Carga terrestre de Miami a México con precio fijo por categoría de caja.": "Ground freight from Miami to Mexico with a fixed price per box category.",
+  "Servicio": "Service",
+  "Cuenta": "Account",
+  "Te acompañamos": "We're here to help",
+  "Centro de soporte": "Support center",
+  "Consulta direcciones de recepción y condiciones de entrega con nuestro equipo antes de enviar.": "Check drop-off addresses and delivery terms with our team before you ship.",
+  "Miami, USA → México": "Miami, USA → Mexico",
+} as const;

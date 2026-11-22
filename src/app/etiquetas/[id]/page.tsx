@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { requireAdminUser } from "@/lib/auth/actions";
 import { logisticsService } from "@/lib/services/logistics";
 import { PackageLabel } from "@/components/admin/package-label";
-export const metadata:Metadata={title:"Etiqueta de paquete",robots:{index:false,follow:false}};
+// Internal handling document read by US and Mexican staff: bilingual, whatever the viewer's language.
+export const metadata:Metadata={title:"Etiqueta de paquete / Package label",robots:{index:false,follow:false}};
 export default async function Page({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{grupo?:string}>}){
  await requireAdminUser(["recepcion","bodega","camiones"]);const {id}=await params;const box=await logisticsService.getBoxById(id);if(!box||!box.receivedAt)notFound();
  const customer=await logisticsService.getUserById(box.userId);

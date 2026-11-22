@@ -1,3 +1,6 @@
+"use client";
+import { marketing } from "@/lib/i18n/catalogs/marketing";
+import { useT } from "@/lib/i18n/provider";
 const NODES = [
   { x: 356, y: 250, r: 8, label: "Monterrey", tx: 376, ty: 255, anchor: "start" as const, weight: 500, size: 15, fill: "#F2914E" },
   { x: 208, y: 388, r: 8, label: "Guadalajara", tx: 196, ty: 378, anchor: "end" as const, weight: 500, size: 15, fill: "#F2914E" },
@@ -20,8 +23,9 @@ const MAIN_ROUTE = "M800 330 C 700 300, 600 210, 520 196 C 440 182, 390 190, 352
 
 /** `progress` de 0 a 1 pinta el tramo ya recorrido sobre la ruta principal. */
 export function RouteMap({ progress }: { progress?: number }) {
+  const t = useT(marketing);
   return (
-    <svg viewBox="0 0 900 520" fill="none" role="img" aria-label="Mapa esquemático de la ruta: Miami, cruce por Nuevo Laredo y distribución al centro de México" className="h-full w-full">
+    <svg viewBox="0 0 900 520" fill="none" role="img" aria-label={t("Mapa esquemático de la ruta: Miami, cruce por Nuevo Laredo y distribución al centro de México")} className="h-full w-full">
       <defs>
         <pattern id="route-grid" width="30" height="30" patternUnits="userSpaceOnUse">
           <path d="M30 0 H0 V30" fill="none" stroke="#2C3D66" strokeWidth="1" />
@@ -36,15 +40,15 @@ export function RouteMap({ progress }: { progress?: number }) {
       <circle cx="800" cy="330" r="11" fill="#fff" />
       <circle cx="800" cy="330" r="22" fill="none" stroke="#fff" strokeWidth="1.5" opacity=".45" />
       <text x="800" y="374" textAnchor="middle" fontFamily="Inter, system-ui, sans-serif" fontWeight="700" fontSize="17" fill="#fff">Miami</text>
-      <text x="800" y="394" textAnchor="middle" fontFamily="Inter, system-ui, sans-serif" fontWeight="400" fontSize="13" fill="#8A96B4">Bodega de origen</text>
+      <text x="800" y="394" textAnchor="middle" fontFamily="Inter, system-ui, sans-serif" fontWeight="400" fontSize="13" fill="#8A96B4">{t("Bodega de origen")}</text>
 
       <rect x="336" y="176" width="32" height="32" rx="6" transform="rotate(45 352 192)" fill="#E8621C" />
-      <text x="352" y="132" textAnchor="middle" fontFamily="Inter, system-ui, sans-serif" fontWeight="400" fontSize="13" fill="#F2914E">Cruce fronterizo</text>
+      <text x="352" y="132" textAnchor="middle" fontFamily="Inter, system-ui, sans-serif" fontWeight="400" fontSize="13" fill="#F2914E">{t("Cruce fronterizo")}</text>
       <text x="352" y="152" textAnchor="middle" fontFamily="Inter, system-ui, sans-serif" fontWeight="700" fontSize="16" fill="#fff">Nuevo Laredo</text>
 
       {NODES.map((node) => <g key={node.label}>
         <circle cx={node.x} cy={node.y} r={node.r} fill={node.fill} />
-        <text x={node.tx} y={node.ty} textAnchor={node.anchor} fontFamily="Inter, system-ui, sans-serif" fontWeight={node.weight} fontSize={node.size} fill="#fff">{node.label}</text>
+        <text x={node.tx} y={node.ty} textAnchor={node.anchor} fontFamily="Inter, system-ui, sans-serif" fontWeight={node.weight} fontSize={node.size} fill="#fff">{node.label === "Ciudad de México" ? t("Ciudad de México") : node.label}</text>
       </g>)}
     </svg>
   );

@@ -1,4 +1,5 @@
 import type { BoxStatus, InvoiceStatus, ShipmentStatus, SupportStatus, TruckStatus } from "@/lib/types";
+import type { Locale } from "@/lib/i18n/config";
 
 export type OperationalStatus = BoxStatus | ShipmentStatus | TruckStatus | InvoiceStatus | SupportStatus;
 export type StatusTone = "neutral" | "info" | "attention" | "success" | "danger";
@@ -46,8 +47,40 @@ export const STATUS_CONFIG: Record<OperationalStatus, { label: string; tone: Sta
   "en-revision": { label: "En revisión", tone: "info", className: INFO },
 };
 
-export function getStatusLabel(status: string) {
-  return STATUS_CONFIG[status as OperationalStatus]?.label ?? status.replaceAll("-", " ").replace(/^./, (letter) => letter.toUpperCase());
+/** Etiquetas en inglés; los identificadores de estado siguen en español. */
+const STATUS_LABELS_EN: Record<OperationalStatus, string> = {
+  "pre-alertada": "Pre-alerted",
+  recibida: "Received",
+  categorizada: "Categorized",
+  "en-bodega": "At warehouse",
+  "cargada-en-camion": "Loaded on truck",
+  "en-transito": "In transit",
+  "en-destino": "At destination",
+  entregada: "Delivered",
+  "excede-categoria": "Exceeds category",
+  rechazada: "Rejected",
+  pendiente: "Pending",
+  confirmado: "Confirmed",
+  entregado: "Delivered",
+  planificado: "Planned",
+  cargando: "Loading",
+  despachado: "Dispatched",
+  "en-frontera": "At the border",
+  cerrado: "Closed",
+  borrador: "Draft",
+  emitida: "Issued",
+  "pago-reportado": "Payment reported",
+  "pendiente-pago-destino": "Payment due at destination",
+  pagada: "Paid",
+  vencida: "Overdue",
+  abierto: "Open",
+  "en-revision": "Under review",
+};
+
+export function getStatusLabel(status: string, locale: Locale = "es") {
+  const known = status as OperationalStatus;
+  if (locale === "en" && STATUS_LABELS_EN[known]) return STATUS_LABELS_EN[known];
+  return STATUS_CONFIG[known]?.label ?? status.replaceAll("-", " ").replace(/^./, (letter) => letter.toUpperCase());
 }
 
 export function getStatusClassName(status: string) {

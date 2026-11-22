@@ -36,6 +36,10 @@ import { suggestCategory } from "@/lib/utils/suggest-category";
 import { receptionSchema, truckSchema } from "@/lib/schemas/admin";
 import { getStatusLabel } from "@/lib/config/status";
 import { CUSTOMER_COPY } from "@/lib/config/customers";
+import { notificationMessages } from "@/lib/i18n/catalogs/notifications";
+import { translator } from "@/lib/i18n/translate";
+import { userLocale } from "@/lib/i18n/user-locale";
+import { messageStatus } from "@/lib/services/reception-email-layout";
 import { administrativeAddressSchema as customerAddressSchema, customerProfileSchema, administrativeRecipientSchema as customerRecipientSchema, internalNoteSchema, lockerCodeSchema, quickCustomerSchema } from "@/lib/schemas/customer";
 
 const adminActor = "Operaciones A&L";
@@ -62,6 +66,7 @@ export async function createCustomerAsAdmin(input: unknown) {
   if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Revisa los datos del cliente." };
   if (parsed.data.email && users.some((user) => user.email.toLowerCase() === parsed.data.email.toLowerCase())) return { ok: false as const, error: "Ya existe una cuenta con ese correo." };
   const { user, address } = await registerCustomer(parsed.data);
+  if (parsed.data.preferredLocale) user.preferredLocale = parsed.data.preferredLocale;
   for(const person of parsed.data.recipients??[])recipients.push({id:crypto.randomUUID(),userId:user.id,addressId:address.id,...person});
   await sendAccountLink(user, "invite");
   return { ok: true as const, user, address };
@@ -80,6 +85,7 @@ export async function createCustomerAtReception(input: unknown) {
   if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Revisa los datos del cliente." };
   if (parsed.data.email && users.some((user) => user.email.toLowerCase() === parsed.data.email.toLowerCase())) return { ok: false as const, error: "Ya existe una cuenta con ese correo." };
   const { user, address } = await registerCustomer(parsed.data);
+  if (parsed.data.preferredLocale) user.preferredLocale = parsed.data.preferredLocale;
   await sendAccountLink(user, "invite");
   for(const person of parsed.data.recipients??[])recipients.push({id:crypto.randomUUID(),userId:user.id,addressId:address.id,...person});
   return { ok: true as const, user, address, invitationStatus: user.email ? "Invitación en cola" : "Sin correo: invitación no enviada" };
@@ -275,8 +281,9 @@ async function createInvoiceForBoxes(userId: string, invoiceBoxes: Box[], actor:
   };
   invoices.push(invoice);
   const customer = users.find(user => user.id === userId);
-  if (customer) await sendEmail({ to: customer.email, subject: `Factura emitida · ${invoice.number}`, heading: "Tu factura está disponible", body: `${invoice.number}: consulta el desglose y reporta tu pago. El comprobante es opcional.`, actionLabel: "Ver factura", actionUrl: `${siteUrl()}/cliente/facturas/${invoice.id}` });
-  pushNotification(userId, "Factura emitida", `${invoice.number} por ${invoiceBoxes.length} ${invoiceBoxes.length === 1 ? "caja" : "cajas"} ya está disponible en tu panel.`);
+  const locale = userLocale(customer), t = translator(notificationMessages, locale);
+  if (customer) await sendEmail({ to: customer.email, subject: t("Factura emitida · {number}", { number: invoice.number }), heading: t("Tu factura está disponible"), body: t("{number}: consulta el desglose y reporta tu pago. El comprobante es opcional.", { number: invoice.number }), actionLabel: t("Ver factura"), actionUrl: `${siteUrl()}/cliente/facturas/${invoice.id}`, locale });
+  pushNotification(userId, t("Factura emitida"), invoiceBoxes.length === 1 ? t("{number} por 1 caja ya está disponible en tu panel.", { number: invoice.number }) : t("{number} por {count} cajas ya está disponible en tu panel.", { number: invoice.number, count: invoiceBoxes.length }));
   return invoice;
 }
 
@@ -339,10 +346,11 @@ export async function receiveBox(input: unknown) {
   };
   if (prealert) boxes[boxes.findIndex(item => item.id === prealert.id)] = box;
   else boxes.push(box);
-  const notification = pushNotification(customer.id, rejected ? "Caja rechazada" : "Caja recibida", rejected ? `${code} fue rechazada: ${parsed.data.rejectionReason}.` : `${code} fue registrada en bodega como ${box.categoryName}.`);
+  const locale = userLocale(customer), t = translator(notificationMessages, locale);
+  const notification = pushNotification(customer.id, rejected ? t("Caja rechazada") : t("Caja recibida"), rejected ? t("{code} fue rechazada: {reason}.", { code, reason: String(parsed.data.rejectionReason) }) : t("{code} fue registrada en bodega como {category}.", { code, category: String(box.categoryName) }));
   let invoice: Invoice | undefined;
   if (!rejected && (flow.billingMoment === "al-recibir" || parsed.data.invoiceNow)) { invoice = await createInvoiceForBoxes(customer.id, [box], adminActor); invoice.receptionActorId=(await requireAdminUser(["recepcion"])).id; }
-  await sendEmail({ to: customer.email, subject: rejected ? `Recepción rechazada ${code}` : `Caja recibida ${code}`, heading: rejected ? "La recepción requiere tu atención" : "Tu caja ya está en bodega", body: notification.body, actionLabel: "Ver mis cajas", actionUrl: `${siteUrl()}/cliente/cajas` });
+  await sendEmail({ to: customer.email, subject: rejected ? t("Recepción rechazada {code}", { code }) : t("Caja recibida {code}", { code }), heading: rejected ? t("La recepción requiere tu atención") : t("Tu caja ya está en bodega"), body: notification.body, actionLabel: t("Ver mis cajas"), actionUrl: `${siteUrl()}/cliente/cajas`, locale });
   return { ok: true as const, suggestion, code, box, invoice, notification };
 
   });
@@ -388,8 +396,9 @@ export async function transitionTruckState(truckId: string, note?: string) {
       if (eligible.length) generatedInvoices.push(await createInvoiceForBoxes(userId, eligible, adminActor));
     }
   }
-  userIds.forEach((userId) => pushNotification(userId, "Tu carga avanzó de etapa", `El camión ${result.value.truck.code} cambió a ${getStatusLabel(result.value.truck.status).toLowerCase()}.`));
-  await Promise.all(users.filter((user) => userIds.has(user.id)).map((user) => sendEmail({ to: user.email, subject: `Actualización ${result.value.truck.code}`, heading: "Tu carga avanzó de etapa", body: `El camión ${result.value.truck.code} cambió al estado ${result.value.truck.status}.`, actionLabel: "Ver seguimiento", actionUrl: `${siteUrl()}/cliente/envios` })));
+  const truckCode = result.value.truck.code, truckStatus = result.value.truck.status;
+  userIds.forEach((userId) => { const locale = userLocale(users.find((user) => user.id === userId)), t = translator(notificationMessages, locale); pushNotification(userId, t("Tu carga avanzó de etapa"), t("El camión {truck} cambió a {status}.", { truck: truckCode, status: getStatusLabel(truckStatus, locale).toLowerCase() })); });
+  await Promise.all(users.filter((user) => userIds.has(user.id)).map((user) => { const locale = userLocale(user), t = translator(notificationMessages, locale); return sendEmail({ to: user.email, subject: t("Actualización {truck}", { truck: truckCode }), heading: t("Tu carga avanzó de etapa"), body: t("El camión {truck} cambió al estado {status}.", { truck: truckCode, status: messageStatus(truckStatus, locale) }), actionLabel: t("Ver seguimiento"), actionUrl: `${siteUrl()}/cliente/envios`, locale }); }));
   return { ok: true as const, truck: result.value.truck, changedBoxes: result.value.changedBoxIds.length, changedShipments: result.value.changedShipmentIds.length, generatedInvoices };
 
   });
@@ -414,12 +423,12 @@ async function approveValidatedPayment(invoiceId: string, note: string, expected
   });
 }
 async function approvePaymentTransition(invoiceId: string, note: string) {
-  return runMutation("admin:facturas|recepcion", async () => { await simulateLatency(); if (note.trim().length < 5) return { ok: false as const, error: "Agrega una nota de validación de al menos 5 caracteres." }; const index = invoices.findIndex((item) => item.id === invoiceId); if (index < 0) return { ok: false as const, error: "No encontramos la factura seleccionada." }; const result = transitionInvoice(invoices[index]!, "pagada", { actor: "Operaciones A&L", note }); if (!result.ok) return result; invoices[index] = { ...result.value, paymentReviewNote: note }; pushNotification(result.value.userId, "Pago aprobado", `Validamos el pago de ${result.value.number}. La factura quedó como pagada.`); const user = users.find((item) => item.id === result.value.userId); if (user) await sendEmail({ to: user.email, subject: "Pago aprobado", heading: "Tu pago fue aprobado", body: `La factura ${result.value.number} ahora aparece como pagada.`, actionLabel: "Ver factura", actionUrl: `${siteUrl()}/cliente/facturas/${result.value.id}` }); return { ok: true as const, invoice: invoices[index]! };
+  return runMutation("admin:facturas|recepcion", async () => { await simulateLatency(); if (note.trim().length < 5) return { ok: false as const, error: "Agrega una nota de validación de al menos 5 caracteres." }; const index = invoices.findIndex((item) => item.id === invoiceId); if (index < 0) return { ok: false as const, error: "No encontramos la factura seleccionada." }; const result = transitionInvoice(invoices[index]!, "pagada", { actor: "Operaciones A&L", note }); if (!result.ok) return result; invoices[index] = { ...result.value, paymentReviewNote: note }; const user = users.find((item) => item.id === result.value.userId); const locale = userLocale(user), t = translator(notificationMessages, locale); pushNotification(result.value.userId, t("Pago aprobado"), t("Validamos el pago de {number}. La factura quedó como pagada.", { number: result.value.number })); if (user) await sendEmail({ to: user.email, subject: t("Pago aprobado"), heading: t("Tu pago fue aprobado"), body: t("La factura {number} ahora aparece como pagada.", { number: result.value.number }), actionLabel: t("Ver factura"), actionUrl: `${siteUrl()}/cliente/facturas/${result.value.id}`, locale }); return { ok: true as const, invoice: invoices[index]! };
 
   });
 }
 export async function rejectPayment(invoiceId: string, note: string, expectedReportedAt?: string) {
-  return runMutation("admin:facturas", async () => { await simulateLatency(); if (note.trim().length < 5) return { ok: false as const, error: "Explica el rechazo con al menos 5 caracteres." }; const index = invoices.findIndex((item) => item.id === invoiceId); if (index < 0) return { ok: false as const, error: "No encontramos la factura seleccionada." }; if (expectedReportedAt && invoices[index]!.paymentReport?.reportedAt !== expectedReportedAt) return {ok:false as const,error:"El reporte cambió. Actualiza antes de rechazarlo."}; if (invoices[index]!.status !== "pago-reportado") return { ok: false as const, error: "Solo puedes rechazar un pago que esté reportado y pendiente de revisión." }; const result = transitionInvoice(invoices[index]!, "emitida", { actor: adminActor, note }); if (!result.ok) return result; invoices[index] = { ...result.value, payments:result.value.payments?.map(p=>p.status==="pendiente"?{...p,status:"rechazado" as const}:p), paymentReviewNote: note, paymentReport: undefined }; pushNotification(result.value.userId, "Reporte de pago rechazado", `${result.value.number} necesita un nuevo reporte: ${note}`); const user = users.find((item) => item.id === result.value.userId); if (user) await sendEmail({ to: user.email, subject: "Reporte de pago rechazado", heading: "Necesitamos revisar tu reporte", body: `El reporte de ${result.value.number} fue rechazado: ${note}`, actionLabel: "Revisar factura", actionUrl: `${siteUrl()}/cliente/facturas/${result.value.id}` }); return { ok: true as const, invoice: invoices[index]! };
+  return runMutation("admin:facturas", async () => { await simulateLatency(); if (note.trim().length < 5) return { ok: false as const, error: "Explica el rechazo con al menos 5 caracteres." }; const index = invoices.findIndex((item) => item.id === invoiceId); if (index < 0) return { ok: false as const, error: "No encontramos la factura seleccionada." }; if (expectedReportedAt && invoices[index]!.paymentReport?.reportedAt !== expectedReportedAt) return {ok:false as const,error:"El reporte cambió. Actualiza antes de rechazarlo."}; if (invoices[index]!.status !== "pago-reportado") return { ok: false as const, error: "Solo puedes rechazar un pago que esté reportado y pendiente de revisión." }; const result = transitionInvoice(invoices[index]!, "emitida", { actor: adminActor, note }); if (!result.ok) return result; invoices[index] = { ...result.value, payments:result.value.payments?.map(p=>p.status==="pendiente"?{...p,status:"rechazado" as const}:p), paymentReviewNote: note, paymentReport: undefined }; const user = users.find((item) => item.id === result.value.userId); const locale = userLocale(user), t = translator(notificationMessages, locale); pushNotification(result.value.userId, t("Reporte de pago rechazado"), t("{number} necesita un nuevo reporte: {note}", { number: result.value.number, note })); if (user) await sendEmail({ to: user.email, subject: t("Reporte de pago rechazado"), heading: t("Necesitamos revisar tu reporte"), body: t("El reporte de {number} fue rechazado: {note}", { number: result.value.number, note }), actionLabel: t("Revisar factura"), actionUrl: `${siteUrl()}/cliente/facturas/${result.value.id}`, locale }); return { ok: true as const, invoice: invoices[index]! };
   });
 }
 export async function createTruck(input: unknown) {

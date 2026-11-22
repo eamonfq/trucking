@@ -8,13 +8,21 @@ import { createAccount, consumeToken, findAccount } from "./repository";
 import { requestLimit } from "./actions";
 import { sendAccountLink } from "./account-email";
 import { sendEmail, deliverPendingEmails, siteUrl } from "@/lib/services/email";
+import { getLocale } from "@/lib/i18n/server";
+import { emails } from "@/lib/i18n/catalogs/emails";
+import { translator } from "@/lib/i18n/translate";
+import { userLocale } from "@/lib/i18n/user-locale";
 export async function registerAccount(input: RegistrationInput) {
   const parsed = registrationSchema.safeParse(input);
   if (!parsed.success) return { ok: false as const, message: "Revisa los datos marcados antes de continuar." };
   if (!await requestLimit("register", parsed.data.email, 4)) return { ok: false as const, message: "Espera 15 minutos antes de intentar otra vez." };
+  const locale = await getLocale();
   const result = await withStore(async () => {
     if (await findAccount(parsed.data.email)) return { ok: false as const, message: "No pudimos crear esta cuenta. Si ya te registraste, recupera tu acceso." };
     const { user } = await createAccount(parsed.data, parsed.data.password);
+    // The language the customer signed up in decides their emails and documents.
+    const stored = users.find((item) => item.id === user.id);
+    if (stored) stored.preferredLocale = locale;
     const email = await sendAccountLink(user, "verify");
     return { ok: true as const, lockerCode: user.lockerCode, emailStatus: email.status };
   }, true);
@@ -39,7 +47,8 @@ export async function verifyEmail(token: string) {
   const result = await withStore(async () => {
     const user = await consumeToken(token, "verify");
     if (!user) return { ok: false as const, message: "El enlace venció o ya fue utilizado. Solicita uno nuevo." };
-    await sendEmail({ to: user.email, subject: "Bienvenido a A&L", heading: `Tu casillero ${user.lockerCode} está activo.`, body: "Tu correo ha sido confirmado. Ya puedes organizar tus compras y seguir cada envío desde tu cuenta.", actionLabel: "Entrar a mi cuenta", actionUrl: `${siteUrl()}/login` });
+    const locale = userLocale(user), t = translator(emails, locale);
+    await sendEmail({ to: user.email, subject: t("Bienvenido a A&L"), heading: t("Tu casillero {locker} está activo.", { locker: String(user.lockerCode) }), body: t("Tu correo ha sido confirmado. Ya puedes organizar tus compras y seguir cada envío desde tu cuenta."), actionLabel: t("Entrar a mi cuenta"), actionUrl: `${siteUrl()}/login`, locale });
     return { ok: true as const };
   }, true);
   after(deliverPendingEmails); return result;
@@ -51,7 +60,8 @@ export async function resetPassword(input: { password: string; confirmPassword: 
   const result = await withStore(async () => {
     const user = await consumeToken(input.token!, "reset", parsed.data.password);
     if (!user) return { ok: false as const, message: "El enlace venció o ya fue utilizado. Solicita uno nuevo." };
-    await sendEmail({ to: user.email, subject: "Contraseña actualizada · A&L", heading: "Tu acceso está protegido.", body: "Tu contraseña cambió y cerramos todas las sesiones anteriores. Si no reconoces este cambio, contacta a soporte y solicita recuperar tu acceso.", actionLabel: "Iniciar sesión", actionUrl: `${siteUrl()}/login` });
+    const locale = userLocale(user), t = translator(emails, locale);
+    await sendEmail({ to: user.email, subject: t("Contraseña actualizada · A&L"), heading: t("Tu acceso está protegido."), body: t("Tu contraseña cambió y cerramos todas las sesiones anteriores. Si no reconoces este cambio, contacta a soporte y solicita recuperar tu acceso."), actionLabel: t("Iniciar sesión"), actionUrl: `${siteUrl()}/login`, locale });
     return { ok: true as const };
   }, true);
   after(deliverPendingEmails); return result;

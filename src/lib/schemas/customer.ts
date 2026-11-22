@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { mexicanPhoneSchema, rfcSchema } from "@/lib/schemas/address";
 import {optionalEmailSchema,optionalAddressSchema} from "./optional-contact";
+import { LOCALES } from "@/lib/i18n/config";
 
 export const customerProfileSchema = z.object({
   firstName: z.string().trim().min(2, "Escribe el nombre."),
@@ -9,6 +10,8 @@ export const customerProfileSchema = z.object({
   email: optionalEmailSchema,
   phone: mexicanPhoneSchema,
   rfc: rfcSchema,
+  /** Idioma de sus correos, avisos y facturas; lo elige el admin o el mostrador (docs/idiomas.md). */
+  preferredLocale: z.enum(LOCALES).optional(),
 });
 
 export const lockerCodeSchema = z.string().trim().toUpperCase().regex(/^AL-MX-\d{4}$/, "Usa el formato AL-MX-0000.");

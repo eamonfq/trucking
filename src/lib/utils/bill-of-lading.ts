@@ -10,7 +10,8 @@ const VIN = /\bVIN(?![A-Z])/i;
 const pieceNote = (box: Box) => (box.contentsNote ?? box.prealertDetails?.description ?? "").trim();
 const oneLine = (value: string) => value.replace(/\s*\n+\s*/g, ". ").replace(/\.{2,}/g, ".").replace(/\s{2,}/g, " ").trim();
 const wholePounds = (value: number) => Math.round(value);
-const missingNote = (count: number) => (count ? ` (${count} pieza${count === 1 ? "" : "s"} sin peso registrado)` : "");
+// The BOL is an English (VICS) document: its prefilled descriptions are in English.
+const missingNote = (count: number) => (count ? ` (${count} piece${count === 1 ? "" : "s"} without recorded weight)` : "");
 
 export function emptyBillOfLadingLine(id: string): BillOfLadingLine {
   return { id, handlingType: "", packageType: "", hazmat: false, description: "", nmfc: "", freightClass: "" };

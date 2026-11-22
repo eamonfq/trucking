@@ -1,0 +1,68 @@
+/** Correos (`/admin/correos` y `src/components/admin/email-controls.tsx`). Clave: español; valor: inglés. */
+export const adminEmails = {
+  // Página
+  "Comunicación": "Communication",
+  "Cada mensaje, bajo control.": "Every message, under control.",
+  "Estado de los últimos 100 correos transaccionales. Aceptado por Resend no significa entregado.": "Status of the last 100 transactional emails. Accepted by Resend doesn't mean delivered.",
+  "En cola": "Queued",
+  "Reintentando": "Retrying",
+  "Aceptado por Resend": "Accepted by Resend",
+  "Entregado": "Delivered",
+  "Fallido": "Failed",
+  "Rebotado": "Bounced",
+  "Marcado como spam": "Marked as spam",
+  "Vista previa local: los mensajes se guardan, pero no se envían a destinatarios reales.": "Local preview: messages are saved but not sent to real recipients.",
+  "Entrega mediante Resend. Los reintentos se procesan con el worker de correo.": "Delivery through Resend. Retries are processed by the email worker.",
+  "Verificación": "Verification",
+  "Bienvenida": "Welcome",
+  "Recuperación": "Password recovery",
+  "Contraseña cambiada": "Password changed",
+  "Invitación": "Invitation",
+  "Factura": "Invoice",
+  "Recepción": "Receiving",
+  "Pago": "Payment",
+  "Entrega": "Delivery",
+  "Soporte": "Support",
+  "Fecha": "Date",
+  "Estado": "Status",
+  "Intentos": "Attempts",
+  "Detalle": "Detail",
+  "Abrir correo local": "Open local email",
+  "Revisar remitente y configuración de Resend": "Check the sender and Resend settings",
+  "Los correos aparecerán aquí al crear cuentas o realizar operaciones.": "Emails will appear here when accounts are created or operations are performed.",
+  // Conexión y prueba
+  "Conexión y prueba real": "Connection and live test",
+  "Clave privada: {status}": "Private key: {status}",
+  "Configurada": "Configured",
+  "Pendiente": "Pending",
+  "Modo operativo: {mode}": "Operating mode: {mode}",
+  "Webhook: {status}": "Webhook: {status}",
+  "Configurado; validar recepción": "Configured; verify receipt",
+  "URL de enlaces: {site}": "Link URL: {site}",
+  "La prueba envía solo un correo al destinatario indicado. No vacía la cola ni activa envíos masivos. Un sitio localhost y su logo solo son accesibles desde este equipo; para clientes externos se necesita una URL pública.": "The test sends a single email to the given recipient. It doesn't empty the queue or turn on bulk sending. A localhost site and its logo are only reachable from this computer; external customers need a public URL.",
+  "No hay dominios registrados.": "No domains registered.",
+  "La consulta no pudo completarse.": "The check couldn't be completed.",
+  "Comprobar dominios en Resend": "Check domains in Resend",
+  "No se pudo confirmar la prueba. Revisa el estado antes de repetirla.": "The test couldn't be confirmed. Check its status before repeating it.",
+  "Correo remitente de la prueba": "Test sender email",
+  "Destinatario autorizado para la prueba": "Authorized test recipient",
+  "Autorizo enviar un correo real a esta dirección.": "I authorize sending a real email to this address.",
+  "Enviar prueba real": "Send live test",
+  "Para activar la operación: configurar RESEND_FROM_EMAIL, EMAIL_DELIVERY=resend y una URL pública en el servidor, comprobar el webhook e iniciar el worker. La clave nunca se muestra ni se guarda en el navegador.": "To go live: set RESEND_FROM_EMAIL, EMAIL_DELIVERY=resend and a public URL on the server, check the webhook and start the worker. The key is never shown or stored in the browser.",
+} as const;
+
+/**
+ * Mensajes de `src/lib/auth/email-actions.ts`. Esas acciones no pasan por `runMutation`, así que
+ * `email-controls.tsx` los traduce al mostrarlos (también se incluyen en `messages/admin.ts`).
+ */
+export const adminEmailMessages = {
+  "Espera unos minutos antes de consultar de nuevo.": "Wait a few minutes before checking again.",
+  "Falta RESEND_API_KEY en la configuración privada del servidor.": "RESEND_API_KEY is missing from the server's private configuration.",
+  "No pudimos consultar dominios ({code}). Revisa conexión y permisos de la clave en Resend. Una clave de solo envío no permite listar dominios.": "We couldn't check the domains ({code}). Check the connection and the key's permissions in Resend. A send-only key can't list domains.",
+  "No pudimos conectar con Resend. No se ha enviado ningún mensaje.": "We couldn't connect to Resend. No message has been sent.",
+  "Indica remitente, destinatario y confirma que autorizas el envío real.": "Enter the sender and recipient, and confirm that you authorize the real send.",
+  "Falta configurar la clave de Resend en el servidor.": "The Resend key isn't configured on the server.",
+  "Límite de 3 pruebas cada 10 minutos. Espera antes de reintentar.": "Limit of 3 tests every 10 minutes. Wait before trying again.",
+  "Resend aceptó la prueba. Confirma que llegó al buzón; esto no activa la cola operativa ni acredita entrega.": "Resend accepted the test. Confirm that it reached the inbox; this doesn't turn on the operating queue or prove delivery.",
+  "No se pudo confirmar el envío. Revisa conexión, dominio del remitente y restricciones del destinatario en Resend. La cola operativa no se activó.": "The send couldn't be confirmed. Check the connection, the sender domain and the recipient restrictions in Resend. The operating queue wasn't turned on.",
+} as const;

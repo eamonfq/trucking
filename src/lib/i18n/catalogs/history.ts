@@ -1,0 +1,86 @@
+/**
+ * Notas y autores que el código guarda en español en el historial de cajas, envíos y facturas
+ * (`timeline`). Se traducen al mostrarlos (`translateSegments`): frase por frase si la nota es
+ * compuesta. Lo que escribe una persona (motivos, notas) queda como se escribió.
+ * Clave: español; valor: inglés.
+ */
+export const history = {
+  // Autores
+  "Operaciones A&L": "A&L operations",
+  "Sistema": "System",
+  "Sistema A&L": "A&L system",
+  // Recepción y bodega
+  "Paquetes recibidos en {name}, {city}.": "Packages received at {name}, {city}.",
+  "Paquete recibido físicamente en {name}.": "Package physically received at {name}.",
+  "bodega de origen": "the origin warehouse",
+  "{store}: {description}. Valor declarado USD {value}. Asignada a {locker}.": "{store}: {description}. Declared value USD {value}. Assigned to {locker}.",
+  "{store}: {description}. Valor declarado USD {value}.": "{store}: {description}. Declared value USD {value}.",
+  "Peso pendiente completado: {weight} lb. Cotización, facturas y pagos sin cambios. Reimprimir etiqueta.": "Pending weight completed: {weight} lb. Quote, invoices and payments unchanged. Reprint label.",
+  "Retiro del inventario {reference}: {reason}. Reimprimir etiquetas.": "Removed from inventory {reference}: {reason}. Reprint labels.",
+  "Retiro revertido por administración. Archivo {id}. Reimprimir etiquetas.": "Removal reverted by the admin team. File {id}. Reprint labels.",
+  "Eliminación de datos de prueba {id}. Carga y totales recalculados.": "Test data deleted {id}. Load and totals recalculated.",
+  "Validación operativa": "Operational validation",
+  "Disponible para asignación a guía máster.": "Available to assign to a master waybill.",
+  // Frases de la nota de recepción y del desglose del cobro (billingDescription)
+  "Carga personalizada": "Custom cargo",
+  "Precio acordado USD {price}": "Agreed price USD {price}",
+  "Peso no registrado": "Weight not recorded",
+  "Peso real registrado": "Actual weight recorded",
+  "Carga fuera de categoría estándar": "Cargo outside the standard categories",
+  "Cobro por volumen": "Charged by volume",
+  "Cobro por peso real": "Charged by actual weight",
+  "Medidas opcionales": "Measurements optional",
+  "Selección de precio fijo por caja del catálogo": "Fixed price selected from the box catalog",
+  "Peso conjunto {total} lb / {pieces} piezas": "Combined weight {total} lb / {pieces} pieces",
+  "total USD {amount}": "total USD {amount}",
+  "peso y cargo de esta pieza prorrateados, no pesaje individual": "this piece's weight and charge are prorated, not weighed individually",
+  "Volumen": "Volume",
+  "peso real informativo {weight} lb": "actual weight for reference {weight} lb",
+  "Peso real {weight} lb": "Actual weight {weight} lb",
+  "cobro {weight} lb × USD {rate}": "charged {weight} lb × USD {rate}",
+  "peso dimensional {weight} lb": "dimensional weight {weight} lb",
+  "dimensional {weight} lb": "dimensional {weight} lb",
+  "Cotización manual acordada": "Agreed manual quote",
+  "Precio fijo": "Fixed price",
+  // Camiones
+  "Asignada a {code}.": "Assigned to {code}.",
+  "Cargada a {code} por selección manual desde Bodega.": "Loaded onto {code} by manual selection from the warehouse board.",
+  "Retirada de {code}.": "Removed from {code}.",
+  "Todas las descargas del viaje fueron confirmadas por escaneo.": "All unloads on this trip were confirmed by scanning.",
+  "Paradas y fechas estimadas actualizadas.": "Stops and estimated dates updated.",
+  "Guía máster creada.": "Master waybill created.",
+  // Acciones del camión (state-machine.ts TRUCK_ACTIONS), guardadas como nota
+  "Las cajas asignadas pasarán a cargadas en camión.": "The assigned boxes will be marked as loaded on the truck.",
+  "Las cajas y sus envíos pasarán a tránsito.": "The boxes and their shipments will move to in transit.",
+  "Se registrará el arribo de la unidad al cruce fronterizo.": "The truck's arrival at the border crossing will be recorded.",
+  "Las cajas y sus envíos pasarán a destino.": "The boxes and their shipments will be marked as at destination.",
+  "La guía máster se cerrará; las entregas seguirán registrándose caja por caja.": "The master waybill will be closed; deliveries will still be recorded box by box.",
+  // Envíos y entregas
+  "Solicitud creada con {count} cajas. Entrega: a domicilio.": "Request created with {count} boxes. Delivery: home delivery.",
+  "Solicitud creada con {count} cajas. Entrega: en sucursal.": "Request created with {count} boxes. Delivery: at a pickup location.",
+  "Cajas elegibles y destinatario validados.": "Eligible boxes and recipient validated.",
+  "Envío {code} creado hacia {city}.": "Shipment {code} created to {city}.",
+  "Recibe: {name}. {note}": "Received by: {name}. {note}",
+  "Recibe: {name}. ": "Received by: {name}. ",
+  "Entrega corregida junto con {code}: {reason}. Reimprimir etiqueta.": "Delivery corrected together with {code}: {reason}. Reprint label.",
+  "Entrega actualizada para esta pieza: {reason}. Recibe {name}. Dirección / referencia: {address}. Reimprimir etiqueta. Cliente, cobros y ruta sin cambios.": "Delivery updated for this piece: {reason}. Recipient: {name}. Address / reference: {address}. Reprint label. Customer, charges and route unchanged.",
+  // Facturas y pagos
+  "Documento generado según la configuración de facturación.": "Document generated according to the billing settings.",
+  "Pago reportado con referencia {reference}.": "Payment reported with reference {reference}.",
+  "Pago reportado para {number}.": "Payment reported for {number}.",
+  "Referencia bancaria no localizada.": "Bank reference not found.",
+  "Pagos combinados recibidos y registrados por operaciones.": "Combined payments received and recorded by operations.",
+  "La suma de pagos combinados cubre el total exacto.": "The combined payments cover the exact total.",
+  "Cargo verificado {id}. Folio {folio}.": "Charge verified {id}. Number {folio}.",
+  "Corrección administrativa: {reason}. Sin cargos ni reembolsos externos.": "Administrative correction: {reason}. No external charges or refunds.",
+  "Corrección: {reason}": "Correction: {reason}",
+  "Cobro total en {method} confirmado por {actor} con comprobante.": "Full {method} payment confirmed by {actor} with proof of payment.",
+  // Métodos de pago guardados (se traducen dentro de las notas)
+  "efectivo": "cash",
+  "tarjeta": "card",
+  "transferencia": "transfer",
+  "deposito": "deposit",
+  "cheque": "check",
+  "zelle": "Zelle",
+  "mixto": "mixed",
+} as const;

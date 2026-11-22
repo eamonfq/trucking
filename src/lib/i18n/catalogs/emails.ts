@@ -1,0 +1,105 @@
+/**
+ * Correos (solo servidor): marco del correo, resumen de recepción, correos de cuenta, push y vistas previas.
+ * Se escriben en el idioma de quien los recibe (`userLocale`), no en el de la petición.
+ * Clave: español; valor: inglés.
+ */
+export const emails = {
+  // Marco del correo (src/lib/services/email-template.ts)
+  "Continuar": "Continue",
+  "Tu envío, en buenas manos.": "Your shipment, in good hands.",
+  "Este es un correo automático. Nunca te pediremos tu contraseña por correo.": "This is an automated email. We will never ask for your password by email.",
+  "TU CUENTA": "YOUR ACCOUNT",
+  "Foto de recepción": "Receiving photo",
+  "Primera foto registrada en la recepción": "First photo taken at receiving",
+  "Primera foto de esta recepción. También puedes verla en el detalle del paquete desde tu panel.": "First photo of this receipt. You can also see it in the package details in your dashboard.",
+  "Si el botón no funciona, copia este enlace en tu navegador:": "If the button doesn't work, copy this link into your browser:",
+  "Por tu seguridad, nunca compartas tu contraseña ni este enlace. Si no solicitaste este mensaje, puedes ignorarlo.": "For your security, never share your password or this link. If you didn't request this message, you can ignore it.",
+
+  // Resumen de recepción (src/lib/services/reception-email-layout.ts)
+  "Recepción {reference}": "Receipt {reference}",
+  "{count} unidades": "{count} units",
+  "1 unidad": "1 unit",
+  "Peso conjunto: {weight} lb. Pesos por pieza prorrateados, no pesajes individuales.": "Combined weight: {weight} lb. Per-piece weights are prorated, not individual weighings.",
+  "Facturación pendiente": "Billing pending",
+  "Total facturado: USD {total}": "Total invoiced: USD {total}",
+  "Rechazada": "Rejected",
+  "Facturas:": "Invoices:",
+  "No registradas": "Not recorded",
+  "Pago confirmado": "Payment confirmed",
+  "Pendiente de pago en destino": "Payment due at destination",
+  "Revisa tus facturas en el panel": "Check your invoices in your dashboard",
+  "Pieza {index}/{total}": "Piece {index}/{total}",
+  " (prorrateado)": " (prorated)",
+  "Registramos tu recepción. Aquí tienes el resumen de tus unidades.": "We recorded your receipt. Here is a summary of your units.",
+  "RECEPCIÓN": "RECEIPT",
+  "Peso conjunto: {weight} lb · piezas con peso prorrateado": "Combined weight: {weight} lb · pieces with prorated weight",
+  "Total facturado": "Total invoiced",
+  "Contenido de tu recepción": "Contents of your receipt",
+  "Detalle de unidades": "Unit details",
+  "Unidades recibidas": "Units received",
+  "UNIDAD": "UNIT",
+  "PESO / MEDIDAS": "WEIGHT / DIMENSIONS",
+  "Y {count} unidades más. Consulta el detalle completo en tu panel.": "And {count} more units. See the full details in your dashboard.",
+  "1 factura disponible en tu panel, con el desglose de cargos y pagos.": "1 invoice available in your dashboard, with the breakdown of charges and payments.",
+  "{count} facturas disponibles en tu panel, con el desglose de cargos y pagos.": "{count} invoices available in your dashboard, with the breakdown of charges and payments.",
+
+  // Correo de recepción (src/lib/auth/file-actions.ts)
+  "Recepción {code} · {count} unidad(es)": "Receipt {code} · {count} unit(s)",
+  "Recepción registrada con observaciones": "Receipt recorded with notes",
+  "Tu paquete ya está en bodega": "Your package is at the warehouse",
+  "Recepción {code}: {count} unidad(es).": "Receipt {code}: {count} unit(s).",
+  "{code}: {weight} lb, {dimensions} in": "{code}: {weight} lb, {dimensions} in",
+  "{code}: {weight} lb prorrateadas, {dimensions} in": "{code}: {weight} lb prorated, {dimensions} in",
+  "{count} unidad(es) rechazada(s); consulta los motivos en tu panel.": "{count} unit(s) rejected; see the reasons in your dashboard.",
+  "Total facturado: USD {total}. Facturas: {invoices}.": "Total invoiced: USD {total}. Invoices: {invoices}.",
+  "El cobro se determinará según la configuración de facturación.": "The charge will be set according to the billing settings.",
+  "Ver mis paquetes": "View my packages",
+
+  // Correos de cuenta (src/lib/auth/account-email.ts y user-actions.ts)
+  "Confirma tu correo · A&L": "Confirm your email · A&L",
+  "Un paso más. Todo listo para comenzar.": "One more step. Everything is ready to start.",
+  "Hola {name}. Reservamos tu casillero {locker}. Confirma tu correo para activar el acceso. Este enlace vence en 24 horas.": "Hi {name}. We reserved your locker {locker}. Confirm your email to activate your access. This link expires in 24 hours.",
+  "Confirmar mi correo": "Confirm my email",
+  "Recupera tu acceso · A&L": "Recover your access · A&L",
+  "Volvamos a conectar.": "Let's get you back in.",
+  "Recibimos una solicitud para cambiar tu contraseña. El enlace es personal, funciona una sola vez y vence en 30 minutos.": "We received a request to change your password. The link is personal, works only once and expires in 30 minutes.",
+  "Crear nueva contraseña": "Create a new password",
+  "Tu casillero está listo · A&L": "Your locker is ready · A&L",
+  "Bienvenido a tu nueva ruta.": "Welcome to your new route.",
+  "Hola {name}. Operaciones creó tu casillero {locker}. Elige tu contraseña para confirmar tu correo y activar la cuenta. El enlace vence en 24 horas.": "Hi {name}. Operations created your locker {locker}. Choose your password to confirm your email and activate your account. The link expires in 24 hours.",
+  "Activar mi cuenta": "Activate my account",
+  "Tu acceso de almacén · A&L": "Your warehouse access · A&L",
+  "Tu acceso de almacén está listo": "Your warehouse access is ready",
+  "Hola {name}. El administrador te asignó acceso al módulo de almacén. Elige tu contraseña y confirma tu correo. Este enlace vence en 24 horas.": "Hi {name}. The administrator gave you access to the warehouse module. Choose your password and confirm your email. This link expires in 24 hours.",
+  "Tu acceso al equipo · A&L": "Your team access · A&L",
+  "Tu espacio de trabajo está listo": "Your workspace is ready",
+  "Hola {name}. Te asignaron acceso al panel operativo de A&L. Crea tu contraseña para confirmar tu correo. Al ingresar verás las herramientas autorizadas. El enlace es personal y vence en 24 horas.": "Hi {name}. You were given access to the A&L operations panel. Create your password to confirm your email. When you log in, you will see the tools you are authorized to use. The link is personal and expires in 24 hours.",
+  "Bienvenido a A&L": "Welcome to A&L",
+  "Tu casillero {locker} está activo.": "Your locker {locker} is active.",
+  "Tu correo ha sido confirmado. Ya puedes organizar tus compras y seguir cada envío desde tu cuenta.": "Your email has been confirmed. You can now organize your purchases and track every shipment from your account.",
+  "Entrar a mi cuenta": "Go to my account",
+  "Contraseña actualizada · A&L": "Password updated · A&L",
+  "Tu acceso está protegido.": "Your access is protected.",
+  "Tu contraseña cambió y cerramos todas las sesiones anteriores. Si no reconoces este cambio, contacta a soporte y solicita recuperar tu acceso.": "Your password was changed and we signed out all previous sessions. If you don't recognize this change, contact support and ask to recover your access.",
+  "Iniciar sesión": "Log in",
+
+  // Push (src/lib/services/push.ts): texto genérico, sin datos privados en la pantalla bloqueada
+  "A&L · Nueva actualización": "A&L · New update",
+  "Tienes novedades en tu cuenta. Abre tu panel para ver los detalles.": "You have updates on your account. Open your dashboard to see the details.",
+
+  // Prueba del proveedor (src/lib/auth/email-actions.ts)
+  "Prueba de correo · A&L": "Email test · A&L",
+  "La comunicación también viaja contigo.": "Communication travels with you too.",
+  "Esta es una prueba autorizada desde el panel operativo de A&L. Confirma la recepción en tu buzón. No contiene enlaces de acceso ni datos de clientes.": "This is an authorized test from the A&L operations panel. Confirm that it arrived in your inbox. It contains no access links or customer data.",
+
+  // Vista previa de plantillas (src/app/api/emails/preview/route.ts)
+  "Tu casillero está activo.": "Your locker is active.",
+  "Tu factura está disponible.": "Your invoice is available.",
+  "Tu caja ya está en bodega.": "Your box is at the warehouse.",
+  "Tu pago está en revisión.": "Your payment is under review.",
+  "Tu caja llegó a sus manos.": "Your box reached its recipient.",
+  "Estamos para ayudarte.": "We're here to help.",
+  "Tu cuenta A&L": "Your A&L account",
+  "Hola. Esta es una vista previa de la identidad visual de nuestros correos: mensajes claros, enlaces personales y el respaldo de A&L en cada paso.": "Hi. This is a preview of the visual identity of our emails: clear messages, personal links and A&L's support at every step.",
+  "Continuar a mi cuenta": "Continue to my account",
+} as const;

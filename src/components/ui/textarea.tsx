@@ -1,3 +1,6 @@
+"use client";
+import { fieldMessages } from "@/lib/i18n/catalogs/fields";
+import { useMessageTranslator } from "@/lib/i18n/provider";
 import { forwardRef, useId, type TextareaHTMLAttributes } from "react";
 import { cn } from "@/lib/utils/cn";
 
@@ -5,13 +8,14 @@ type TextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & { label: stri
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function Textarea({ id, label, error, hint, tone = "light", className, ...props }, ref) {
   const generatedId = useId();
+  const tm = useMessageTranslator(fieldMessages);
   const textareaId = id ?? props.name ?? generatedId;
   const descriptionId = `${textareaId}-description`;
   return (
     <div className={cn("grid min-w-0 gap-2 text-xs font-medium", tone === "dark" ? "text-white/80" : "text-ink-700")}>
       <label htmlFor={textareaId}>{label}</label>
       <textarea ref={ref} id={textareaId} aria-invalid={Boolean(error)} aria-describedby={error || hint ? descriptionId : undefined} className={cn("min-h-28 w-full min-w-0 resize-y rounded-md border-[1.5px] border-line-300 bg-white px-4 py-3 text-base font-medium text-navy-900 outline-none transition placeholder:font-normal placeholder:text-label-600 hover:border-label-600 focus:border-brand-700 disabled:bg-cream-100 disabled:text-ink-500", error && "border-danger", className)} {...props} />
-      {(error || hint) && <span id={descriptionId} className={cn("text-xs font-normal", error ? (tone === "dark" ? "text-[#FF9C93]" : "text-danger") : tone === "dark" ? "text-white/55" : "text-ink-500")}>{error ?? hint}</span>}
+      {(error || hint) && <span id={descriptionId} className={cn("text-xs font-normal", error ? (tone === "dark" ? "text-[#FF9C93]" : "text-danger") : tone === "dark" ? "text-white/55" : "text-ink-500")}>{error ? tm(error) : hint}</span>}
     </div>
   );
 });

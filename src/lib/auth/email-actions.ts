@@ -7,6 +7,10 @@ import { sendEmail, siteUrl } from "@/lib/services/email";
 import { renderEmail } from "@/lib/services/email-template";
 import { withStore } from "@/lib/db/store";
 import { revalidatePath } from "next/cache";
+import { users } from "@/lib/db/collections";
+import { emails } from "@/lib/i18n/catalogs/emails";
+import { translator } from "@/lib/i18n/translate";
+import { userLocale } from "@/lib/i18n/user-locale";
 
 export async function checkEmailProvider() {
   const actor=await requireAdminUser(["correos"]);
@@ -28,12 +32,14 @@ export async function sendProviderTest(input:unknown) {
   if (!parsed.success) return {ok:false as const,error:"Indica remitente, destinatario y confirma que autorizas el envío real."};
   if (!process.env.RESEND_API_KEY) return {ok:false as const,error:"Falta configurar la clave de Resend en el servidor."};
   if (!await allowAttempt(`email-test/${actor.id}`,3,600)) return {ok:false as const,error:"Límite de 3 pruebas cada 10 minutos. Espera antes de reintentar."};
-  const message={to:parsed.data.to,subject:"Prueba de correo · A&L",heading:"La comunicación también viaja contigo.",body:"Esta es una prueba autorizada desde el panel operativo de A&L. Confirma la recepción en tu buzón. No contiene enlaces de acceso ni datos de clientes."};
-  const queued=await withStore(async()=>{
+  const {queued,message}=await withStore(async()=>{
+    // In the recipient's language when the address belongs to a user; Spanish otherwise.
+    const locale=userLocale(users.find(user=>user.email?.toLowerCase()===parsed.data.to.toLowerCase())),t=translator(emails,locale);
+    const message={to:parsed.data.to,subject:t("Prueba de correo · A&L"),heading:t("La comunicación también viaja contigo."),body:t("Esta es una prueba autorizada desde el panel operativo de A&L. Confirma la recepción en tu buzón. No contiene enlaces de acceso ni datos de clientes."),locale};
     const item=await sendEmail(message);
     // Exclude from workers inside the same transaction; only the explicit test can send it.
     await sql().execute("UPDATE email_outbox SET status='failed',attempts=1,last_error='Test awaiting provider result' WHERE id=?",[item.id]);
-    return item;
+    return {queued:item,message};
   },true);
   try {
     const result=await new Resend(process.env.RESEND_API_KEY).emails.send({from:`A&L Trucking Logistics <${parsed.data.from}>`,to:message.to,subject:message.subject,...renderEmail(message,siteUrl())},{idempotencyKey:`ayl/${queued.id}`});

@@ -1,0 +1,52 @@
+/**
+ * Entrega de un paquete: destinatario y dirección de la etiqueta (`package-delivery.tsx`, en el
+ * detalle de la caja). Clave: español; valor: inglés.
+ */
+export const trucksPackageDelivery = {
+  // Campos del domicilio
+  "Calle": "Street",
+  "Número exterior": "Street number",
+  "Número interior": "Unit number",
+  "Colonia": "Neighborhood (colonia)",
+  "Código postal": "Postal code",
+  "Municipio / ciudad": "Municipality / city",
+  "Estado": "State",
+  "Referencias adicionales": "Additional references",
+  // Tarjeta
+  "Entrega de este paquete": "Delivery for this package",
+  "Destinatario y dirección que aparecen en la etiqueta": "Recipient and address shown on the label",
+  "Editar entrega": "Edit delivery",
+  "Asignar entrega": "Assign delivery",
+  "Quién recibe": "Who receives it",
+  "Destinatario sin asignar": "No recipient assigned",
+  "Dirección / referencia de entrega": "Delivery address / reference",
+  "No hay una dirección o referencia asignada a este paquete.": "No address or reference is assigned to this package.",
+  "Almacén del viaje: {name}": "Trip warehouse: {name}",
+  "Entrega guardada. Reimprime la etiqueta para usar los nuevos datos.": "Delivery saved. Reprint the label to use the new details.",
+  // Diálogo
+  "Asignar o corregir entrega": "Assign or correct delivery",
+  "{code} · El cambio aplica solo a esta pieza, no a otras cajas ni al directorio del cliente.": "{code} · The change applies only to this piece, not to other boxes or the customer's contact list.",
+  "Cancelar": "Cancel",
+  "Guardar entrega": "Save delivery",
+  "No se confirmó el guardado. Actualiza el detalle antes de reintentar.": "The save wasn't confirmed. Refresh the details before retrying.",
+  "1. Quién recibe": "1. Who receives it",
+  "Buscar contacto del cliente": "Search the customer's contacts",
+  "Destinatario": "Recipient",
+  "Capturar contacto para esta pieza": "Enter a contact for this piece",
+  "Refina la búsqueda para encontrar otros contactos.": "Refine the search to find other contacts.",
+  "Nombre de quien recibe": "Recipient name",
+  "Teléfono de quien recibe": "Recipient phone",
+  "2. Dónde se entrega": "2. Where it's delivered",
+  "Dirección de este paquete": "Address for this package",
+  "Escribir dirección o referencia para esta pieza": "Write an address or reference for this piece",
+  "Dirección vacía": "Empty address",
+  "Selecciona una dirección con datos de entrega.": "Select an address with delivery details.",
+  "Nombre de bodega o referencia de entrega": "Warehouse name or delivery reference",
+  "Ej. Bodega Valle de Juárez": "E.g. Valle de Juárez warehouse",
+  "Una referencia es suficiente para retiro en bodega. Los campos del domicilio son opcionales.": "A reference is enough for pickup at a warehouse. The address fields are optional.",
+  "Ocultar domicilio completo": "Hide full address",
+  "Agregar domicilio completo (opcional)": "Add full address (optional)",
+  "Motivo de asignación o corrección": "Reason for the assignment or correction",
+  "Ej. Completar dirección pendiente": "E.g. Complete a pending address",
+  "Se conserva una copia de la entrega y queda registro del cambio. No modifica pagos, precios ni el almacén del viaje. Reimprime la etiqueta después de guardar.": "A copy of the delivery is kept and the change is logged. It doesn't change payments, prices or the trip warehouse. Reprint the label after saving.",
+} as const;

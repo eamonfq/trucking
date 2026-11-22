@@ -1,0 +1,20 @@
+/** Marco del panel del cliente: navegación y pie de la barra lateral (client-shell.tsx, layout). Clave: español; valor: inglés. */
+export const clientShell = {
+  "Inicio": "Home",
+  "Mis cajas": "My boxes",
+  "Mis envíos": "My shipments",
+  "Crear envío": "Create shipment",
+  "Pre-alertas": "Pre-alerts",
+  "Editar operaciones": "Edit operations",
+  "Cotizador": "Quote calculator",
+  "Direcciones": "Addresses",
+  "Destinatarios": "Recipients",
+  "Mis facturas": "My invoices",
+  "Estado de cuenta": "Account statement",
+  "Notificaciones": "Notifications",
+  "Soporte": "Support",
+  "Ayuda": "Help",
+  "Cuenta": "Account",
+  "Cerrar sesión": "Log out",
+  "Cliente demo": "Demo customer",
+} as const;

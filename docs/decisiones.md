@@ -2,6 +2,38 @@
 
 Una entrada por decisión, la más reciente arriba. Las entradas no se borran: si una decisión cambia, se añade otra que la reemplaza. Las entradas anteriores al 2026-11-06 resumen los documentos por tema, que conservan el detalle.
 
+## 2026-11-20 — Todo el sistema en dos idiomas: lo que se envía a una persona va en su idioma
+**Decisión:**
+- El panel del cliente, el admin y el almacén también se traducen al inglés. El dueño confirmó que el equipo usará el admin en inglés.
+- Los mensajes que devuelven las Server Actions se traducen en un solo punto, `runMutation()`, según el idioma de quien hace la petición. Las acciones siguen escribiendo español, y los catálogos de `src/lib/i18n/messages/` admiten `{marcadores}`.
+- **Lo que se envía o se genera para una persona sale en el idioma de esa persona** (`users.preferredLocale`), aunque lo dispare un operador en otro idioma: correos, push, avisos del panel, factura y recibo de recepción. Lo puede fijar el admin en la ficha del cliente y en el alta en mostrador (español por defecto). Las cuentas antiguas sin preferencia guardan la del primer acceso.
+- **La etiqueta del paquete y el manifiesto de carga son bilingües**, porque cruzan la frontera. **El bill of lading queda en inglés** (formato VICS).
+- El historial que guarda el código en español se traduce al mostrarlo, frase por frase. Lo que escribe una persona no se traduce.
+
+**Motivo:**
+- El dueño lo pidió: «admin usará inglés», «el inglés lo revisas tú según la lógica de negocio» y «facturas en inglés o español según idioma».
+- Traducir en `runMutation` evita tocar cientos de `return { error }`. Además, esos mensajes no viajan al navegador, porque los catálogos de mensajes solo los importa el servidor.
+- Componer al crear, y no al mostrar, garantiza que un correo, un push o un PDF salgan siempre en el mismo idioma que la persona eligió.
+- Una etiqueta bilingüe la entienden en El Paso y en México; una en el idioma de quien imprime, no.
+
+**Reemplaza:** amplía la entrada del mismo día sobre el sitio en español e inglés (fase 1).
+
+## 2026-11-20 — Sitio en español e inglés: idioma por cookie y el español como clave de traducción
+**Decisión:**
+- El idioma se guarda en la cookie `ayl_lang` y, con sesión, en `users.preferredLocale`. Prioridad: elección del usuario, después el idioma del navegador y, si no hay nada, español.
+- Las URLs **no** llevan prefijo de idioma.
+- Las traducciones son catálogos propios en TypeScript (`src/lib/i18n/catalogs/`), sin librería. La clave es el texto en español y el valor, el inglés. `t()` solo acepta claves existentes, así que una traducción faltante no compila.
+- Se avanza por fases desplegables por separado (ver [idiomas.md](idiomas.md)).
+
+**Motivo:**
+- Prefijo `/en/...` descartado: obligaba a reescribir el proxy, las redirecciones de login (`siguiente`) y todos los enlaces internos. Además rompía los enlaces de rastreo ya compartidos y solo sirve para Google, y el sitio hoy no se indexa.
+- `next-intl` descartado: con dos idiomas y textos simples no compensa una dependencia más que validar contra cada versión de Next.
+- Claves por identificador (`admin.reception.save`), como proponía el plan inicial, descartadas: los componentes son líneas de miles de caracteres, y con el español como clave se migra archivo por archivo sin perder legibilidad ni crear claves huérfanas.
+
+**Consecuencia:**
+- Cambiar un texto en español obliga a cambiar también su clave en el catálogo; `tsc` lo detecta.
+- Los mensajes que llegan en tiempo de ejecución (errores de Server Actions y de Zod) se traducen al mostrarlos y, si falta uno, se ven en español.
+
 ## 2026-11-20 — Producción se vacía de operaciones; se conservan clientes y destinatarios
 **Decisión:** a pedido del dueño se borró en producción todo lo operativo:
 - recepciones y cajas (229), facturas con sus pagos (229), camiones (7) y Bill of Lading (2);

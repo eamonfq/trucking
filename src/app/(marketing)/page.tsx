@@ -18,17 +18,26 @@ const usd = (value: number) => new Intl.NumberFormat("en-US", {style: "currency"
 import { faqs } from "@/lib/data/faqs";
 import { siteUrl, homeDescription } from "@/lib/seo";
 import { configService } from "@/lib/services/config";
+import { home } from "@/lib/i18n/catalogs/home";
+import { getLocale } from "@/lib/i18n/server";
+import { translator } from "@/lib/i18n/translate";
+import { LANGUAGE_TAG } from "@/lib/i18n/config";
 
-export const metadata: Metadata = {
-  title: "Envíos de cajas de USA a México",
-  description: homeDescription,
-  alternates: { canonical: "/" },
-  openGraph: { title: "Envíos de USA a México | A&L Trucking Logistics", description: homeDescription, url: "/", siteName: "A&L Trucking Logistics", locale: "es_MX", type: "website" },
-  twitter: { card: "summary", title: "Envíos de USA a México | A&L", description: homeDescription },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale();
+  const t = translator(home, locale);
+  return {
+    title: t("Envíos de cajas de USA a México"),
+    description: t(homeDescription),
+    alternates: { canonical: "/" },
+    openGraph: { title: t("Envíos de USA a México | A&L Trucking Logistics"), description: t(homeDescription), url: "/", siteName: "A&L Trucking Logistics", locale: locale === "en" ? "en_US" : "es_MX", type: "website" },
+    twitter: { card: "summary", title: t("Envíos de USA a México | A&L"), description: t(homeDescription) },
+  };
+}
 
 export default async function LandingPage() {
-  const [flow, categories] = await Promise.all([configService.getFlowConfig(), configService.getRateTable()]);
+  const [flow, categories, locale] = await Promise.all([configService.getFlowConfig(), configService.getRateTable(), getLocale()]);
+  const t = translator(home, locale);
   const locker = flow.originMode === "casillero";
   const cheapest = categories.reduce<(typeof categories)[number] | undefined>((lowest, category) => !lowest || category.priceUsd < lowest.priceUsd ? category : lowest, undefined);
   const featured = categories[1]?.id;
@@ -43,13 +52,13 @@ export default async function LandingPage() {
 
   const structuredData = { "@context": "https://schema.org", "@graph": [
     { "@type": "Organization", "@id": siteUrl("/#organization"), name: "A&L Trucking Logistics", url: siteUrl("/"), logo: siteUrl("/brand/logoayl.png") },
-    { "@type": "WebSite", "@id": siteUrl("/#website"), name: "A&L Trucking Logistics", url: siteUrl("/"), inLanguage: "es-MX", publisher: { "@id": siteUrl("/#organization") } },
-    { "@type": "Service", name: "Envíos terrestres de cajas de USA a México", serviceType: "Transporte terrestre de cajas", provider: { "@id": siteUrl("/#organization") }, description: homeDescription, url: siteUrl("/") },
-    { "@type": "FAQPage", mainEntity: faqs.map(faq => ({ "@type": "Question", name: faq.question, acceptedAnswer: { "@type": "Answer", text: faq.answer } })) },
+    { "@type": "WebSite", "@id": siteUrl("/#website"), name: "A&L Trucking Logistics", url: siteUrl("/"), inLanguage: LANGUAGE_TAG[locale], publisher: { "@id": siteUrl("/#organization") } },
+    { "@type": "Service", name: t("Envíos terrestres de cajas de USA a México"), serviceType: t("Transporte terrestre de cajas"), provider: { "@id": siteUrl("/#organization") }, description: t(homeDescription), url: siteUrl("/") },
+    { "@type": "FAQPage", mainEntity: faqs.map(faq => ({ "@type": "Question", name: t(faq.question), acceptedAnswer: { "@type": "Answer", text: t(faq.answer) } })) },
   ] };
   return <>
     <BoxIsoDefs />
-    <a href="#contenido" className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:bg-white focus:p-4">Saltar al contenido</a>
+    <a href="#contenido" className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:bg-white focus:p-4">{t("Saltar al contenido")}</a>
     <MarketingHeader />
     <main id="contenido" className="[&_section[id]]:scroll-mt-28">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData).replace(/</g, "\\u003c") }} />
@@ -66,21 +75,21 @@ export default async function LandingPage() {
           <div className="flex min-w-0 flex-col gap-7">
             <p className="inline-flex w-fit items-center gap-3 rounded-full border border-navy-700 bg-white/6 px-4.5 py-2.5 text-over font-semibold uppercase text-[#F2E9DC]">
               <span aria-hidden="true" className="size-2 rounded-full bg-brand-600" />
-              <span className="hidden sm:inline">Carga terrestre · </span>Miami → México
+              <span className="hidden sm:inline">{t("Carga terrestre · ")}</span>{t("Miami → México")}
             </p>
             <h1 className="font-display text-[3.25rem] font-extrabold leading-[.86] tracking-[-.05em] text-white sm:text-7xl lg:text-[6.75rem]">
-              Envía más,<br /><span className="text-brand-300">paga menos.</span>
+              {t("Envía más,")}<br /><span className="text-brand-300">{t("paga menos.")}</span>
             </h1>
-            <p className="max-w-[32.5rem] text-lg leading-relaxed text-[#B9C4DC] text-pretty">Elige una caja con precio fijo del catálogo o cotiza por volumen o peso real. Son modalidades distintas; las cargas especiales se cotizan de forma individual.</p>
+            <p className="max-w-[32.5rem] text-lg leading-relaxed text-[#B9C4DC] text-pretty">{t("Elige una caja con precio fijo del catálogo o cotiza por volumen o peso real. Son modalidades distintas; las cargas especiales se cotizan de forma individual.")}</p>
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-              <Link href="/registro" className="inline-flex min-h-14 items-center justify-center gap-2.5 rounded-lg bg-brand-600 px-7 text-base font-semibold text-white shadow-[0_14px_34px_rgba(232,98,28,.32)] transition hover:-translate-y-0.5 hover:bg-brand-700">Crear mi cuenta <span aria-hidden="true">→</span></Link>
-              <Link href="/login" className="inline-flex min-h-14 items-center justify-center rounded-lg border-[1.5px] border-[#44567F] px-6 text-base font-semibold text-white transition hover:border-white">Ingresar a mi cuenta</Link>
-              <Link href="#tarifas" className="inline-flex min-h-14 items-center justify-center rounded-lg border-[1.5px] border-[#44567F] px-6 text-base font-semibold text-white transition hover:border-white">Ver tarifas</Link>
+              <Link href="/registro" className="inline-flex min-h-14 items-center justify-center gap-2.5 rounded-lg bg-brand-600 px-7 text-base font-semibold text-white shadow-[0_14px_34px_rgba(232,98,28,.32)] transition hover:-translate-y-0.5 hover:bg-brand-700">{t("Crear mi cuenta")} <span aria-hidden="true">→</span></Link>
+              <Link href="/login" className="inline-flex min-h-14 items-center justify-center rounded-lg border-[1.5px] border-[#44567F] px-6 text-base font-semibold text-white transition hover:border-white">{t("Ingresar a mi cuenta")}</Link>
+              <Link href="#tarifas" className="inline-flex min-h-14 items-center justify-center rounded-lg border-[1.5px] border-[#44567F] px-6 text-base font-semibold text-white transition hover:border-white">{t("Ver tarifas")}</Link>
             </div>
             <dl className="hidden flex-wrap gap-10 border-t border-[#2A3A5E] pt-7 lg:flex">
-              <HeroStat value={String(categories.length)} detail={<>categorías con<br />precio fijo por caja</>} />
-              <HeroStat value={cheapest ? usd(cheapest.priceUsd) : "—"} detail={<>USD desde, por caja<br />precio fijo por caja</>} />
-              <HeroStat value="Rastreo" detail={<>consulta los avances<br />con tu código</>} />
+              <HeroStat value={String(categories.length)} detail={<>{t("categorías con")}<br />{t("precio fijo por caja")}</>} />
+              <HeroStat value={cheapest ? usd(cheapest.priceUsd) : "—"} detail={<>{t("USD desde, por caja")}<br />{t("precio fijo por caja")}</>} />
+              <HeroStat value={t("Rastreo")} detail={<>{t("consulta los avances")}<br />{t("con tu código")}</>} />
             </dl>
           </div>
 
@@ -93,8 +102,8 @@ export default async function LandingPage() {
             <ScaledBox categories={categories} id={categories[1]?.id ?? ""} className="absolute left-18.5 top-24" chip="light" chipClass="-left-5.5 top-2" />
             <ScaledBox categories={categories} id={categories[0]?.id ?? ""} className="absolute right-14 top-10" chip="light" chipClass="-right-4.5 -top-1.5" />
             <p className="absolute -bottom-1.5 right-2 flex items-center gap-2.5 rounded-full border border-navy-700 bg-white/6 px-4 py-2.5">
-              <span className="text-[.6875rem] font-semibold uppercase tracking-[.14em] text-brand-300">A escala real</span>
-              <span className="text-xs text-[#B9C4DC]">Categorías del catálogo</span>
+              <span className="text-[.6875rem] font-semibold uppercase tracking-[.14em] text-brand-300">{t("A escala real")}</span>
+              <span className="text-xs text-[#B9C4DC]">{t("Categorías del catálogo")}</span>
             </p>
           </div>
 
@@ -117,9 +126,9 @@ export default async function LandingPage() {
         <div className="relative mt-16 border-t border-[#2A3A5E] bg-navy-975">
           <div className="mx-auto grid max-w-[90rem] items-center gap-8 px-5 py-8 sm:px-8 lg:grid-cols-[1fr_38.75rem] lg:px-18">
             <div className="flex flex-col gap-1.5">
-              <p className="text-over font-semibold uppercase text-brand-300">Rastreo público</p>
-              <h2 className="font-display text-3xl font-bold leading-tight tracking-[-.02em] text-white">¿Dónde está tu carga?</h2>
-              <p className="text-sm text-[#A8B2CA]">Consulta con tu folio sin iniciar sesión.</p>
+              <p className="text-over font-semibold uppercase text-brand-300">{t("Rastreo público")}</p>
+              <h2 className="font-display text-3xl font-bold leading-tight tracking-[-.02em] text-white">{t("¿Dónde está tu carga?")}</h2>
+              <p className="text-sm text-[#A8B2CA]">{t("Consulta con tu folio sin iniciar sesión.")}</p>
             </div>
             <TrackingSearch dark />
           </div>
@@ -131,24 +140,24 @@ export default async function LandingPage() {
         <div className="mx-auto max-w-[90rem]">
           <div className="grid items-end gap-10 pb-16 lg:grid-cols-[1fr_30rem]">
             <div className="flex flex-col gap-5">
-              <p className="text-over font-semibold uppercase text-brand-300">Tarifas transparentes</p>
-              <h2 className="font-display text-[2.75rem] font-extrabold leading-[.94] tracking-[-.04em] text-white sm:text-6xl lg:text-d2">Una caja.<br />Un precio fijo.</h2>
+              <p className="text-over font-semibold uppercase text-brand-300">{t("Tarifas transparentes")}</p>
+              <h2 className="font-display text-[2.75rem] font-extrabold leading-[.94] tracking-[-.04em] text-white sm:text-6xl lg:text-d2">{t("Una caja.")}<br />{t("Un precio fijo.")}</h2>
             </div>
-            <p className="text-lg leading-relaxed text-[#A8B2CA] text-pretty">Precios fijos por caja en USD, con las medidas y límites de peso indicados. En recepción elige «Precio fijo por caja» para aplicar estas tarifas. Volumen y peso son modalidades distintas; servicios adicionales se cotizan aparte.</p>
+            <p className="text-lg leading-relaxed text-[#A8B2CA] text-pretty">{t("Precios fijos por caja en USD, con las medidas y límites de peso indicados. En recepción elige «Precio fijo por caja» para aplicar estas tarifas. Volumen y peso son modalidades distintas; servicios adicionales se cotizan aparte.")}</p>
           </div>
           <div className="grid gap-3 xl:grid-cols-5 xl:gap-5">
             {categories.map((category) => {
               const highlight = category.id === featured;
               return (
                 <article key={category.id} className={`relative flex items-center gap-4 rounded-xl border p-5 transition hover:-translate-y-0.5 xl:min-h-105 xl:flex-col xl:items-stretch xl:justify-between xl:p-7 ${highlight ? "border-brand-500 bg-cream-100 shadow-[0_0_0_3px_rgba(232,98,28,.35)]" : "border-navy-700 bg-navy-800"}`}>
-                  {highlight && <span className="absolute -top-3 left-5 rounded-full bg-brand-700 px-3 py-1.5 text-[.6875rem] font-bold uppercase tracking-[.14em] text-white xl:left-6">Categoría destacada</span>}
+                  {highlight && <span className="absolute -top-3 left-5 rounded-full bg-brand-700 px-3 py-1.5 text-[.6875rem] font-bold uppercase tracking-[.14em] text-white xl:left-6">{t("Categoría destacada")}</span>}
                   <div className="flex w-14 shrink-0 sm:w-20 justify-center xl:hidden"><BoxIso category={category} scale={0.6} /></div>
                   <div className="hidden h-42 items-end justify-center xl:flex"><BoxIso category={category} scale={1} /></div>
 
                   {/* Móvil: medidas y límite en líneas propias, así ninguna parte con el separador colgando */}
                   <div className="flex min-w-0 flex-1 flex-col gap-1 xl:hidden">
                     <p className={`text-base font-semibold ${highlight ? "text-navy-900" : "text-white"}`}>{category.name}</p>
-                    <p className={`text-sm ${highlight ? "text-ink-700" : "text-[#A8B2CA]"}`}>{category.dimensions.length} × {category.dimensions.width} × {category.dimensions.height} in · hasta {category.maxWeightLb} lb</p>
+                    <p className={`text-sm ${highlight ? "text-ink-700" : "text-[#A8B2CA]"}`}>{category.dimensions.length} × {category.dimensions.width} × {category.dimensions.height} in · {t("hasta {weight} lb", { weight: category.maxWeightLb })}</p>
                   </div>
                   <p className={`shrink-0 font-display text-[1.5rem] sm:text-[1.875rem] font-extrabold leading-none tracking-[-.03em] xl:hidden ${highlight ? "text-navy-900" : "text-white"}`}>{usd(category.priceUsd)}</p>
 
@@ -161,7 +170,7 @@ export default async function LandingPage() {
                     </p>
                     <div className={`flex flex-col gap-1.5 border-t pt-3.5 ${highlight ? "border-line-300" : "border-navy-700"}`}>
                       <span className={`text-sm ${highlight ? "text-ink-700" : "text-[#A8B2CA]"}`}>{category.dimensions.length} × {category.dimensions.width} × {category.dimensions.height} in</span>
-                      <span className={`text-sm font-medium ${highlight ? "text-brand-700" : "text-brand-300"}`}>Hasta {category.maxWeightLb} lb</span>
+                      <span className={`text-sm font-medium ${highlight ? "text-brand-700" : "text-brand-300"}`}>{t("Hasta {weight} lb", { weight: category.maxWeightLb })}</span>
                     </div>
                   </div>
                 </article>
@@ -175,9 +184,9 @@ export default async function LandingPage() {
       <section id="cotizar" className="bg-white px-5 py-24 sm:px-8 lg:px-18 lg:py-28">
         <div className="mx-auto grid max-w-[90rem] items-start gap-14 lg:grid-cols-[27.5rem_minmax(0,1fr)] lg:gap-20">
           <div className="flex flex-col gap-5">
-            <p className="text-over font-semibold uppercase text-brand-700">Cotizador en vivo</p>
-            <h2 className="font-display text-[2.75rem] font-extrabold leading-[.96] tracking-[-.04em] text-navy-900 sm:text-[3.75rem]">Mide, pesa y<br />ve tu precio.</h2>
-            <p className="text-lg leading-relaxed text-ink-700 text-pretty">Por volumen, ingresa las medidas exteriores en pulgadas. Por peso, ingresa las libras reales. También puedes consultar precios fijos o solicitar una cotización para cargas especiales.</p>
+            <p className="text-over font-semibold uppercase text-brand-700">{t("Cotizador en vivo")}</p>
+            <h2 className="font-display text-[2.75rem] font-extrabold leading-[.96] tracking-[-.04em] text-navy-900 sm:text-[3.75rem]">{t("Mide, pesa y")}<br />{t("ve tu precio.")}</h2>
+            <p className="text-lg leading-relaxed text-ink-700 text-pretty">{t("Por volumen, ingresa las medidas exteriores en pulgadas. Por peso, ingresa las libras reales. También puedes consultar precios fijos o solicitar una cotización para cargas especiales.")}</p>
           </div>
           <QuoteCalculator rates={categories} weightPricing={{pricePerLbUsd:flow.pricePerLbUsd,dimensionalBase:flow.dimensionalBase,dimensionalFactor:flow.dimensionalFactor}} />
         </div>
@@ -187,14 +196,14 @@ export default async function LandingPage() {
       <section id="proceso" className="bg-cream-100 px-5 py-24 sm:px-8 lg:px-18 lg:py-28">
         <div className="mx-auto max-w-[90rem]">
           <div className="flex max-w-3xl flex-col gap-5 pb-6">
-            <p className="text-over font-semibold uppercase text-brand-700">Cómo funciona</p>
+            <p className="text-over font-semibold uppercase text-brand-700">{t("Cómo funciona")}</p>
             <h2 className="font-display text-[2.75rem] font-extrabold leading-[.96] tracking-[-.04em] text-navy-900 sm:text-[4.25rem]">
-              {locker ? <>De la tienda en USA<br />a tu destino en México.</> : <>De tu caja a<br />tu destino en México.</>}
+              {locker ? <>{t("De la tienda en USA")}<br />{t("a tu destino en México.")}</> : <>{t("De tu caja a")}<br />{t("a tu destino en México.")}</>}
             </h2>
           </div>
-          <p className="mb-8 max-w-2xl text-lg leading-8 text-ink-700">Explora qué hace el cliente, qué gestiona el equipo y cómo se valida cada etapa. La demostración no modifica datos reales.</p>
+          <p className="mb-8 max-w-2xl text-lg leading-8 text-ink-700">{t("Explora qué hace el cliente, qué gestiona el equipo y cómo se valida cada etapa. La demostración no modifica datos reales.")}</p>
           <FlowExplorer initialFlow={flow} />
-          <Link href="/como-funciona" className="mt-6 inline-flex min-h-12 items-center font-semibold text-brand-700">Abrir la guía completa del sistema →</Link>
+          <Link href="/como-funciona" className="mt-6 inline-flex min-h-12 items-center font-semibold text-brand-700">{t("Abrir la guía completa del sistema →")}</Link>
         </div>
       </section>
 
@@ -202,9 +211,9 @@ export default async function LandingPage() {
       <section className="bg-white px-5 py-24 sm:px-8 lg:px-18 lg:py-28">
         <div className="mx-auto grid max-w-[90rem] gap-14 lg:grid-cols-[1fr_1.15fr] lg:items-center">
           <div className="flex flex-col gap-5">
-            <p className="text-over font-semibold uppercase text-brand-700">Cómo enviar tu caja</p>
-            <h2 className="font-display text-[2.5rem] font-extrabold leading-[.98] tracking-[-.04em] text-navy-900 sm:text-d3">La forma importa tanto como el contenido.</h2>
-            <p className="max-w-lg text-lg leading-relaxed text-ink-700 text-pretty">Una caja que conserva su forma cuadrada se estiba mejor, viaja protegida y no retrasa el envío completo.</p>
+            <p className="text-over font-semibold uppercase text-brand-700">{t("Cómo enviar tu caja")}</p>
+            <h2 className="font-display text-[2.5rem] font-extrabold leading-[.98] tracking-[-.04em] text-navy-900 sm:text-d3">{t("La forma importa tanto como el contenido.")}</h2>
+            <p className="max-w-lg text-lg leading-relaxed text-ink-700 text-pretty">{t("Una caja que conserva su forma cuadrada se estiba mejor, viaja protegida y no retrasa el envío completo.")}</p>
           </div>
           <PackingGuide />
         </div>
@@ -214,23 +223,23 @@ export default async function LandingPage() {
       <section id="cobertura" className="bg-cream-100 px-5 py-24 sm:px-8 lg:px-18 lg:py-28">
         <div className="mx-auto grid max-w-[90rem] gap-14 lg:grid-cols-[1fr_1.2fr] lg:items-center">
           <div className="flex flex-col gap-5">
-            <p className="text-over font-semibold uppercase text-brand-700">Cobertura</p>
-            <h2 className="font-display text-[2.5rem] font-extrabold leading-[.98] tracking-[-.04em] text-navy-900 sm:text-d3">Miami, frontera y el centro de México.</h2>
-            <p className="max-w-lg text-lg leading-relaxed text-ink-700 text-pretty">Consulta los destinos disponibles y confirma con el equipo la zona, modalidad de entrega y fecha estimada antes de coordinar tu envío.</p>
+            <p className="text-over font-semibold uppercase text-brand-700">{t("Cobertura")}</p>
+            <h2 className="font-display text-[2.5rem] font-extrabold leading-[.98] tracking-[-.04em] text-navy-900 sm:text-d3">{t("Miami, frontera y el centro de México.")}</h2>
+            <p className="max-w-lg text-lg leading-relaxed text-ink-700 text-pretty">{t("Consulta los destinos disponibles y confirma con el equipo la zona, modalidad de entrega y fecha estimada antes de coordinar tu envío.")}</p>
             <ul className="mt-2 grid gap-2">
               {flow.destinationCities.map((city) => (
                 <li key={city} className="flex items-center justify-between gap-4 rounded-md bg-white px-5 py-3.5">
                   <span className="text-sm font-medium text-navy-900">{city}</span>
-                  <span className="text-sm text-ink-500">Consultar entrega</span>
+                  <span className="text-sm text-ink-500">{t("Consultar entrega")}</span>
                 </li>
               ))}
               <li className="flex flex-col gap-1 rounded-md border border-line-300 px-5 py-3.5">
-                <span className="text-xs font-semibold uppercase tracking-wider text-label-600">Antes de enviar</span>
-                <span className="text-sm text-ink-700">Confirma la cobertura de tu domicilio y las condiciones de entrega.</span>
+                <span className="text-xs font-semibold uppercase tracking-wider text-label-600">{t("Antes de enviar")}</span>
+                <span className="text-sm text-ink-700">{t("Confirma la cobertura de tu domicilio y las condiciones de entrega.")}</span>
               </li>
             </ul>
           </div>
-          <div className="overflow-hidden rounded-xl bg-navy-900"><RouteMap /><p className="px-6 pb-5 text-sm text-[#A8B2CA]">Recorrido ilustrativo; la ruta y entrega se confirman para cada envío.</p></div>
+          <div className="overflow-hidden rounded-xl bg-navy-900"><RouteMap /><p className="px-6 pb-5 text-sm text-[#A8B2CA]">{t("Recorrido ilustrativo; la ruta y entrega se confirman para cada envío.")}</p></div>
         </div>
       </section>
 
@@ -239,9 +248,9 @@ export default async function LandingPage() {
       <section id="faq" className="bg-white px-5 py-24 sm:px-8 lg:px-18 lg:py-28">
         <div className="mx-auto grid max-w-[90rem] gap-14 lg:grid-cols-[1fr_1.4fr] lg:items-start">
           <div className="flex flex-col gap-5">
-            <p className="text-over font-semibold uppercase text-brand-700">Preguntas frecuentes</p>
-            <h2 className="font-display text-[2.5rem] font-extrabold leading-[.98] tracking-[-.04em] text-navy-900 sm:text-d3">Antes de enviar, todo claro.</h2>
-            <p className="max-w-md text-lg leading-relaxed text-ink-700 text-pretty">Si tu duda no está aquí, escríbenos desde el centro de soporte dentro de tu cuenta.</p>
+            <p className="text-over font-semibold uppercase text-brand-700">{t("Preguntas frecuentes")}</p>
+            <h2 className="font-display text-[2.5rem] font-extrabold leading-[.98] tracking-[-.04em] text-navy-900 sm:text-d3">{t("Antes de enviar, todo claro.")}</h2>
+            <p className="max-w-md text-lg leading-relaxed text-ink-700 text-pretty">{t("Si tu duda no está aquí, escríbenos desde el centro de soporte dentro de tu cuenta.")}</p>
           </div>
           <FaqList />
         </div>
@@ -251,10 +260,10 @@ export default async function LandingPage() {
       <section className="bg-brand-600 px-5 py-24 sm:px-8 lg:px-18">
         <div className="mx-auto flex max-w-[90rem] flex-col items-start justify-between gap-10 lg:flex-row lg:items-center">
           <div className="flex flex-col gap-4">
-            <h2 className="font-display text-[2.5rem] font-extrabold leading-[.98] tracking-[-.04em] text-white sm:text-d3">{locker ? "Tu casillero en Miami, listo para empezar." : "Tu próxima entrega, organizada desde tu cuenta."}</h2>
-            <p className="max-w-xl text-lg leading-relaxed text-white/85 text-pretty">{locker ? "Crea tu cuenta y confirma tu correo para acceder a tu casillero y organizar tus compras." : "Crea tu cuenta, confirma tu correo y coordina la recepción de tus cajas con A&L."}</p>
+            <h2 className="font-display text-[2.5rem] font-extrabold leading-[.98] tracking-[-.04em] text-white sm:text-d3">{locker ? t("Tu casillero en Miami, listo para empezar.") : t("Tu próxima entrega, organizada desde tu cuenta.")}</h2>
+            <p className="max-w-xl text-lg leading-relaxed text-white/85 text-pretty">{locker ? t("Crea tu cuenta y confirma tu correo para acceder a tu casillero y organizar tus compras.") : t("Crea tu cuenta, confirma tu correo y coordina la recepción de tus cajas con A&L.")}</p>
           </div>
-          <Link href="/registro" className="inline-flex min-h-14 shrink-0 items-center gap-2.5 rounded-lg bg-white px-8 text-base font-semibold text-navy-900 transition hover:-translate-y-0.5">Crear mi cuenta <span aria-hidden="true">→</span></Link>
+          <Link href="/registro" className="inline-flex min-h-14 shrink-0 items-center gap-2.5 rounded-lg bg-white px-8 text-base font-semibold text-navy-900 transition hover:-translate-y-0.5">{t("Crear mi cuenta")} <span aria-hidden="true">→</span></Link>
         </div>
       </section>
     </main>

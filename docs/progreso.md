@@ -5,7 +5,23 @@ _Última actualización: 2026-11-20_
 ## Dónde quedó el trabajo
 
 - **Producción vaciada de operaciones el 2026-11-20**, a pedido del dueño. Se conservaron clientes, destinatarios, direcciones, personal y configuración, y los folios continúan (detalle en docs/decisiones.md). Verificado después: no queda nada operativo, el sitio responde, un folio borrado muestra «No encontramos ese folio» y no hay errores nuevos en PM2. Si hubiera que deshacerlo: restaurar `~/Respaldos/ayl-produccion/ayl_real-20261120T213939Z.sql.gz`.
-- **Siguiente tema: sitio en español e inglés** (público, panel del cliente y admin). Idioma según el navegador y con un selector para cambiarlo. Plan en preparación; todavía no hay código.
+- **Todo el sistema en español e inglés: fases 1 a 4 hechas en local (2026-11-20), sin commit ni despliegue.**
+  - Incluye:
+    - el sitio público y el acceso;
+    - el panel del cliente, el admin y el almacén, cada uno con su selector ES | EN;
+    - los mensajes del servidor, que se traducen en `runMutation`;
+    - los correos, push y avisos en el idioma del destinatario;
+    - la factura y el recibo en el idioma del cliente;
+    - la etiqueta y el manifiesto bilingües, y el BOL en inglés.
+  - El admin elige el idioma del cliente en su ficha y en el alta en mostrador.
+  - Unos 4.000 textos. Reglas, glosario, fases y preguntas abiertas en docs/idiomas.md; decisión en docs/decisiones.md.
+  - **Corrige además un error de producción:** el panel del cliente daba error 500 a cualquier cliente que entrara. `src/app/(cliente)/layout.tsx` pedía la lista completa de usuarios, que solo pueden leer los admins. El error existía desde el 2026-09-25 (commit `cd21d5d`). Ahora el layout carga solo al usuario de la sesión.
+  - Verificado con Node 22:
+    - 395 tests unitarios y 89 de integración, lint, `tsc` y build en verde;
+    - recorrido en el navegador con la copia local: 17 pantallas del cliente y 22 del admin en inglés, sin errores de consola, sin texto de interfaz en español y sin desborde en móvil (390 px);
+    - el modo español sigue igual.
+  - En la copia local quedaron, solo por la prueba, la cuenta AL-MX-0019 verificada y la preferencia `en` en ella y en `admin-1`.
+  - **Siguiente paso:** commit y despliegue (respaldo y después `./deploy.sh`); que el dueño revise el inglés en el uso diario y responda las preguntas 4–7 de idiomas.md.
 - **Bill of lading editable: desplegado en producción el 2026-11-20** (commit `4959f02`). Lo pidió el cliente: crear el BOL, mostrar cantidades en vez del detalle de cada caja y llenar las instrucciones especiales.
   - Va en Admin › Camiones › Bill of Lading, con el formato VICS de su muestra (`~/Downloads/bill of landing2.pdf`). Se crea desde un camión o con «Nuevo en blanco».
   - El PDF por pieza del camión se conserva como «Manifiesto PDF».
@@ -41,7 +57,8 @@ _Última actualización: 2026-11-20_
   - Pendientes menores: en un BOL de varias páginas, la primera fila de la página siguiente no lleva línea superior; y la heurística del VIN puede agrupar piezas que no son vehículos (todo es editable).
 - [ ] **Recepción: el botón «Guardar recepción» se apaga sin decir por qué** (consulta del cliente, 2026-11-13). El destinatario en México es obligatorio para guardar (`reception-form.tsx:208`), pero el alta rápida del cliente lo marca «(opcional)» (`customer-quick-create.tsx:74`) y el único aviso es un texto gris en el paso 01. Propuesta: mostrar junto al botón lo que falta, con enlace, y quitar el «(opcional)».
 - [ ] **Rastreo público** (`/rastrear/[codigo]`), visto en la misma consulta:
-  - con una caja sin envío (hoy, todas), el título dice «En bodega en bodega Miami.»;
+  - ~~con una caja sin envío, el título decía «En bodega en bodega Miami.»~~ Corregido en la fase 1 de idiomas: sin ciudad de destino solo muestra el estado;
+  - la dirección de bodega del casillero sigue siendo el marcador «Dirección de bodega en Miami por confirmar» (`src/lib/config/company.ts`), que ven los clientes en su panel. A&L recibe en El Paso y Chicago;
   - el mapa es fijo, con la ruta Miami → Nuevo Laredo → centro de México, que no es la de A&L;
   - la entrega estimada sale vacía («— de mes»);
   - no es GPS y las notas no se publican. Una pieza que se recoge en otra ciudad (p. ej. una moto en Oklahoma registrada en El Paso) aparece «En bodega» desde que se registra. Valorar con el cliente una etapa «Pendiente de recolección» o una nota pública.

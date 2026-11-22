@@ -52,6 +52,7 @@ import { accountById, createAccount, consumeToken, issueToken, findAccount, sql,
 import { authenticate, getSession } from "@/lib/auth/actions";
 import { createSessionToken, verifySessionToken, deleteSession } from "@/lib/auth/session";
 import { registerAccount, requestPasswordReset, resetPassword, verifyEmail } from "@/lib/auth/user-actions";
+import { setLocale } from "@/lib/i18n/actions";
 import { upsertClientAddress, deleteClientAddress, updateClientProfile, changeClientPassword } from "@/lib/auth/client-actions";
 import { toggleCustomerStatus, createCustomerAtReception, receiveBox, createTruck as createNewTruck, assignBoxToTruck, transitionTruckState, saveFlowConfig } from "@/lib/auth/admin-actions";
 import { DEFAULT_FLOW_CONFIG } from "@/lib/config/flow";
@@ -561,6 +562,27 @@ describe.sequential("Real MySQL authentication and operations", () => {
     const [after]=await root.query<mysql.RowDataPacket[]>("SELECT COUNT(*) AS count FROM email_outbox WHERE status='queued'");
     expect(after[0].count).toBe(before[0].count);
     expect(process.env.EMAIL_DELIVERY).toBe("preview");
+  });
+  it("remembers the chosen language on the device, in the profile and at the next login", async () => {
+    cookieJar.clear();
+    cookieJar.set("ayl_lang",{value:"en"});
+    const email="english@example.invalid";
+    expect((await registerAccount({...customer,email,password,confirmPassword:password,acceptedTerms:true})).ok).toBe(true);
+    const account=await findAccount(email);if(!account)throw new Error("account");
+    const saved=()=>withStore(async()=>users.find(item=>item.id===account.user_id)?.preferredLocale);
+    expect(await saved()).toBe("en");
+    const token=await withStore(()=>issueToken(account.user_id,"verify"),true);
+    expect((await verifyEmail(token)).ok).toBe(true);
+    // A new device without the cookie gets the saved preference at login.
+    cookieJar.clear();
+    expect((await authenticate(email,password)).ok).toBe(true);
+    expect(cookieJar.get("ayl_lang")?.value).toBe("en");
+    expect((await setLocale("es")).ok).toBe(true);
+    expect(cookieJar.get("ayl_lang")).toMatchObject({value:"es",options:{maxAge:31536000,path:"/"}});
+    expect(await saved()).toBe("es");
+    expect((await setLocale("fr")).ok).toBe(false);
+    expect(cookieJar.get("ayl_lang")?.value).toBe("es");
+    cookieJar.clear();
   });
   it("completes registration to delivery without photos or payment attachments", async () => {
     cookieJar.clear();
@@ -1673,6 +1695,26 @@ describe.sequential("Optional customer contact and full-admin test cleanup",()=>
  });
  let customerId="",boxId="",originalCode="";
  const minimal={firstName:"Sin correo",paternalLastName:"Prueba",phone:"5512345678"};
+ it("writes to the customer in the language the admin chose and answers the admin in theirs",async()=>{
+  cookieJar.set("ayl_session",{value:adminSession});
+  cookieJar.set("ayl_lang",{value:"en"});
+  const email="english-customer@example.invalid";
+  const created=await createCustomerAsAdmin({...minimal,email,preferredLocale:"en"});
+  expect(created.ok).toBe(true);if(!created.ok)throw new Error(created.error);
+  const saved=()=>withStore(async()=>users.find(u=>u.id===created.user.id)?.preferredLocale);
+  expect(await saved()).toBe("en");
+  const [rows]=await root.query<mysql.RowDataPacket[]>("SELECT payload FROM email_outbox WHERE status='queued' ORDER BY created_at DESC LIMIT 10");
+  const invite=rows.map(row=>decryptEmail(typeof row.payload==="string"?JSON.parse(row.payload):row.payload)).find(message=>message.to===email);
+  expect(invite?.locale).toBe("en");
+  // The admin works in English: runMutation returns the server message in the request language.
+  expect(await createCustomerAsAdmin({...minimal,email})).toEqual({ok:false,error:"An account with that email already exists."});
+  cookieJar.set("ayl_lang",{value:"es"});
+  expect(await createCustomerAsAdmin({...minimal,email})).toEqual({ok:false,error:"Ya existe una cuenta con ese correo."});
+  // The customer record can change it later.
+  expect((await updateCustomerProfile(created.user.id,{...minimal,email,preferredLocale:"es"})).ok).toBe(true);
+  expect(await saved()).toBe("es");
+  cookieJar.delete("ayl_lang");
+ });
  it("creates multiple customers without email or address and skips email/token generation",async()=>{
   cookieJar.set("ayl_session",{value:adminSession});
   for(let n=0;n<2;n++){

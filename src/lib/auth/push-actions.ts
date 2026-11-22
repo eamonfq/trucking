@@ -6,13 +6,20 @@ import {SESSION_COOKIE} from './session';
 import {tokenHash} from './crypto';
 import {pushConfig,subscriptionSchema} from '@/lib/services/push';
 import type {RowDataPacket} from 'mysql2/promise';
+import {getLocale} from '@/lib/i18n/server';
+import {localizeResult} from '@/lib/i18n/localize-result';
+import {serverMessages} from '@/lib/i18n/messages';
 export async function pushSettings(endpoint?:string){
  const session=await getSession();if(session?.role!=='cliente')return {publicKey:null,active:false};
  const config=pushConfig();if(!config)return {publicKey:null,active:false};
  const [rows]=await sql().execute<RowDataPacket[]>('SELECT id FROM push_subscriptions WHERE id=? AND user_id=? AND session_hash=?',[tokenHash(endpoint??''),session.userId,tokenHash((await cookies()).get(SESSION_COOKIE)!.value)]);
  return {publicKey:config.publicKey,active:rows.length>0};
 }
+// Not a runMutation: its messages are translated here, in the language of the request.
 export async function subscribePush(input:unknown){
+ return localizeResult(await subscribe(input),serverMessages,await getLocale());
+}
+async function subscribe(input:unknown){
  const session=await getSession();if(session?.role!=='cliente'||!pushConfig())return {ok:false,error:'Inicia sesión como cliente y comprueba que los avisos estén habilitados.'};
  if(!await requestLimit('push-subscribe',session.userId,20))return {ok:false,error:'Espera unos minutos antes de reintentar.'};
  const parsed=subscriptionSchema.safeParse(input);if(!parsed.success)return {ok:false,error:'El navegador no envió una suscripción compatible.'};

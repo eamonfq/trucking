@@ -8,6 +8,11 @@ import localFont from "next/font/local";
 import { ToastProvider } from "@/components/ui/toast";
 import "./globals.css";
 import { seoConfig, homeDescription } from "@/lib/seo";
+import { I18nProvider } from "@/lib/i18n/provider";
+import { getLocale } from "@/lib/i18n/server";
+import { LANGUAGE_TAG } from "@/lib/i18n/config";
+import { common } from "@/lib/i18n/catalogs/common";
+import { translator } from "@/lib/i18n/translate";
 
 const inter = localFont({
   src: [
@@ -24,25 +29,28 @@ const bricolage = localFont({
   weight: "200 800",
 });
 
-export const metadata: Metadata = {
-  appleWebApp:{capable:true,title:'A&L',statusBarStyle:'default'},
-  icons:{apple:'/pwa/apple-touch-icon.png'},
-  metadataBase: new URL(seoConfig.origin),
-  title: { default: "A&L Trucking Logistics", template: "%s | A&L Trucking Logistics" },
-  description: homeDescription,
-  applicationName: "A&L Trucking Logistics",
-  keywords: ["envíos USA México", "carga terrestre", "cajas a México", "A&L Trucking Logistics"],
-  robots: { index: seoConfig.indexable, follow: seoConfig.indexable },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = translator(common, await getLocale());
+  return {
+    appleWebApp:{capable:true,title:'A&L',statusBarStyle:'default'},
+    icons:{apple:'/pwa/apple-touch-icon.png'},
+    metadataBase: new URL(seoConfig.origin),
+    title: { default: "A&L Trucking Logistics", template: "%s | A&L Trucking Logistics" },
+    description: t(homeDescription),
+    applicationName: "A&L Trucking Logistics",
+    keywords: [t("envíos USA México"), t("carga terrestre"), t("cajas a México"), "A&L Trucking Logistics"],
+    robots: { index: seoConfig.indexable, follow: seoConfig.indexable },
+  };
+}
 
 export const viewport:Viewport={themeColor:'#101b30'};
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   await connection();
-  const [categories,flow]=await Promise.all([configService.getCatalog(),configService.getFlowConfig()]);
+  const [categories,flow,locale]=await Promise.all([configService.getCatalog(),configService.getFlowConfig(),getLocale()]);
   const operator=(await getSession())?.role==="operador";
   return (
-    <html lang="es-MX" data-scroll-behavior="smooth">
-      <body className={`${inter.variable} ${bricolage.variable} font-sans antialiased`}><PwaProvider><ToastProvider><CatalogProvider categories={operator ? [] : categories} destinations={flow.destinationCities}>{children}</CatalogProvider></ToastProvider></PwaProvider></body>
+    <html lang={LANGUAGE_TAG[locale]} data-scroll-behavior="smooth">
+      <body className={`${inter.variable} ${bricolage.variable} font-sans antialiased`}><I18nProvider locale={locale}><PwaProvider><ToastProvider><CatalogProvider categories={operator ? [] : categories} destinations={flow.destinationCities}>{children}</CatalogProvider></ToastProvider></PwaProvider></I18nProvider></body>
     </html>
   );
 }

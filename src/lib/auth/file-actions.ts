@@ -22,6 +22,11 @@ import {quoteGroupWeight,allocateUnits} from '@/lib/utils/group-weight';
 import {configService} from '@/lib/services/config';
 import {prepareReceptionConcepts} from '@/lib/utils/reception-concepts';
 import {boxWeightLabel,receptionConceptSummaries} from '@/lib/utils/reception-display';
+import {emails} from '@/lib/i18n/catalogs/emails';
+import {notificationMessages} from '@/lib/i18n/catalogs/notifications';
+import {translator} from '@/lib/i18n/translate';
+import {userLocale} from '@/lib/i18n/user-locale';
+import {messageStatus} from '@/lib/services/reception-email-layout';
 
 const receptionRequests=collection<{id:string;actorId:string;fingerprint:string;boxIds:string[];invoiceIds:string[]}>('receptionRequests');
 function savedReception(request:typeof receptionRequests[number]){
@@ -106,13 +111,14 @@ export async function completeReceptionPayment(requestId:string,input:unknown){
 function receptionEmail(result:{results:Array<{box:Box;invoice?:Invoice}>;total:number}):EmailInput|undefined{
     const first=result.results[0].box,customer=users.find(u=>u.id===first.userId);
     if(!customer)return;
+    const locale=userLocale(customer),t=translator(emails,locale);
     const code=first.receptionGroup?.code??first.code;
     const firstPhoto=result.results.find(r=>r.box.photoFileId)?.box;
     const receptionPhoto=firstPhoto?.photoFileId?{fileId:firstPhoto.photoFileId,ownerId:firstPhoto.userId}:undefined;
     const rejected=result.results.filter(r=>r.box.status==="rechazada").length;
-    const invoiceList=result.results.flatMap(r=>r.invoice?[`${r.invoice.number} (${r.invoice.status})`]:[]);
-    const reception={reference:code,totalWeightLb:!first.receptionConcept?first.billing?.groupWeight?.totalWeightLb:undefined,concepts:first.receptionConcept?receptionConceptSummaries(result.results.map(r=>r.box)):undefined,totalUsd:invoiceList.length?result.total:undefined,pieces:result.results.map(r=>({code:r.box.code,weightLb:r.box.weightLb,weightLabel:boxWeightLabel(r.box),description:r.box.contentsNote,dimensions:Object.values(r.box.dimensions).every(n=>n>0)?`${r.box.dimensions.length} × ${r.box.dimensions.width} × ${r.box.dimensions.height}`:"No registradas",rejected:r.box.status==="rechazada"})),invoices:result.results.flatMap(r=>r.invoice?[{number:r.invoice.number,status:r.invoice.status}]:[])};
-    return {receptionPhoto,reception,to:customer.email,subject:`Recepción ${code} · ${result.results.length} unidad(es)`,heading:rejected?"Recepción registrada con observaciones":"Tu paquete ya está en bodega",body:`Recepción ${code}: ${result.results.length} unidad(es). ${result.results.map(r=>`${r.box.code}: ${r.box.weightLb} lb${r.box.billing?.groupWeight?" prorrateadas":""}, ${r.box.dimensions.length} × ${r.box.dimensions.width} × ${r.box.dimensions.height} in`).join("; ")}. ${rejected?`${rejected} unidad(es) rechazada(s); consulta los motivos en tu panel.`:""} ${invoiceList.length?`Total facturado: USD ${result.total.toFixed(2)}. Facturas: ${invoiceList.join(", ")}.`:"El cobro se determinará según la configuración de facturación."}`,actionLabel:"Ver mis paquetes",actionUrl:`${siteUrl()}/cliente/cajas`};
+    const invoiceList=result.results.flatMap(r=>r.invoice?[`${r.invoice.number} (${messageStatus(r.invoice.status,locale)})`]:[]);
+    const reception={reference:code,totalWeightLb:!first.receptionConcept?first.billing?.groupWeight?.totalWeightLb:undefined,concepts:first.receptionConcept?receptionConceptSummaries(result.results.map(r=>r.box),locale):undefined,totalUsd:invoiceList.length?result.total:undefined,pieces:result.results.map(r=>({code:r.box.code,weightLb:r.box.weightLb,weightLabel:boxWeightLabel(r.box,locale),description:r.box.contentsNote,dimensions:Object.values(r.box.dimensions).every(n=>n>0)?`${r.box.dimensions.length} × ${r.box.dimensions.width} × ${r.box.dimensions.height}`:t("No registradas"),rejected:r.box.status==="rechazada"})),invoices:result.results.flatMap(r=>r.invoice?[{number:r.invoice.number,status:r.invoice.status}]:[])};
+    return {receptionPhoto,reception,locale,to:customer.email,subject:t("Recepción {code} · {count} unidad(es)",{code,count:result.results.length}),heading:rejected?t("Recepción registrada con observaciones"):t("Tu paquete ya está en bodega"),body:`${t("Recepción {code}: {count} unidad(es).",{code,count:result.results.length})} ${result.results.map(r=>{const piece={code:r.box.code,weight:r.box.weightLb,dimensions:`${r.box.dimensions.length} × ${r.box.dimensions.width} × ${r.box.dimensions.height}`};return r.box.billing?.groupWeight?t("{code}: {weight} lb prorrateadas, {dimensions} in",piece):t("{code}: {weight} lb, {dimensions} in",piece);}).join("; ")}. ${rejected?t("{count} unidad(es) rechazada(s); consulta los motivos en tu panel.",{count:rejected}):""} ${invoiceList.length?t("Total facturado: USD {total}. Facturas: {invoices}.",{total:result.total.toFixed(2),invoices:invoiceList.join(", ")}):t("El cobro se determinará según la configuración de facturación.")}`,actionLabel:t("Ver mis paquetes"),actionUrl:`${siteUrl()}/cliente/cajas`};
 }
 
 export async function receiveBoxWithPhoto(input: unknown, data: FormData, paymentInput?: unknown) {
@@ -185,9 +191,10 @@ async function recordMixedPayments(list:Invoice[],payment:z.output<typeof recept
   const paid=transitionInvoice(invoice,'pagada',{actor:actor.id,at,note:'La suma de pagos combinados cubre el total exacto.'});
   if(!paid.ok)return paid;
   Object.assign(invoice,paid.value);invoice.collectionMethod='mixto';
-  notifications.unshift({id:crypto.randomUUID(),userId:invoice.userId,title:'Pago confirmado',body:`${invoice.number}: pagos combinados confirmados por USD ${invoiceTotal(invoice).toFixed(2)}.`,createdAt:at,read:false});
   const customer=users.find(u=>u.id===invoice.userId);
-  if(customer)await sendEmail({to:customer.email,subject:`Pago confirmado · ${invoice.number}`,heading:'Tus pagos fueron registrados',body:`${invoice.number}: el total de USD ${invoiceTotal(invoice).toFixed(2)} está liquidado mediante pagos combinados. Consulta los folios y métodos en tu factura.`,actionLabel:'Ver factura',actionUrl:`${siteUrl()}/cliente/facturas/${invoice.id}`});
+  const locale=userLocale(customer),t=translator(notificationMessages,locale),settled={number:invoice.number,total:invoiceTotal(invoice).toFixed(2)};
+  notifications.unshift({id:crypto.randomUUID(),userId:invoice.userId,title:t('Pago confirmado'),body:t('{number}: pagos combinados confirmados por USD {total}.',settled),createdAt:at,read:false});
+  if(customer)await sendEmail({to:customer.email,subject:t('Pago confirmado · {number}',settled),heading:t('Tus pagos fueron registrados'),body:t('{number}: el total de USD {total} está liquidado mediante pagos combinados. Consulta los folios y métodos en tu factura.',settled),actionLabel:t('Ver factura'),actionUrl:`${siteUrl()}/cliente/facturas/${invoice.id}`,locale});
  }
  return {ok:true as const};
 }
@@ -213,9 +220,10 @@ async function recordWarehousePayment(invoiceId: string, payment: z.output<typeo
     invoice.paymentReport = {method:payment.method, amountUsd:invoiceTotal(invoice), reference, receiptFileId:id, receiptName:file?.name, reportedAt:at};
     return approvePayment(invoice.id, `Cobro total en ${payment.method} confirmado por ${actor.id} con comprobante.`, at);
   }
-  notifications.unshift({id:crypto.randomUUID(), userId:invoice.userId, title:"Pago pendiente en destino", body:`${invoice.number}: el total de ${invoiceTotal(invoice)} USD se pagará en destino.`, createdAt:at, read:false});
   const user = users.find(item => item.id === invoice.userId);
-  if (user) await sendEmail({to:user.email, subject:"Pago pendiente en destino", heading:"Tu pago se realizará en destino", body:`La factura ${invoice.number}, por ${invoiceTotal(invoice)} USD, sigue pendiente de cobro. La referencia registrada documenta el acuerdo y no acredita un pago.`,actionLabel:"Ver factura",actionUrl:`${siteUrl()}/cliente/facturas/${invoice.id}`});
+  const locale = userLocale(user), t = translator(notificationMessages, locale), due = {number:invoice.number, total:invoiceTotal(invoice)};
+  notifications.unshift({id:crypto.randomUUID(), userId:invoice.userId, title:t("Pago pendiente en destino"), body:t("{number}: el total de {total} USD se pagará en destino.", due), createdAt:at, read:false});
+  if (user) await sendEmail({to:user.email, subject:t("Pago pendiente en destino"), heading:t("Tu pago se realizará en destino"), body:t("La factura {number}, por {total} USD, sigue pendiente de cobro. La referencia registrada documenta el acuerdo y no acredita un pago.", due),actionLabel:t("Ver factura"),actionUrl:`${siteUrl()}/cliente/facturas/${invoice.id}`,locale});
   return {ok:true as const, invoice};
 }
 

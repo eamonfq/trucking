@@ -7,6 +7,9 @@ import {canCollectInvoice,type AdminPrincipal} from '@/lib/auth/admin-permission
 import {invoiceTotal} from '@/lib/utils/invoices';
 import {appendPayment,paymentLocation} from '@/lib/services/payment-records';
 import {sendEmail,siteUrl} from '@/lib/services/email';
+import {notificationMessages} from '@/lib/i18n/catalogs/notifications';
+import {translator} from '@/lib/i18n/translate';
+import {userLocale} from '@/lib/i18n/user-locale';
 import {cloverConfig,cloverRequest,isCapturedCharge,type CloverCharge} from './clover-provider';
 import type {Invoice} from '@/lib/types';
 
@@ -73,10 +76,11 @@ async function finish(id:string,data:CloverCharge|undefined,declined:boolean){re
       invoice.paymentReport={method:'clover',amountUsd:invoiceTotal(invoice),reference:data.id!,reportedAt:at};
     }
     attempt.status='paid';
-    const message=`Pago de USD ${(attempt.amount/100).toFixed(2)} confirmado con Clover para ${list.map(i=>i.number).join(', ')}. Referencia: ${data.id}.`;
-    notifications.unshift({id:crypto.randomUUID(),userId:attempt.customerId,title:'Pago confirmado con Clover',body:message,createdAt:at,read:false});
     const customer=users.find(u=>u.id===attempt.customerId);
-    if(customer)await sendEmail({to:customer.email,subject:'Pago confirmado con Clover',heading:'Tu pago fue confirmado',body:message,actionLabel:'Ver facturas',actionUrl:`${siteUrl()}/cliente/facturas`});
+    const locale=userLocale(customer),t=translator(notificationMessages,locale);
+    const message=t('Pago de USD {amount} confirmado con Clover para {invoices}. Referencia: {reference}.',{amount:(attempt.amount/100).toFixed(2),invoices:list.map(i=>i.number).join(', '),reference:String(data.id)});
+    notifications.unshift({id:crypto.randomUUID(),userId:attempt.customerId,title:t('Pago confirmado con Clover'),body:message,createdAt:at,read:false});
+    if(customer)await sendEmail({to:customer.email,subject:t('Pago confirmado con Clover'),heading:t('Tu pago fue confirmado'),body:message,actionLabel:t('Ver facturas'),actionUrl:`${siteUrl()}/cliente/facturas`,locale});
   }else if(declined){attempt.status='declined';for(const invoice of invoices.filter(i=>i.cloverPaymentId===id))delete invoice.cloverPaymentId;}
   else attempt.status='review';
   return publicAttempt(attempt);

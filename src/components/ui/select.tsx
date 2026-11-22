@@ -1,3 +1,6 @@
+"use client";
+import { fieldMessages } from "@/lib/i18n/catalogs/fields";
+import { useMessageTranslator } from "@/lib/i18n/provider";
 import { forwardRef, useId, type SelectHTMLAttributes } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
@@ -16,6 +19,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
   ref,
 ) {
   const generatedId = useId();
+  const tm = useMessageTranslator(fieldMessages);
   const selectId = id ?? props.name ?? generatedId;
   const errorId = `${selectId}-error`;
   return (
@@ -27,7 +31,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
       </select>
       <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-ink-500" />
       </span>
-      {error && <span id={errorId} className={cn("text-xs font-normal", tone === "dark" ? "text-[#FF9C93]" : "text-danger")}>{error}</span>}
+      {error && <span id={errorId} className={cn("text-xs font-normal", tone === "dark" ? "text-[#FF9C93]" : "text-danger")}>{tm(error)}</span>}
     </div>
   );
 });

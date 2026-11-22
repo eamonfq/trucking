@@ -1,0 +1,23 @@
+/** Marco del panel administrativo (`src/components/admin/admin-shell.tsx`): navegación y sesión. Clave: español; valor: inglés. */
+export const adminShell = {
+  "Eliminar pruebas": "Delete test data",
+  "Usuarios y permisos": "Users and permissions",
+  "Resumen": "Overview",
+  "Pendientes": "To-do",
+  "Recepción": "Receiving",
+  "Prealertas": "Pre-alerts",
+  "Almacenes y operadores": "Warehouses and operators",
+  "Recepción en destino": "Destination receiving",
+  "Bodega": "Warehouse",
+  "Camiones": "Trucks",
+  "Entregas": "Deliveries",
+  "Facturas": "Invoices",
+  "Clientes": "Customers",
+  "Soporte": "Support",
+  "Edición": "Editing",
+  "Correos": "Emails",
+  "Configuración": "Settings",
+  "Operaciones A&L": "A&L Operations",
+  "Cerrar sesión": "Log out",
+  "Menú": "Menu",
+} as const;

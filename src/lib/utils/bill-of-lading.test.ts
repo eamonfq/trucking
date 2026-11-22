@@ -30,7 +30,7 @@ describe("groupTruckCargo", () => {
       box("c2", 30),
     ]);
     expect(lines.map((line) => [line.packageQty, line.weightLb])).toEqual([[2, 30], [3, 3176]]);
-    expect(lines[0]!.description).toContain("1 pieza sin peso registrado");
+    expect(lines[0]!.description).toContain("1 piece without recorded weight");
   });
 
   it("does not treat words that merely start with VIN as a vehicle", () => {

@@ -8,6 +8,9 @@ import { TruckDetailManager } from "@/components/admin/truck-detail-manager";
 import { SectionTitle } from "@/components/cliente/section-title";
 import { logisticsService } from "@/lib/services/logistics";
 import { billOfLadingService } from "@/lib/services/bill-of-lading";
+import { trucksManager } from "@/lib/i18n/catalogs/trucks-manager";
+import { getLocale, getT } from "@/lib/i18n/server";
+import { localizeTruckRoute } from "@/lib/utils/reception-display";
 
 export default async function TruckDetailPage({ params }: { params: Promise<{ id: string }> }) { await requireAdminUser(["camiones"]);
   const { id } = await params;
@@ -21,5 +24,6 @@ export default async function TruckDetailPage({ params }: { params: Promise<{ id
   ]);
   if (!truck) notFound();
   const {warehouses}=await getOperationalLocations();
-  return <><Link href="/admin/camiones" className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-navy-500 hover:text-orange-600"><ArrowLeft className="size-4" />Volver a camiones</Link><SectionTitle eyebrow="Guía máster" title={truck.code} description={`${truck.route}. Consulta capacidad, cajas e historial antes de ejecutar la siguiente acción.`} /><div className="mt-7"><TruckRoute boxes={boxes} truck={truck} warehouses={warehouses}/><TruckDetailManager key={JSON.stringify(truck)} initialTruck={truck} initialAssigned={boxes.filter((box) => truck.boxIds.includes(box.id))} initialAvailable={boxes.filter((box) => box.status === "en-bodega" && !box.truckId)} users={users} drivers={drivers} shipments={shipments} billOfLading={bills.find((bill) => bill.truckId === truck.id)} /></div></>;
+  const t = await getT(trucksManager);
+  return <><Link href="/admin/camiones" className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-navy-500 hover:text-orange-600"><ArrowLeft className="size-4" />{t("Volver a camiones")}</Link><SectionTitle eyebrow={t("Guía máster")} title={truck.code} description={t("{route}. Consulta capacidad, cajas e historial antes de ejecutar la siguiente acción.", { route: localizeTruckRoute(truck.route, await getLocale()) })} /><div className="mt-7"><TruckRoute boxes={boxes} truck={truck} warehouses={warehouses}/><TruckDetailManager key={JSON.stringify(truck)} initialTruck={truck} initialAssigned={boxes.filter((box) => truck.boxIds.includes(box.id))} initialAvailable={boxes.filter((box) => box.status === "en-bodega" && !box.truckId)} users={users} drivers={drivers} shipments={shipments} billOfLading={bills.find((bill) => bill.truckId === truck.id)} /></div></>;
 }

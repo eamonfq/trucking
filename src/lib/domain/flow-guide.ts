@@ -1,5 +1,7 @@
 import type { FlowConfig } from "@/lib/config/flow";
 import type { BoxStatus, ShipmentStatus, TruckStatus, InvoiceStatus, SupportStatus } from "@/lib/types";
+import type { Locale } from "@/lib/i18n/config";
+import { getFlowGuideEn } from "./flow-guide.en";
 
 export type GuideTrack = "envio" | "pagos" | "soporte";
 export type GuideStep = {
@@ -11,7 +13,8 @@ export type GuideStep = {
 };
 
 // Public educational content only. No customer data or mutations belong here.
-export function getFlowGuide(flow: FlowConfig, track: GuideTrack): GuideStep[] {
+export function getFlowGuide(flow: FlowConfig, track: GuideTrack, locale: Locale = "es"): GuideStep[] {
+  if (locale === "en") return getFlowGuideEn(flow, track);
   const delivery = flow.deliveryMode === "sucursal" ? "en sucursal" : flow.deliveryMode === "domicilio" ? "a domicilio" : "en sucursal o a domicilio, según la opción elegida";
   const billing = flow.billingMoment === "al-recibir" ? "al registrar la recepción" : "al despachar el camión";
   if (track === "pagos") return [

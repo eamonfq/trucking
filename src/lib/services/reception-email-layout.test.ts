@@ -21,3 +21,15 @@ it('escapes user values and never marks pending money as paid',()=>{
  const output=renderEmail(input,'http://localhost:3100');expect(output.html).not.toContain('<script>');expect(output.html).toContain('&lt;script&gt;');expect(output.html).toContain('Pendiente de pago en destino');expect(output.html).not.toContain('Pago confirmado');
 });
 it('preserves ordinary email rendering without reception data',()=>{const input=fixture(1);delete input.reception;expect(renderEmail(input,'http://localhost:3100').html).toContain('Legacy body');});
+it('writes the whole email in English for an English-speaking customer and keeps old payloads in Spanish',()=>{
+ const input={...fixture(10),subject:'Receipt BX-QA · 10 unit(s)',heading:'Your package is at the warehouse',actionLabel:'View my packages',locale:'en' as const};
+ input.receptionPhoto={fileId:'private-id',ownerId:'private-owner'};input.reception!.totalWeightLb=500;input.reception!.pieces[0].dimensions='Not recorded';input.reception!.pieces[1].rejected=true;
+ const {html,text}=renderEmail(input,'http://localhost:3100');
+ expect(html).toContain('<html lang="en">');
+ for(const english of ['YOUR ACCOUNT','We recorded your receipt. Here is a summary of your units.','RECEIPT','10 units','Combined weight: 500 lb · pieces with prorated weight','Total invoiced','Payment confirmed','Unit details','aria-label="Units received"','UNIT</th>','WEIGHT / DIMENSIONS','Piece 2/10 · Rejected','50 lb (prorated)','And 2 more units. See the full details in your dashboard.','1 invoice available in your dashboard','Receiving photo','alt="First photo taken at receiving"','View my packages &rarr;',"If the button doesn't work",'For your security, never share your password or this link.','Your shipment, in good hands.'])expect(html).toContain(english);
+ expect(text).toContain('Receipt BX-QA\n10 units\nCombined weight: 500 lb.');expect(text).toContain('1/10 · BX-QA-01\n50 lb | Not recorded\n');expect(text).toContain('Invoices:\nAL-QA-001: Paid');expect(text).toContain('View my packages: http://localhost:3100/cliente/cajas');expect(text).toContain('This is an automated email.');
+ expect(`${html}\n${text}`).not.toMatch(/[áéíóúñ¿¡]|Recepción|unidades|Pago confirmado|Continuar|TU CUENTA|Not recorded in/);
+ const legacy=fixture(1);delete legacy.actionLabel;
+ const spanish=renderEmail(legacy,'http://localhost:3100');
+ expect(spanish.html).toContain('<html lang="es">');expect(spanish.html).toContain('TU CUENTA · A&amp;L');expect(spanish.html).toContain('Continuar &rarr;');expect(spanish.text).toContain('Facturas:\nAL-QA-001: pagada');expect(spanish.text).toContain('Tu envío, en buenas manos.');
+});

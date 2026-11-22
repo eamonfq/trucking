@@ -3,6 +3,11 @@ export const CUSTOMER_STATUS = {
   inactive: { label: "Inactivo", className: "bg-stone-100 text-navy-500" },
 } as const;
 
+/**
+ * Textos en español, que son las claves de los catálogos en inglés: `customers-directory.ts`,
+ * `customers-detail.ts` (pestañas) y `customers-activity.ts`. `activity` se guarda en español en el
+ * historial del cliente y se traduce al mostrarlo, así que estos valores no deben cambiar sin su catálogo.
+ */
 export const CUSTOMER_COPY = {
   directory: {
     eyebrow: "Relación con clientes",

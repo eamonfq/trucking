@@ -1,12 +1,11 @@
 import { Check, Circle } from "lucide-react";
 import type { TimelineEvent } from "@/lib/types";
-import { getStatusLabel } from "@/lib/config/status";
-import { formatDate } from "@/lib/utils/format";
+import { HistoryText, LocalDate, StatusLabel, TimelineList, UiText } from "./localized";
 
 export function Timeline({ events, currentIndex = events.length - 1 }: { events: TimelineEvent[]; currentIndex?: number }) {
-  if (events.length === 0) return <p className="text-sm text-navy-500">Aún no hay movimientos registrados.</p>;
+  if (events.length === 0) return <p className="text-sm text-navy-500"><UiText text="Aún no hay movimientos registrados." /></p>;
   return (
-    <ol className="grid" aria-label="Historial del envío">
+    <TimelineList>
       {events.map((event, index) => {
         const completed = index < currentIndex;
         const current = index === currentIndex;
@@ -16,10 +15,10 @@ export function Timeline({ events, currentIndex = events.length - 1 }: { events:
             <span className={`relative z-10 grid size-8 place-items-center rounded-full border-2 ${completed ? "border-success-700 bg-success-700 text-white" : current ? "border-orange-500 bg-orange-50 text-orange-600" : "border-stone-200 bg-white text-navy-400"}`}>
               {completed ? <Check className="size-4" aria-hidden="true" /> : <Circle className="size-3" fill="currentColor" aria-hidden="true" />}
             </span>
-            <div className="pt-1"><div className="flex flex-wrap items-baseline justify-between gap-2"><p className="text-sm font-bold text-navy-900">{getStatusLabel(event.to)}</p><time className="text-xs text-navy-500">{formatDate(event.at)}</time></div><p className="mt-1 text-sm text-navy-500">{event.actor}{event.note ? ` · ${event.note}` : ""}</p></div>
+            <div className="pt-1"><div className="flex flex-wrap items-baseline justify-between gap-2"><p className="text-sm font-bold text-navy-900"><StatusLabel status={event.to} /></p><time className="text-xs text-navy-500"><LocalDate value={event.at} /></time></div><p className="mt-1 text-sm text-navy-500"><HistoryText text={event.actor} />{event.note ? <> · <HistoryText text={event.note} /></> : null}</p></div>
           </li>
         );
       })}
-    </ol>
+    </TimelineList>
   );
 }

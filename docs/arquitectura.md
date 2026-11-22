@@ -46,6 +46,7 @@ Los cambios de estado pasan por `src/lib/domain/state-machine.ts`.
 | `schemas/` | Validación con Zod |
 | `utils/` | Cobros, facturas, piezas y conceptos de recepción, carga del camión, etiquetas |
 | `config/` | Categorías de caja, estados, empresa, ubicaciones y catálogo postal de México |
+| `i18n/` | Idioma (español e inglés). Ver [idiomas.md](idiomas.md). Contiene:<br>• detección (`negotiate.ts`);<br>• `getLocale`/`getT` en servidor y `useT` en cliente;<br>• el selector (`actions.ts`);<br>• los catálogos de interfaz por área en `catalogs/`;<br>• los mensajes de las Server Actions en `messages/`, que traduce `runMutation` con `localize-result.ts`;<br>• el idioma de cada destinatario (`user-locale.ts`). |
 
 ## Datos
 

@@ -10,6 +10,9 @@ import { invoiceCorrectionSchema } from "@/lib/schemas/invoice-correction";
 import { correctedPayment, isCloverInvoice, validateInvoiceCorrection } from "@/lib/utils/invoice-correction";
 import { appendPayment } from "@/lib/services/payment-records";
 import { sendEmail,siteUrl } from "@/lib/services/email";
+import { notificationMessages } from "@/lib/i18n/catalogs/notifications";
+import { translator } from "@/lib/i18n/translate";
+import { userLocale } from "@/lib/i18n/user-locale";
 
 const edits=collection<{id:string;kind:string;entityId:string;actorId:string;at:string;reason:string;before:unknown;after:unknown}>("operationalEdits");
 export async function correctInvoice(input:unknown){
@@ -43,9 +46,9 @@ export async function correctInvoice(input:unknown){
     invoice.timeline.push({from:before.status,to:invoice.status,actor:actorName,at,note:`Corrección administrativa: ${reason}. Sin cargos ni reembolsos externos.`});
     edits.unshift({id:crypto.randomUUID(),kind:"invoice",entityId:id,actorId:actor.id,at,reason,before,after:structuredClone(invoice)});
     await audit(actor.id,`invoice.corrected:${id}`);
-    const customer=users.find(u=>u.id===invoice.userId),body=`Se corrigió la factura ${invoice.number}. Motivo: ${reason}. Consulta el desglose actualizado en tu panel.`;
-    notifications.unshift({id:crypto.randomUUID(),userId:invoice.userId,title:"Factura actualizada",body,createdAt:at,read:false});
-    if(customer?.email)await sendEmail({to:customer.email,subject:`Factura actualizada · ${invoice.number}`,heading:"Tu factura fue actualizada",body,actionLabel:"Ver factura",actionUrl:`${siteUrl()}/cliente/facturas/${id}`});
+    const customer=users.find(u=>u.id===invoice.userId),locale=userLocale(customer),t=translator(notificationMessages,locale),body=t("Se corrigió la factura {number}. Motivo: {reason}. Consulta el desglose actualizado en tu panel.",{number:invoice.number,reason});
+    notifications.unshift({id:crypto.randomUUID(),userId:invoice.userId,title:t("Factura actualizada"),body,createdAt:at,read:false});
+    if(customer?.email)await sendEmail({to:customer.email,subject:t("Factura actualizada · {number}",{number:invoice.number}),heading:t("Tu factura fue actualizada"),body,actionLabel:t("Ver factura"),actionUrl:`${siteUrl()}/cliente/facturas/${id}`,locale});
     return {ok:true as const,invoice:structuredClone(invoice)};
   });
 }

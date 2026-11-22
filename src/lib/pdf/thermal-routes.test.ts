@@ -8,6 +8,7 @@ vi.mock('@/lib/services/logistics',()=>({logisticsService:{getInvoices:mocks.inv
 vi.mock('@/lib/pdf/thermal-document',()=>({ThermalDocument:mocks.thermal}));
 vi.mock('@/lib/pdf/invoice-document',()=>({InvoiceDocument:vi.fn(()=>null)}));
 vi.mock('@react-pdf/renderer',()=>({renderToBuffer:vi.fn(async()=>Buffer.from('%PDF-test'))}));
+vi.mock('@/lib/pdf/document-locale',()=>({customerLocale:vi.fn(async(userId?:string)=>userId==='en-customer'?'en':'es')}));
 beforeEach(()=>vi.clearAllMocks());
 it('denies financial vouchers to warehouse operators and anonymous users',async()=>{
  for(const session of [null,{role:'operador'}]){
@@ -28,4 +29,13 @@ it('prints all pieces of one reception without unrelated invoices or customers',
  mocks.invoices.mockResolvedValue([{id:'i',userId:'u',boxIds:['b1','b2']},{id:'mixed',userId:'u',boxIds:['b1','another']}]);
  const response=await receptionPdf(new Request('http://localhost/'),{params:Promise.resolve({id:'b1'})});expect(response.status).toBe(200);
  expect(mocks.thermal).toHaveBeenCalledWith(expect.objectContaining({reference:'BX-1',receipt:true,boxes:boxes.slice(0,2),invoices:[{id:'i',userId:'u',boxIds:['b1','b2']}]}));
+});
+it('prints customer documents in the customer language, also when an admin downloads them',async()=>{
+ mocks.session.mockResolvedValue({role:'admin'});
+ mocks.boxes.mockResolvedValue([{id:'b1',userId:'en-customer',code:'BX-1',receivedAt:'2026-09-17'}]);
+ mocks.invoices.mockResolvedValue([{id:'i',number:'AL-1',userId:'en-customer',boxIds:['b1']}]);
+ await receptionPdf(new Request('http://localhost/'),{params:Promise.resolve({id:'b1'})});
+ expect(mocks.thermal).toHaveBeenLastCalledWith(expect.objectContaining({receipt:true,locale:'en'}));
+ await invoicePdf(new Request('http://localhost/?formato=termico'),{params:Promise.resolve({id:'i'})});
+ expect(mocks.thermal).toHaveBeenLastCalledWith(expect.objectContaining({reference:'AL-1',locale:'en'}));
 });

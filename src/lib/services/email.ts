@@ -53,7 +53,7 @@ export async function deliverPendingEmails() {
           continue;
         }
         const rendered = renderEmail(input, siteUrl());
-        const attachments=input.receptionPhoto?[await receptionPhotoAttachment(input.receptionPhoto)]:undefined;
+        const attachments=input.receptionPhoto?[await receptionPhotoAttachment(input.receptionPhoto,input.locale)]:undefined;
         const result = await resend.emails.send({ from: process.env.RESEND_FROM_EMAIL, to: input.to, subject: input.subject, ...rendered, ...(attachments?{attachments}:{}) }, { idempotencyKey: `ayl/${row.id}` });
         if (result.error) throw new Error(result.error.name);
         await connection.execute("UPDATE email_outbox SET status='sent',provider_id=?,attempts=attempts+1,last_error=NULL,payload=JSON_OBJECT() WHERE id=?", [result.data!.id, row.id]);

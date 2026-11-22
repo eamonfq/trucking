@@ -1,4 +1,7 @@
 "use client";
+import { ui } from "@/lib/i18n/catalogs/ui";
+import { fieldMessages } from "@/lib/i18n/catalogs/fields";
+import { useMessageTranslator, useT } from "@/lib/i18n/provider";
 import { forwardRef, useId, useState, type InputHTMLAttributes } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
@@ -18,6 +21,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   const generatedId = useId();
   const inputId = id ?? props.name ?? generatedId;
   const [visible, setVisible] = useState(false);
+  const t = useT(ui);
+  const tm = useMessageTranslator(fieldMessages);
   const isPassword = props.type === "password";
   const descriptionId = `${inputId}-description`;
   return (
@@ -33,9 +38,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         {...props}
         type={isPassword && visible ? "text" : props.type}
       />
-      {isPassword && <button type="button" aria-label={visible ? "Ocultar contraseña" : "Mostrar contraseña"} aria-pressed={visible} onClick={() => setVisible(value => !value)} className="absolute right-1 top-1/2 grid size-10 -translate-y-1/2 place-items-center rounded-md text-ink-500 focus-visible:outline-2 focus-visible:outline-brand-700">{visible ? <EyeOff className="size-5" /> : <Eye className="size-5" />}</button>}
+      {isPassword && <button type="button" aria-label={visible ? t("Ocultar contraseña") : t("Mostrar contraseña")} aria-pressed={visible} onClick={() => setVisible(value => !value)} className="absolute right-1 top-1/2 grid size-10 -translate-y-1/2 place-items-center rounded-md text-ink-500 focus-visible:outline-2 focus-visible:outline-brand-700">{visible ? <EyeOff className="size-5" /> : <Eye className="size-5" />}</button>}
       </span>
-      {(error || hint) && <span id={descriptionId} className={cn("text-xs font-normal", error ? (tone === "dark" ? "text-[#FF9C93]" : "text-danger") : tone === "dark" ? "text-white/55" : "text-ink-500")}>{error ?? hint}</span>}
+      {(error || hint) && <span id={descriptionId} className={cn("text-xs font-normal", error ? (tone === "dark" ? "text-[#FF9C93]" : "text-danger") : tone === "dark" ? "text-white/55" : "text-ink-500")}>{error ? tm(error) : hint}</span>}
     </div>
   );
 });

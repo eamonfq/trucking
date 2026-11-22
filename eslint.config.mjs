@@ -5,5 +5,6 @@ import nextTs from "eslint-config-next/typescript";
 export default defineConfig([
   ...nextVitals,
   ...nextTs,
-  globalIgnores([".next/**", "coverage/**", "next-env.d.ts", "Guía visual de rediseño editorial/**"]),
+  // .local/ holds unversioned local files (access notes, one-off scripts); it is not part of the app.
+  globalIgnores([".next/**", "coverage/**", "next-env.d.ts", "Guía visual de rediseño editorial/**", ".local/**"]),
 ]);

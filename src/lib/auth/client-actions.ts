@@ -24,6 +24,9 @@ import { sendEmail, siteUrl } from "@/lib/services/email";
 import type { Address, Box, Recipient, Shipment, SupportTicket, User } from "@/lib/types";
 import { toClientUser } from "@/lib/utils/users";
 import { matchesInvoiceTotal } from "@/lib/utils/invoices";
+import { notificationMessages } from "@/lib/i18n/catalogs/notifications";
+import { translator, type Translator } from "@/lib/i18n/translate";
+import { userLocale } from "@/lib/i18n/user-locale";
 
 const nextId = (prefix: string, length: number) => `${prefix}-${length + 1}-${crypto.randomUUID()}`;
 const fullName = (user: User) => `${user.firstName} ${user.paternalLastName}`.trim();
@@ -38,11 +41,14 @@ function recordActivity(user: User, type: string, description: string) {
   user.activity.unshift({ id: `act-${crypto.randomUUID()}`, type, description, actor: fullName(user), at: new Date().toISOString() });
 }
 
-async function notify(userId: string, title: string, body: string, href = "/cliente") {
+// Written in the customer's language: the notification is stored already translated and the email follows it.
+async function notify(userId: string, compose: (t: Translator<typeof notificationMessages>) => { title: string; body: string }, href = "/cliente") {
   const user = users.find((item) => item.id === userId);
+  const locale = userLocale(user), t = translator(notificationMessages, locale);
+  const { title, body } = compose(t);
   const createdAt = new Date().toISOString();
   notifications.unshift({ id: nextId("not", notifications.length), userId, title, body, createdAt, read: false });
-  if (user) await sendEmail({ to: user.email, subject: title, heading: title, body, actionLabel: "Abrir mi panel", actionUrl: `${siteUrl()}${href}` });
+  if (user) await sendEmail({ to: user.email, subject: title, heading: title, body, actionLabel: t("Abrir mi panel"), actionUrl: `${siteUrl()}${href}`, locale });
 }
 
 export async function createPrealert(input: unknown) {
@@ -61,7 +67,7 @@ export async function createPrealert(input: unknown) {
   const box: Box = { id: nextId("box", boxes.length), code: `BX-26${String(nextDocumentSequence("box")).padStart(4, "0")}`, userId: user.id, categoryId: category.id, categoryName: category.name, status: "pre-alertada", dimensions: { ...category.dimensions }, weightLb: 0, originTracking: parsed.data.tracking, prealertDetails:{store:parsed.data.store,description:parsed.data.description,declaredValue:parsed.data.declaredValue}, photos: [], timeline: [{ from: null, to: "pre-alertada", actor: fullName(user), at, note: `${parsed.data.store}: ${parsed.data.description}. Valor declarado USD ${parsed.data.declaredValue}.` }] };
   boxes.push(box);
   recordActivity(user, "pre-alerta", `Pre-alerta ${box.code} registrada con tracking ${parsed.data.tracking}.`);
-  await notify(user.id, "Pre-alerta registrada", `${box.code} quedó vinculada al tracking ${parsed.data.tracking}.`, `/cliente/cajas/${box.code}`);
+  await notify(user.id, (t) => ({ title: t("Pre-alerta registrada"), body: t("{code} quedó vinculada al tracking {tracking}.", { code: box.code, tracking: parsed.data.tracking }) }), `/cliente/cajas/${box.code}`);
   return { ok: true as const, box };
 
   });
@@ -100,7 +106,7 @@ export async function createClientShipment(input: unknown) {
   shipments.push(confirmed.value);
   selected.forEach((box) => { box.shipmentId = confirmed.value.id; });
   recordActivity(user, "envío", `Envío ${confirmed.value.code} creado hacia ${confirmed.value.destinationCity}.`);
-  await notify(user.id, "Envío confirmado", `${confirmed.value.code} agrupa ${confirmed.value.boxIds.length} cajas hacia ${confirmed.value.destinationCity}.`, `/cliente/envios/${confirmed.value.code}`);
+  await notify(user.id, (t) => ({ title: t("Envío confirmado"), body: t("{code} agrupa {count} cajas hacia {city}.", { code: confirmed.value.code, count: confirmed.value.boxIds.length, city: confirmed.value.destinationCity }) }), `/cliente/envios/${confirmed.value.code}`);
   return { ok: true as const, shipment: confirmed.value };
 
   });
@@ -122,7 +128,7 @@ export async function reportInvoicePayment(invoiceId: string, input: unknown) {
   const paymentEntry=appendPayment(invoices[index]!,user,"pendiente",parsed.data.method,parsed.data.reference);
   invoices[index]!.paymentReport!.reference ||= paymentEntry.folio;
   recordActivity(user, "pago", `Pago reportado para ${invoices[index]!.number}.`);
-  await notify(user.id, "Pago enviado a revisión", `Recibimos el reporte de ${invoices[index]!.number}. Operaciones validará los datos del pago; el archivo es opcional.`, `/cliente/facturas/${invoiceId}`);
+  await notify(user.id, (t) => ({ title: t("Pago enviado a revisión"), body: t("Recibimos el reporte de {number}. Operaciones validará los datos del pago; el archivo es opcional.", { number: invoices[index]!.number }) }), `/cliente/facturas/${invoiceId}`);
   return { ok: true as const, invoice: invoices[index]! };
 
   });
@@ -149,7 +155,7 @@ export async function changeClientPassword(input: unknown) {
   if (parsed.data.currentPassword === parsed.data.password) return { ok: false as const, error: "La contraseña nueva debe ser distinta de la actual." };
   await setPassword(user.id, parsed.data.password);
   recordActivity(user, "seguridad", "Contraseña actualizada desde el panel.");
-  await notify(user.id, "Contraseña actualizada", "La contraseña de tu cuenta se cambió correctamente. Si no fuiste tú, contacta a soporte.", "/cliente/cuenta/seguridad");
+  await notify(user.id, (t) => ({ title: t("Contraseña actualizada"), body: t("La contraseña de tu cuenta se cambió correctamente. Si no fuiste tú, contacta a soporte.") }), "/cliente/cuenta/seguridad");
   return { ok: true as const };
 
   });
@@ -273,7 +279,7 @@ export async function createSupportTicket(input: unknown) {
   };
   supportTickets.unshift(ticket);
   recordActivity(user, "soporte", `Ticket ${ticket.code} abierto: ${ticket.subject}.`);
-  await notify(user.id, "Ticket de soporte abierto", `${ticket.code} quedó registrado. Operaciones responderá en el mismo hilo.`, "/cliente/soporte");
+  await notify(user.id, (t) => ({ title: t("Ticket de soporte abierto"), body: t("{code} quedó registrado. Operaciones responderá en el mismo hilo.", { code: ticket.code }) }), "/cliente/soporte");
   return { ok: true as const, ticket };
 
   });

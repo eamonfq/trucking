@@ -4,6 +4,7 @@ import {afterEach, expect, it, vi} from 'vitest';
 import {QuoteCalculator} from './quote-calculator';
 import {BOX_CATEGORIES} from '@/lib/config/box-categories';
 import {DEFAULT_WEIGHT_PRICING} from '@/lib/utils/billing';
+import {I18nProvider} from '@/lib/i18n/provider';
 
 vi.stubGlobal('React', React);
 vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
@@ -59,4 +60,18 @@ it('preserves separately configured fixed category prices', () => {
   ['10','16','12','40'].forEach((value, index) => fill(node, index, value));
   expect(node.textContent).toContain('$80.00');
   expect(BOX_CATEGORIES[0].priceUsd).toBe(80);
+});
+
+it('shows the calculator in English when the visitor chose English', () => {
+  const node = document.createElement('div');
+  document.body.append(node);
+  const root = createRoot(node);
+  mounts.push({root, node});
+  act(() => root.render(<I18nProvider locale="en"><QuoteCalculator rates={[...BOX_CATEGORIES]} weightPricing={DEFAULT_WEIGHT_PRICING}/></I18nProvider>));
+  expect(node.textContent).toContain('How do you want a quote?');
+  expect(node.textContent).toContain('Your result');
+  ['10','16','12'].forEach((value, index) => fill(node, index, value));
+  expect(node.textContent).toContain('$36.48');
+  expect(node.textContent).toContain('Formula: (length × width × height ÷ 1000)');
+  expect(node.textContent).not.toContain('Cómo quieres cotizar');
 });

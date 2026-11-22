@@ -1,15 +1,19 @@
+"use client";
 import Image from "next/image";
 import Link from "next/link";
 import logoAyl from "../../../public/brand/logoayl.png";
+import { marketing } from "@/lib/i18n/catalogs/marketing";
+import { useT } from "@/lib/i18n/provider";
 
 /*
   El PNG oficial no tiene transparencia, así que sobre fondos oscuros va dentro
   de una placa blanca y sobre fondos claros se coloca directo.
 */
 export function BrandLogo({ inverse = false, className = "h-9 w-auto" }: { inverse?: boolean; className?: string }) {
+  const t = useT(marketing);
   const image = <Image src={logoAyl} alt="A&L Trucking Logistics" priority sizes="(max-width: 640px) 140px, 170px" className={className} />;
   return (
-    <Link href="/" aria-label="A&L Trucking Logistics, ir al inicio" className={inverse ? "inline-flex self-start rounded-lg bg-white px-3.5 py-3" : "inline-flex"}>
+    <Link href="/" aria-label={t("A&L Trucking Logistics, ir al inicio")} className={inverse ? "inline-flex self-start rounded-lg bg-white px-3.5 py-3" : "inline-flex"}>
       {image}
     </Link>
   );

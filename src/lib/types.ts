@@ -30,6 +30,8 @@ export type Warehouse = { kind?:import("./config/warehouses").WarehouseKind; cou
 export type TruckStop = { warehouseId: string; city: string; arrivalDate: string };
 
 export type User = {
+  /** Idioma elegido por el usuario (selector ES | EN o alta); decide correos y documentos. */
+  preferredLocale?: import("./i18n/config").Locale;
   adminPermissions?: import("./auth/admin-permissions").AdminSection[];
   warehouseGrants?: WarehouseGrant[];
   id: string;

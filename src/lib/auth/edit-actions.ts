@@ -15,6 +15,9 @@ import { categoryIdSchema } from "@/lib/config/category-schema";
 import { suggestCategory } from "@/lib/utils/suggest-category";
 import { invoiceTotal } from "@/lib/utils/invoices";
 import { sendEmail, siteUrl } from "@/lib/services/email";
+import { notificationMessages } from "@/lib/i18n/catalogs/notifications";
+import { translator } from "@/lib/i18n/translate";
+import { userLocale } from "@/lib/i18n/user-locale";
 
 const money = z.coerce.number().min(0).max(100000).multipleOf(0.01);
 const inputSchema = z.object({
@@ -121,9 +124,10 @@ export async function editOperation(input: unknown) {
     await audit(session.userId,`${kind}.corrected`);
     if ("userId" in entity) {
       const user=users.find(x=>x.id===entity.userId);
-      const body=`Se actualizó ${"code" in entity ? entity.code : "number" in entity ? entity.number : "tu registro"}. Motivo: ${reason}`;
-      notifications.unshift({id:crypto.randomUUID(),userId:entity.userId,title:"Registro actualizado",body,createdAt:at,read:false});
-      if (user) await sendEmail({to:user.email,subject:"Registro actualizado · A&L",heading:"Una actualización en tu operación",body,actionLabel:"Revisar mi panel",actionUrl:`${siteUrl()}/cliente`});
+      const locale=userLocale(user),t=translator(notificationMessages,locale);
+      const body=t("Se actualizó {record}. Motivo: {reason}",{record:"code" in entity ? entity.code : "number" in entity ? entity.number : t("tu registro"),reason});
+      notifications.unshift({id:crypto.randomUUID(),userId:entity.userId,title:t("Registro actualizado"),body,createdAt:at,read:false});
+      if (user) await sendEmail({to:user.email,subject:t("Registro actualizado · A&L"),heading:t("Una actualización en tu operación"),body,actionLabel:t("Revisar mi panel"),actionUrl:`${siteUrl()}/cliente`,locale});
     }
     return {ok:true as const};
   });

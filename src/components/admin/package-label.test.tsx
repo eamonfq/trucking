@@ -19,8 +19,8 @@ it('numbers each label and breaks only before subsequent labels, even with trail
 it('prints sender and recipient contacts separately and explicitly marks missing dimensions',()=>{
  const markup=renderToStaticMarkup(<PackageLabel code="BX-260015-01" receptionCode="BX-260015" position="1/3" dimensions={{length:0,width:0,height:0}} weightLb={50} lockerCode="AL-MX-0008" sender={{name:'Agustín Orozco',phone:'2036900651'}} recipient={{name:'Karla Ponce',phone:'6785437790'}}/>);
  const container=document.createElement('div');container.innerHTML=markup;
- expect(container.querySelectorAll('.label-contact')[0].textContent).toContain('Envía:Agustín Orozco2036900651');
- expect(container.querySelectorAll('.label-contact')[1].textContent).toContain('Recibe:Karla Ponce6785437790');
+ expect(container.querySelectorAll('.label-contact')[0].textContent).toContain('Envía / Sender:Agustín Orozco2036900651');
+ expect(container.querySelectorAll('.label-contact')[1].textContent).toContain('Recibe / Recipient:Karla Ponce6785437790');
  expect(markup).toContain('No registradas');expect(markup).not.toContain('0 × 0');
  if(process.env.LABEL_QA==='1'){
   const previewAddress={id:'qa',userId:'qa',label:'Casa',street:'Avenida de los Pinos y Calle Principal',exteriorNumber:'1234',neighborhood:'Colonia Las Cuatro Esquinas',postalCode:'49540',municipality:'Valle de Juárez',state:'Jalisco',references:'Portón azul frente a la plaza, dejar con la persona encargada de recepción'};
@@ -44,7 +44,7 @@ it('prints a pickup reference or full address beneath the recipient without hidi
  const pickupNode=document.createElement('div');
  pickupNode.innerHTML=renderToStaticMarkup(<PackageLabel {...common} recipient={{name:'Karla Ponce',phone:'6785437790',address:pickup}}/>);
  expect(pickupNode.querySelector('.label-contact:last-of-type .label-address')?.textContent).toBe('Bodega Valle de Juárez');
- expect(pickupNode.querySelector('.label-contact:last-of-type')?.textContent).toContain('Recibe:Karla Ponce6785437790Dirección / referenciaBodega Valle de Juárez');
+ expect(pickupNode.querySelector('.label-contact:last-of-type')?.textContent).toContain('Recibe / Recipient:Karla Ponce6785437790Dirección / referencia · Address / referenceBodega Valle de Juárez');
  const fullNode=document.createElement('div');
  fullNode.innerHTML=renderToStaticMarkup(<PackageLabel {...common} recipient={{name:'Karla Ponce',phone:'6785437790',address:full}}/>);
  const printed=fullNode.querySelector('.label-address')?.textContent;
@@ -55,5 +55,5 @@ it('prints a pickup reference or full address beneath the recipient without hidi
 it('prints an explicit pending address instead of silently omitting the delivery section',()=>{
  const markup=renderToStaticMarkup(<PackageLabel code="BX-QA" dimensions={{length:0,width:0,height:0}} weightLb={20} lockerCode="AL-QA" recipient={{name:'Destinatario Ejemplo',phone:'15550000000'}}/>);
  const container=document.createElement('div');container.innerHTML=markup;
- expect(container.querySelector('.label-contact:last-of-type .label-address')?.textContent).toBe('Dirección / referencia no registrada');
+ expect(container.querySelector('.label-contact:last-of-type .label-address')?.textContent).toBe('Dirección / referencia no registrada · Address / reference not recorded');
 });
